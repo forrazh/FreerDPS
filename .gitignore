@@ -7,3 +7,4 @@ Makefile.conf
 **/*.vok
 **/*.vos
 **/.*.aux
+_opam
