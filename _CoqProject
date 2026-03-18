@@ -1,2 +1,2 @@
--Q _build/default/theories MonadEx
+-Q _build/default/theories FreerDPS
 -arg -w -arg -projection-no-head-constant

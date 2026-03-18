@@ -2,7 +2,7 @@
 (warnings (deprecated_coq_lang disabled))
 (using coq 0.9)
 
-(name FreerDPS)
+(name freerdps)
 
 (generate_opam_files true)
 
@@ -33,4 +33,4 @@
 ; to use the latest coq version available, which is not 
 ; possible using the current opam versions.
 
-(tags (rocq "distributed systems" probabilities))
+; (tags (rocq "distributed systems" probabilities))
