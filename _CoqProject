@@ -1,0 +1,2 @@
+-Q _build/default/theories MonadEx
+-arg -w -arg -projection-no-head-constant

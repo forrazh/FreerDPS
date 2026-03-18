@@ -8,3 +8,4 @@ Makefile.conf
 **/*.vos
 **/.*.aux
 _opam
+_build
