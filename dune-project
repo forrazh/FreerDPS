@@ -2,7 +2,7 @@
 (warnings (deprecated_coq_lang disabled))
 (using coq 0.9)
 
-(name freeing-monae)
+(name FreerDPS)
 
 (generate_opam_files true)
 
@@ -10,8 +10,8 @@
 
 
 (package
- (name freeing-monae)
- (synopsis "A short synopsis")
+ (name freerdps)
+ (synopsis "A FreeSpec rewrite to bring the power of equational reasoning and probabilities.")
  (description "A longer description")
  (depends 
     (coq-monae (= "dev"))
