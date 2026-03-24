@@ -1,7 +1,0 @@
--Q theories FreerDPS
--arg -w -arg -projection-no-head-constant
-
-./theories/FreerMonad.v
-./theories/FlipMonad.v
-./theories/freer_lib/ActoFreerCoproduct.v
-./theories/freer_lib/FreerFlip.v

@@ -3,7 +3,7 @@ From Stdlib Require Import ssrmatching Reals JMeq.
 From mathcomp Require Import ssreflect.
 From HB Require Import structures.
 From monae Require Import preamble hierarchy monad_transformer.
-From FreerDPS Require Import FreerMonad.
+From FreerTheories Require Import FreerMonad.
 
 Local Open Scope monae_scope.
 Local Close Scope nat_scope.

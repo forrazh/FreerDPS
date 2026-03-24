@@ -12,7 +12,6 @@ Unset Printing Implicit Defensive.
 
 Definition Eff : UU0 := UU0 -> UU0.
 
-(* Definition de la Freer Monad dans la THEORIE DES CATEGORIES *)
 HB.mixin Record isFreerMonad (F : Eff) (M : UU0 -> UU0) of Monad M := {
     (* F : UU0 -> UU0 ; *)
     trigger : F ~~> M ;  

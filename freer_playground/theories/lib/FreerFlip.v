@@ -3,7 +3,7 @@ From mathcomp Require Import ssreflect ssrbool ssrnum ssralg reals.
 From infotheo Require Import realType_ext.
 From HB Require Import structures.
 From monae Require Import preamble hierarchy monad_lib.
-From FreerDPS Require Import FlipMonad FreerMonad.
+From FreerTheories Require Import FlipMonad FreerMonad.
 
 Declare Scope freer_flip_scope.
 
