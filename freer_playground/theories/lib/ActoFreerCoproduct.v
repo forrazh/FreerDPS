@@ -158,7 +158,6 @@ Proof.
      
 Qed.
 
-HB.about isMonadCoproduct.Build.
 HB.instance Definition _ := isMonadCoproduct.Build (Nacto) (Nacto') (Macto) mmor_l mmor_r from_coproduct cp_left_law cp_right_law from_coproduct_unique.
 
     End cop.

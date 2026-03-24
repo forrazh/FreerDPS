@@ -88,13 +88,9 @@ HB.export FreerMonadMod.
 Module FreerMod.
 Section freer.
 
-  HB.about acto.
-
 Variable F : Eff.
 
 Local Notation M := (acto F).
-Check M.
-About acto.
 
 Let trigger : F ~~> M := fun X fx => Impure fx (fun x => Pure F x).
 
@@ -142,8 +138,6 @@ Proof.
     under [in RHS]eq_bind do rewrite -Hy.
     by rewrite -dtrigger'-dbind'/trigger.
 Qed.
-
-HB.about isFreerMonad.Build.
 
 HB.instance Definition _ := isFreerMonad.Build F M 
   denote_ret 

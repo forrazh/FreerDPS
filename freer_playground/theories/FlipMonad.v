@@ -99,7 +99,6 @@ Proof.
 Qed.  
 
 (*** negation law ***)
-About choice_of_Type.
 Let choiceC : forall (A : UU0) (p:{prob R}) (a b : M A), choicef p a b = choicef ((Prob.p p).~ %:pr) b a.
 Proof.
   move=> A p a b.
@@ -144,8 +143,6 @@ congr (flip p >>= _).
 by apply/boolp.funext; case.
 Qed.
 
-HB.about isMonadProb.Build.
-
  #[non_forgetful_inheritance]
 HB.instance Definition _ := isMonadProb.Build R M prob_bindDl.
 
@@ -163,8 +160,6 @@ Section ConcreteFlip.
 
 
 Notation pr := (probMonad R).
-(* Variable p : {prob R}. *)
-Check ( @bcoin R flipacto).
 
 Definition cflip (p : {prob R}) := @bcoin R flipacto p.
 
