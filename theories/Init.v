@@ -5,9 +5,16 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 (** * Utils Functions *)
-From HB Require Import structures.
-From monae Require Import preamble hierarchy. 
-
+(* From HB Require Export structures. *)
+From monae Require Export preamble hierarchy.
+From mathcomp Require Export ssreflect. 
+Ltac done :=
+  trivial; hnf; intros; solve
+   [ do ![solve [trivial | simple refine (@sym_equal _ _ _ _); trivial]
+         | discriminate | contradiction | split]
+   | match goal with H : ~ _ |- _ => solve [case H; trivial] end 
+   | auto with freespec
+   ].
 Local Open Scope monae_scope.
 
 Definition when {X} {M : monad}  (b : bool) (m : M X) : M unit := if b then m >> skip else skip. 

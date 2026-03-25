@@ -81,11 +81,12 @@ Ltac simplify_gens :=
 
 #[local]
 Ltac prove_impure :=
-  repeat (cbn -[
+  idtac "pr;imp"; repeat (cbn -[
               to_hoare
               gen_caller_obligation
               gen_callee_obligation
               gen_witness_update
+              lifter
           ] in *;
           simplify_gens;
           destruct_if_when);
@@ -101,33 +102,55 @@ Ltac prove_impure :=
     let o_caller := fresh "o_caller" in
     let equ := fresh "equ" in
     intros x ω' [o_caller equ];
-    repeat rewrite equ in *; clear equ; clear ω';
+    repeat rewrite -> equ in *; clear equ; clear ω';
     prove_impure
 
-  | |- pre (to_hoare ?c ?p) ?ω =>
-    let p := (eval hnf in p) in
-    lazymatch p with
-    | request_then ?e ?f =>
-      let o_caller := fresh "o_caller" in
-      assert (o_caller : gen_caller_obligation c ω e); [ prove_impure
-                                                       | constructor; prove_impure
-                                                       ]
-    | local _ => constructor
-    | bind (bind ?p ?f) ?g =>
-      rewrite (bindA p f g);
-      prove_impure
-    | bind ?p ?f =>
-      apply bindA; [ eauto with freespec
-                                     | let x := fresh "x" in
-                                       let ω' := fresh "ω" in
-                                       let hpost := fresh "hpost" in
-                                       intros x ω' hpost;
-                                       prove_impure
-                                     ]
+    | |- pre ?pcond ?ω =>
 
-    | _ => eauto with freespec
-    end
+    lazymatch pcond with 
+      | lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) ?p => let p := (eval hnf in p) in
+        lazymatch p with
+        | request_then ?e ?f =>
+          let o_caller := fresh "o_caller" in
+          assert (o_caller : gen_caller_obligation c ω e) ; 
+          [ prove_impure | constructor; prove_impure]
+        | local _ => constructor
+        | impure_bind (impure_bind ?p ?f) ?g =>
+          rewrite (bindA p f g);
+          prove_impure
+        | bind ?p ?f =>
+          apply to_hoare_pre_bind_assoc; [ eauto with freespec
+                                        | let x := fresh "x" in
+                                          let ω' := fresh "ω" in
+                                          let hpost := fresh "hpost" in
+                                          intros x ω' hpost;
+                                          prove_impure
+                                        ]
+        | _ => eauto with freespec
+        end
 
+    | to_hoare ?c ?p => let p := (eval hnf in p) in
+      lazymatch p with
+      | request_then ?e ?f =>
+        let o_caller := fresh "o_caller" in
+        assert (o_caller : gen_caller_obligation c ω e) ; 
+        [ prove_impure | constructor; prove_impure]
+      | local _ => constructor
+      | impure_bind (impure_bind ?p ?f) ?g =>
+        rewrite (bindA p f g);
+        prove_impure
+      | bind ?p ?f =>
+        apply to_hoare_pre_bind_assoc; [ eauto with freespec
+                                      | let x := fresh "x" in
+                                        let ω' := fresh "ω" in
+                                        let hpost := fresh "hpost" in
+                                        intros x ω' hpost;
+                                        prove_impure
+                                      ]
+      | _ => eauto with freespec
+      end
+    | _ => idtac "==>not handled"
+    end 
   | |- ?a =>
     eauto with freespec
 
@@ -181,3 +204,63 @@ Ltac unroll_post run :=
 
   | ?a => idtac
   end.
+
+  Ltac cleanvert hyp := inversion hyp; ssubst; move:hyp=>_.
+
+Ltac easy_simpl hyp := idtac "--simpl"; do ? [cbn -[
+              to_hoare
+              gen_caller_obligation
+              gen_callee_obligation
+              gen_witness_update
+] in *; simplify_gens; do ? destruct_if_when_in hyp].
+
+Ltac run_simpl run := 
+  idtac "run_simpl: " run;
+  easy_simpl run ;
+  match type of run with
+| post (to_hoare ?c ?p) ?ω ?x ?ω' => 
+  idtac "=> to_hoare" "c: " c " ; p: " p;
+  let p := (eval hnf in p) in
+  idtac "=> hnf of p: " p;
+  match p with
+  | request_then ?e ?f =>
+    idtac "=> => impure!";
+    cleanvert run;
+    idtac "=> => inverted";
+    match goal with
+    | next : exists _, post (interface_to_hoare c (A:=_) e) _ _ _ /\ _ |- _ => 
+        idtac "=> => => found next: " next;
+        let ω'' := fresh "ω" in 
+        let o_callee := fresh "o_callee" in 
+        let run := fresh "run" in
+        case: next =>ω'' [o_callee run];
+        idtac "=> => => destructed as : [" ω'' "[" o_callee ", " run"]]";
+        run_simpl run; 
+        idtac "<== <== after run"
+    | _ => idtac "<== branched out exists match"
+    end
+  | local ?x => idtac "=> => PURE!"; cleanvert run
+  | _ => idtac "<== freer out" 
+  end
+| post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (bind ?f ?g)) _ _ _  =>  
+      idtac "=> lifter bind";
+      let run1 := fresh "lrun" in
+      let run2 := fresh "rrun" in
+      let ω := fresh "ω" in 
+      let x := fresh "x" in 
+      idtac "=> var names : " run1 run2 ω x;
+      move: run => /(to_hoare_post_bind_assoc c f g);
+      idtac "=> thpba applied"; 
+      move => [x [ω [run1 run2]]]; 
+      idtac "=> destructed run";
+      idtac "=>> run first:";
+      run_simpl run1; 
+      idtac "<<= finished first";
+      idtac "=>> run second:";
+      run_simpl run2;
+      idtac "<<= finished second"
+      (* idtac *)
+      (* destruct run as [x [ω [run1 run2]]]; *)
+      (* run_simpl run1; run_simpl run2 *)
+| ?a => idtac "not post"
+end.

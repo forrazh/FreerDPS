@@ -7,7 +7,6 @@
 From Coq Require Import Arith.
 From FreerDPS Require Import Core Impure Hoare.
 From monae Require Import preamble hierarchy.
-From mathcomp Require Import ssreflect.
 
 #[local] Open Scope nat_scope.
 #[local] Open Scope monae_scope.
@@ -18,15 +17,6 @@ Create HintDb airlock.
 
 (** ** Doors *) 
 
-Locate not_locked_false_eq_true.
-
-Ltac done :=
-  trivial; hnf; intros; solve
-   [ do ![solve [trivial | simple refine (@sym_equal _ _ _ _); trivial]
-         | discriminate | contradiction | split]
-   | match goal with H : ~ _ |- _ => solve [case H; trivial] end 
-   | auto with freespec
-   ].
 Inductive door : Type := left | right.
  
 Definition door_eq_dec (d d' : door) : { d = d' } + { ~ d = d' } :=
@@ -73,10 +63,6 @@ Definition co (d : door) : door :=
   | left => right
   | right => left
   end.
-
-Check (forall i, component CONTROLLER i).
-
-Search iget.
 
 Definition controller `{Provide ix DOORS, Provide ix (STORE nat)} {im : impureMonad ix}
   : component (im:=im) CONTROLLER ix
@@ -210,7 +196,7 @@ Lemma close_door_respectful `{Provide ix DOORS} {im : impureMonad ix} (ω : Ω) 
   : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (doors_contract) (close_door d))( ω).
 
 Proof.
-  do ! [prove impure with airlock; subst; constructor].
+  prove impure with airlock; subst; constructor.
 
   (* This leaves us with one goal to prove:
 
@@ -231,111 +217,28 @@ Lemma open_door_respectful `{Provide ix DOORS} (ω : Ω)
   : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) doors_contract (open_door (ix := ix) d)) ω.
 
 Proof.
-  do ! [prove impure; repeat constructor; subst].
-  (* inversion o_caller0; ssubst. *)
+  prove impure; repeat constructor; subst.
+  by inversion o_caller0; ssubst.
 Qed.
 
  Hint Resolve open_door_respectful : airlock.
-
-Lemma to_hoare_post_bind_assoc `{MayProvide ix i} `(c : contract i Ω)
-   `(p : impure ix a) `(f : a -> impure ix b)
-   `(Hp : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) c (impure_bind p f)) ω x ω')
-  : exists y ω'',
-    post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) c p) ω y ω'' /\ post (to_hoare c (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) $ f y) ω'' x ω'.
-
-Proof.
-move: ω Hp; elim p=>[in_a|Y j k IH] ω.
-- by exists in_a, ω.
-case=>y [ω'' [Hp1 ]].
-move:IH=>/[apply].
-move=> [z [ω''' [Hp2 Hp3]]].
-exists z, ω'''.
-split=>//.
-exists y, ω''.
-by split.
-
-Qed.
-
-
-Ltac run_simpl run := do ? [cbn -[
-              to_hoare
-              gen_caller_obligation
-              gen_callee_obligation
-              gen_witness_update
-] in *; simplify_gens; do ? destruct_if_when_in run]; lazymatch type of run with
-| post (to_hoare ?c ?p) ?ω ?x ?ω' => 
-  let p := (eval hnf in p) in
-  lazymatch p with
-  | request_then ?e ?f => 
-    inversion run; ssubst; let old_run := fresh "old_run" in move: run=>old_run;
-    lazymatch goal with
-    | next : exists _, post (interface_to_hoare c (A:=_) e) _ _ _ /\ _ |- _ => let ω'' := fresh "ω" in let o_callee := fresh "o_calleeeeeeeee" in let run := fresh "run" in case next =>/=ω'' [o_callee run]; run_simpl run 
-    | next : post (lifter (i:=_) (M:=_) _ _) _ _ _ |- _ => have Hfucked : 1 = 3
-    | _ => have Hfucked : 1 = 1
-    end
-  | local ?x => let old_run := fresh "old_run" in inversion run; ssubst; move:run=>old_run; have Hfucked : 3 = 3
-  | impure_bind ?p ?f => move: run=>nooo
-      (* apply (to_hoare_post_bind_assoc c p f) in run;
-      let run1 := fresh "run" in
-      let run2 := fresh "run" in
-      let x := fresh "x" in
-      let ω := fresh "ω" in
-      destruct run as [x [ω [run1 run2]]];
-      unroll_post run1; unroll_post run2 *)
-  end
-| post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (bind ?f ?x)) _ _ _  => apply (bindA f x) in run
-
-| ?a => have Hfucked : 2 = 2
-end.
-
-(* lazymatch goal with
-  | next : exists _, post (interface_to_hoare c _ _) _ _ _ /\ _ |- _ =>
-    let ω'' := fresh "ω" in
-    let o_callee := fresh "o_callee" in
-    let run := fresh "run" in
-    case next =>/=ω'' [o_callee run];
-    run_simpl run
-  | _ => idtac
-  end *)
-
-(* Lemma post_lifted_proper :  forall (N : monad) (l : forall A : UU0, ?i A -> N A) (X Y : UU0)
-(m :N X) (f : X -> ?s Y),
-impure_lift N l Y (m >>= f) = impure_lift N l X m >>=
-(fun x0 : X => impure_lift N l Y (f x0)) . *)
 
 Lemma close_door_run `{Provide ix DOORS} (ω : Ω) (d : door) (ω' : Ω) (x : unit)
   (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) doors_contract (close_door d)) ω x ω')
   : sel d ω' = false.
 Proof.
-  Check impure_lift_bind.
-  (* rewrite bindA in run. *)
-  (* run_simpl run. inversion run; ssubst; move: run H4=>_; case=>/=b [a run].
-  run_simpl run. fold to_hoare in run. rewrite impure_lift_bind in run. destruct_if_when_in run. move:run=>_.
-  inversion run; ssubst. move:run; apply/impure_lift_bind. Check lifter (i:=_) (M:=_) _ _. 
-  inversion new_run;ssubst; move: new_run=>_.
-  - run_simpl run.  inversion run; ssubst; move:run; case=>/=ω'' [o_callee run].
-    run_simpl run; 
-    ssubst. 
+  run_simpl run;
+  cleanvert H1.
+  cleanvert run.
+  cleanvert H1.
+  run_simpl H2.
 
-    by inversion H1; ssubst; rewrite tog_equ_1 H5.
-  - inversion run; ssubst; move:run H1=>_ H1.
+  cleanvert H2.
+  (* cleanvert H4. *)
 
- by inversion H1; ssubst. *)
-Admitted.
-
-
-Proof.
-    (* do ! [rewrite /= in run; simplify_gens ; destruct_if_when_in run]. *)
-    unroll_post run. 
-    
-
-  (* do ! [unroll_post run; rewrite /= in run; ssubst];  inversion run; rewrite /= in run; ssubst. *)
-  - inversion H1; ssubst. repeat destruct H3; ssubst.
-  destruct  H; ssubst. 
-    rewrite tog_equ_1.
-    inversion H1; ssubst.
-    now rewrite H6.
-  + now inversion H1; ssubst.
+  -  cleanvert H1.
+    by rewrite tog_equ_1 H5.
+  by  cleanvert run.
 Qed.
 
  Hint Resolve close_door_run : airlock.
@@ -407,20 +310,15 @@ Proof.
   (* elim p=>[a'|B e f IH] ω pre run safe. *)
   induction p; intros ω hpre run safe.
   + by unroll_post run.
-  + unroll_post run. 
-    assert (hpost : post (interface_to_hoare doors_contract β e) ω x ω0). {
-      split ; [apply H2|now rewrite H3].
-    }
-    apply H1 in run; auto; [by apply hpre|].
-      (* * subst=>/=. inversion H2;subst. ssubst. *)
-       (* destruct d=>//=. apply/  with (ω:=ω0) (β:=x). auto; [now apply hpre|]. *)
-    (* apply H1 with (ω:=ω0) (β:=x); auto. [now apply hpre|].     *)
+  + run_simpl run. 
+    have hpost : post (interface_to_hoare doors_contract (A:=β) e) ω x ω0 
+      by split; [apply H2| by rewrite H3].
+    (* move: H1 => /(_ x ω0) => H1. *)
+     apply/(H1 x ω0) => //; [by apply hpre|].
     cbn in *.
-    (* rewrite -bindA in hpre. *)
-    (* inversion hpre. *)
     inversion hpre; rewrite /=/gen_caller_obligation in H4.
-
-    unfold lifter, gen_caller_obligation, gen_callee_obligation, gen_witness_update in *. 
+    (* simplify_gens *)
+    unfold gen_caller_obligation, gen_callee_obligation, gen_witness_update in *. 
     cbn in *.
     destruct (proj_p e) as [e'|].
     ++ destruct hpost as [o_callee equω].
@@ -436,86 +334,6 @@ Proof.
             right; rewrite tog_equ_2//. 
     ++ rewrite H3;
        exact: safe.
-
-  (* revert ω hpre hpost safe. *)
-  (* induction p; intros ω hpre run safe. *)
-  (* + now unroll_post run. *)
-  (* + unroll_post run. *)
-    (* assert (hpost : post (interface_to_hoare doors_contract β e) ω x0 ω0). { *)
-      (* split; [apply H2|now rewrite H3]. *)
-    (* } *)
-    (* apply H1 with (ω:=ω0) (β:=x0); auto; [now apply hpre|]. *)
-    (* cbn in *. *)
-    (* unfold gen_caller_obligation, gen_callee_obligation, gen_witness_update in *. *)
-    (* destruct (proj_p e) as [e'|]. *)
-    (* ++ destruct hpost as [o_callee equω]. *)
-       (* destruct e' as [d|d]. *)
-       (* +++ rewrite H3. *)
-           (* apply safe. *)
-       (* +++ apply one_door_safe_all_doors_safe with (d := d); *)
-             (* apply one_door_safe_all_doors_safe with (d' := d) in safe; *)
-             (* subst. *)
-           (* destruct hpre as [hbefore hafter]. *)
-           (* inversion hbefore; ssubst. *)
-           (* cbn. *)
-           (* destruct safe as [safe|safe]. *)
-           (* all: right; rewrite tog_equ_2; auto. *)
-    (* ++ destruct hpost as [_ equω]. *)
-       (* subst. *)
-       (* exact safe. *)
-(* Qed. destruct safe.  ; auto. *)
-    (* ++ destruct hpost as [_ equω]. *)
-       (* subst. *)
-       (* exact safe. *)
-(* Qed. *)
-
-
-
-  (* fold (co left) in *.
-  move: ω hpre hpost safe.
-  elim: p=>[x' | β eff k IH] ω hpre run safe.
-  (* induction p; intros ω hpre run safe. *)
-  + by unroll_post run.
-  + unroll_post run.
-    assert (hpost : post (interface_to_hoare doors_contract β eff) ω x0 ω0). {
-      split; [apply H1|now rewrite H2].
-    }
-    apply IH with (ω:=ω0) (β:=x0) => // ; [now apply hpre|] => //=.
-    (* move: H1 run H2 hpost => /gen_caller_obligation/gen_callee_obligation/gen_witness_update H1 run H2 hpost. *)
-    unfold gen_caller_obligation, gen_callee_obligation, gen_witness_update in *.
-    (* move: H1 H2; case: (proj_p eff) => [e'|] H1 H2. *)
-    destruct (proj_p eff) as [e'|] eqn:E.
-    ++ destruct hpost as [o_callee equω].
-      case e' => d/=.
-       destruct e' as [d|d].
-       +++ rewrite H2.
-           apply safe.
-
-       +++ apply one_door_safe_all_doors_safe with (d := d);
-             apply one_door_safe_all_doors_safe with (d' := d) in safe;
-             subst.
-           destruct hpre as [hbefore hafter].
-           (* inversion hpre; ssubst=>//=. *)
-           inversion hbefore; ssubst.
-           destruct safe as [safe|safe].
-           (* ; case Ed: d; rewrite Ed in safe => //=. *)
-           - right; rewrite tog_equ_2/=; auto. admit.
-           - by right; rewrite tog_equ_2. 
-           
-            (* .  Check tog_equ_1. *)
-      ++ rewrite H2; exact: safe. *)
-              (* inversion o_callee; ssubst. *)
-              (* inversion safe. *)
-              (* prove impure with airlock. *)
-              (* auto. *)
-           (*  *)
-           (* admit. *)
-
-  (* all: inversion H1; ssubst.  *)
-   (* rewrite /= in run. ; firstorder.  *)
-    (* ++ destruct hpost as [_ equω].
-       subst.
-       exact safe. *)
 Qed.
 
 (** ** Main Theorem *)
@@ -529,6 +347,8 @@ Definition correct_component `{MayProvide jx j}
     forall (x : α) (ωj' : Ωj) (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure jx) cj $ c α e) ωj x ωj'),
       callee_obligation ci ωi e x /\ pred (witness_update ci ωi e x) ωj'.
 
+
+      
 Lemma controller_correct `{StrictProvide2 ix DOORS (STORE nat)}
   : correct_component controller
                       (no_contract CONTROLLER)
@@ -538,7 +358,11 @@ Proof.
   move=>ωc ωd pred A eff req. 
   have hpre : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) doors_contract (controller A eff)) ωd.
     { 
-      case eff=> [|d]//=; do ! [prove impure with airlock; ssubst; constructor=>//=]. 
+      case eff; do ! [prove impure with airlock; ssubst; constructor => //].
+
+
+      (* case eff=> [|d]//; prove impure with airlock; ssubst; constructor=>//. *)
+        (* do ! [prove impure with airlock; ssubst; constructor=>//=].  *)
       - by inversion o_caller; ssubst; rewrite H6.
       - by inversion o_caller1; ssubst; rewrite H6.
       - by inversion o_caller0; ssubst; rewrite H6.
@@ -549,8 +373,5 @@ Proof.
   
   split=>[|a ωj' run]//=;
   split=>//=.
-  Check respectful_run_inv.
-  (* have run' := . *)
   by apply/(respectful_run_inv _ _ _ _ _ _ run). 
-  (* apply respectful_run_inv in run => //=. *)
 Qed.
