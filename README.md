@@ -4,7 +4,7 @@ FreerDPS stands for : **Freer** *E*quational *R*easoning for **D**istributed and
 
 # Code structure
 
-As of now, the code base is mainly a rewrite of [FreeSpec](https://github.com/lthms/FreeSpec) using monae / ssreflect.
+As of now, the code base is mainly a rewrite of [FreeSpec](https://github.com/lthms/FreeSpec) using [monae](https://github.com/affeldt-aist/monae) / ssreflect.
 
 # Install
 
@@ -15,6 +15,7 @@ You need to install the following libraries for the project to work :
 - monae
 - infotheo
 - mathcomp
+- hierarchy builder
 
 ## Commands
 
@@ -34,8 +35,25 @@ In case monae / infotheo can not be installed through opam, you can clone them f
 
 Versions known to work :
 - monae : dev
-- infotheo : 0.9.6
+- infotheo : 0.9.6 => [I have a local fork for now](https://github.com/forrazh/infotheo/tree/fix/0.9.6)
+
+You just need to clone the repositories and run : 
+
+```sh
+eval $(opam env) # it should be the same switch as the one created above
+oam pin add .
+```
+
+inside the repository.
+
+Once everything is installed, you can run the following commands :
+
+```sh
+coq_makefile -f _CoqProject -o Makefile 
+make
+```
+
 
 # Publications 
 
-As of now, no work have been peer-reviewed.
+This work has been submitted to COMPAS and is under reviewing. 
