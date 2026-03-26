@@ -81,7 +81,7 @@ Ltac simplify_gens :=
 
 #[local]
 Ltac prove_impure :=
-  idtac "pr;imp"; repeat (cbn -[
+  repeat (cbn -[
               to_hoare
               gen_caller_obligation
               gen_callee_obligation

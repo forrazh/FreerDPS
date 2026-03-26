@@ -196,7 +196,7 @@ Lemma close_door_respectful `{Provide ix DOORS} {im : impureMonad ix} (ω : Ω) 
   : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (doors_contract) (close_door d))( ω).
 
 Proof.
-  prove impure with airlock; subst; constructor.
+  prove impure with airlock; subst ; constructor.
 
   (* This leaves us with one goal to prove:
 
