@@ -1,0 +1,8 @@
+(coq.theory
+ (name FreerDPS)
+ (package freerdps)
+ (synopsis "A FreeSpec rewrite to bring the power of equational reasoning and probabilities.")
+ (theories Stdlib infotheo monae mathcomp elpi_examples elpi_elpi elpi Ltac2 Equations HB)
+)  
+
+(include_subdirs qualified)

@@ -1,10 +1,11 @@
-.CoqMakefile.d
-.Makefile.d
-Makefile
-Makefile.conf
+**/Makefile
+**/Makefile.conf
+**/.CoqMakefile.d
+**/.Makefile.d
 **/*.glob
 **/*.vo
 **/*.vok
 **/*.vos
 **/.*.aux
 _opam
+_build
