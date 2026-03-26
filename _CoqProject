@@ -1,0 +1,15 @@
+-Q theories FreerDPS
+-arg -w -arg -projection-no-head-constant
+
+./theories/Component.v
+./theories/Contract.v
+./theories/Core.v
+./theories/Hoare.v
+./theories/HoareFacts.v
+./theories/Impure.v
+./theories/Init.v
+./theories/Instrument.v
+./theories/Interface.v
+./theories/Semantics.v
+./theories/Tactics.v
+./theories/Typeclasses.v

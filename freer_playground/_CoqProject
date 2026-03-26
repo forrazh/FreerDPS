@@ -1,0 +1,7 @@
+-Q theories FreerTheories
+-arg -w -arg -projection-no-head-constant
+
+./theories/FreerMonad.v
+./theories/FlipMonad.v
+./theories/lib/ActoFreerCoproduct.v
+./theories/lib/FreerFlip.v
