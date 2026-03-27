@@ -19,33 +19,7 @@ Local Open Scope reals_ext_scope.
 
 Create HintDb airlock.
 
-(** * Specifying *)
 
-(** ** Doors *) 
-
-Locate not_locked_false_eq_true.
-
-Ltac done :=
-  trivial; hnf; intros; solve
-   [ do ![solve [trivial | simple refine (@sym_equal _ _ _ _); trivial]
-         | discriminate | contradiction | split]
-   | match goal with H : ~ _ |- _ => solve [case H; trivial] end 
-   | auto with freespec
-   ].
-Generalizable All Variables.
-Arguments request {_ } _ _ _.
-
-Module ProbIfaceMod.
-    Section prob_sec.
-        Context {R : realType}.
-Inductive prob_interface : interface :=
-| CanWork (p : {prob R}) : prob_interface bool
-.
-
-Definition can_work  `{Provide ix prob_interface} {im : impureMonad ix} (p:{prob R}) : im bool := ( trigger  (inj_p $ CanWork p)).
-
-    End prob_sec.
-End ProbIfaceMod.
 
 Import ProbIfaceMod.
 
