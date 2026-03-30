@@ -7,7 +7,6 @@
 (* From ExtLib Require Import Functor Applicative Monad. *)
 From FreerDPS Require Import Interface Impure Contract.
 From monae Require Import preamble hierarchy.
-From mathcomp Require Import ssreflect.
 From HB Require Import structures.
 
 Generalizable All Variables.

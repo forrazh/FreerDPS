@@ -8,6 +8,7 @@
 (* From HB Require Export structures. *)
 From monae Require Export preamble hierarchy.
 From mathcomp Require Export ssreflect. 
+
 Ltac done :=
   trivial; hnf; intros; solve
    [ do ![solve [trivial | simple refine (@sym_equal _ _ _ _); trivial]
@@ -15,7 +16,8 @@ Ltac done :=
    | match goal with H : ~ _ |- _ => solve [case H; trivial] end 
    | auto with freespec
    ].
-Local Open Scope monae_scope.
+
+   Local Open Scope monae_scope.
 
 Definition when {X} {M : monad}  (b : bool) (m : M X) : M unit := if b then m >> skip else skip. 
 Notation "f $ x" := (f x) (at level 60, right associativity, only parsing).

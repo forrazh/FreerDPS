@@ -4,8 +4,7 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
-From mathcomp Require Import ssreflect.
-From FreerDPS Require Import Interface Impure Contract Hoare.
+From FreerDPS Require Import Init Interface Impure Contract Hoare.
 From monae Require Import preamble hierarchy.
 Generalizable All Variables.
 

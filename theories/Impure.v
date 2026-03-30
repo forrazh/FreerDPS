@@ -14,11 +14,11 @@
     <<Program>> monad introduced by the <<operational>> package (see
     <<https://github.com/whitequark/unfork#introduction>>). *)
 
-From mathcomp Require Import ssreflect ssrfun.
+From mathcomp Require Import ssrfun.
 From Stdlib Require Import Program Setoid Morphisms.
 From HB Require Import structures.
 From monae Require Import preamble hierarchy.
-From FreerDPS Require Export Interface.
+From FreerDPS Require Export Init Interface.
 
 Local Open Scope monae_scope.
 
