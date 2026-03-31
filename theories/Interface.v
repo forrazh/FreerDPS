@@ -2,7 +2,9 @@ From FreerDPS Require Export Init.
 From HB Require Import structures.
 From mathcomp Require Import ssrfun ssrbool.
 
-Definition interface : UU0 := UU0 -> UU0.
+Notation interface := (UU0 -> UU0).
+
+(* Coercion iface : interface >-> (UU0 -> UU0). *)
 
 Inductive iempty : interface := .
 
@@ -13,88 +15,42 @@ Inductive STORE (S : UU0) : interface :=
 Arguments Get {S}.
 Arguments Put [S] (s).
 
-
-Module Feather.
-
-    (* We need a hierarchy with a few structure, here we Equality -> Singleton *)
-HB.mixin Record HasEqDec T := {
-    eqtest : T -> T -> bool;
-    eqOK : forall x y, reflect (x = y) (eqtest x y);
-}.
-HB.structure Definition Equality := { T of HasEqDec T }.
-
-HB.mixin Record IsContractible T & HasEqDec T := {
-    def : T;
-    all_def : forall x, eqtest x def = true;
-}.
-HB.structure Definition Singleton := { T of IsContractible T }.
-
-(*
-   This is the type which is used as a feather factory.
-
-   - xT plays the role of a rich type,
-   - T is a new type linked to xT by some lemma. In this case a very strong
-     cancellation lemma canfg
-*)
-Definition link {xT T : UU0} {f : xT -> T} {g : T -> xT}
-                (canfg : forall x, f (g x) = x)
-              :=
-                 T. (* (link canfg) is convertible to T *)
-
-(* We explain HB how to transfer Equality over link *)
-Section _TransferEQ.
-
-Context {eT : Equality.type} {T : UU0} {f : eT -> T} {g : T -> eT}.
-About eT.
-About T.
-Context (canfg : forall x, f (g x) = x).
-
-Definition link_eqtest (x y : T) : bool := eqtest (g x) (g y).
-Check link_eqtest.
-Lemma link_eqOK (x y : T) : reflect (x = y) (link_eqtest x y).
-Proof.
-rewrite /link_eqtest. case: (eqOK (g x) (g y)) => [E|abs].
-   constructor. rewrite -[x]canfg -[y]canfg E canfg. by [].
-by constructor=> /(f_equal g)/abs.
-Qed.
-
-Check link canfg.
-
-(* (link canfg) is now an Equality instance *)
-HB.instance Definition link_HasEqDec :=
-  HasEqDec.Build (link canfg) link_eqtest link_eqOK.
-
-End _TransferEQ.
-
-End Feather.
-
 (* Module zul. *)
 HB.mixin Record IsMayProvide (ix i: interface) := {
-  proj_p : forall {α}, ix α -> option (i α)
+  proj_p : forall (α : UU0), ix α -> option (i α)
 }.
 
 HB.structure Definition MayProvide (ix : interface) :=
     { i of IsMayProvide ix i }. 
 
 HB.mixin Record IsProvide ( ix i : interface ) of MayProvide ix i := {
-  inj_p : forall {α}, i α -> ix α;
+  inj_p : forall {α : UU0}, i α -> ix α;
   proj_inj_p_equ :
-    forall {α} (e : i α),
+    forall {α : UU0} (e : i α),
       proj_p α (inj_p e) = Some e
 }.
 
 HB.structure Definition Provide (ix : interface) :=
     { i of IsProvide ix i & IsMayProvide ix i }. 
 
-HB.mixin Record CanDistinguish (ix : interface) (i : Provide.type ix) (j : MayProvide.type ix) := {
+HB.mixin Record CanDistinguish (ix : interface) (i : Provide.type ix) (j : MayProvide.type ix) : Prop := {
     (* P_t: Provide.type ix ;
     Mp_t : MayProvide.type ix; *)
-    distinguish : forall {a} e, proj_p (s:=j) a (inj_p a (s:=i) e) = None
+    distinguish : forall {α : UU0} e, proj_p (s:=j) α (inj_p α (s:=i) e) = None
 }.
 
-HB.structure Definition Distinguish (ix : interface) (i : Provide.type ix) := 
-    {j of CanDistinguish ix i j}.
+Check CanDistinguish.distinguish.
 
+Print CanDistinguish.axioms_.
+Print CanDistinguish.phant_Build.
+Print CanDistinguish.phant_axioms.
+Print CanDistinguish.identity_builder.
+
+HB.structure Definition Distinguish (ix : interface) (i : Provide.type ix) := 
+    { j of CanDistinguish ix i j }.
+
+Check CanDistinguish.distinguish.
+About Distinguish.Interface_CanDistinguish_mixin.
 
 
 Module rfl_m.
@@ -105,7 +61,6 @@ Module rfl_m.
 
 Definition proj_def (a : UU0) (e : i a) : option (j a) := None.
 HB.instance Definition default_MayProvide := IsMayProvide.Build i j proj_def.
-
 
 Definition proj_rfl (a : UU0) (e : i a) : option (i a) := Some e.
 
@@ -121,6 +76,14 @@ Qed.
 
 HB.instance Definition refl_Provide := IsProvide.Build i i inj_rfl proj_inj_rfl_equ.
 
+Lemma dist : forall (a : UU0) e, proj_def a (inj_rfl a e) = None.
+Proof.
+    move => a e.
+    by rewrite/proj_def.
+Qed.
+
+HB.instance Definition refl_Dist := CanDistinguish.Build i i j dist.
+
 End rfl_s.
 End rfl_m.
 
@@ -129,74 +92,126 @@ Declare Scope interface_scope.
 
 Module compose_m.
 
-Inductive iplus (i j : interface) (α : UU0) :=
-| in_left (e : i α) : iplus i j α
+
+Inductive iplus (i j : interface) (α : UU0)  := 
+| in_left (e : i α) : iplus i j α 
 | in_right (e : j α) : iplus i j α.
+
+
+(* Inductive iplus (i j : interface) (α : UU0) : interface α :=
+| in_left (e : i α) : iplus i j α
+| in_right (e : j α) : iplus i j α. *)
 
 Arguments in_left [i j α] (e).
 Arguments in_right [i j α] (e).
 
 Infix "+" := iplus : interface_scope.
-    Section compose_left_s.
 
-        (* Variable a : UU0. *)
-        Variable ix j : interface.
+Section compose_left_s.
 
-        Variable pt : Provide.type ix.
-        Notation i := (Provide.sort ix pt).
-(* TODO: Check if feather factory helps us here *)
-        Variable p_comb : Provide.type (iplus ix j).
-        Notation ixj := (Provide.sort (iplus ix j) p_comb).
-        (* Variable MP : MayProvide.type (iplus ix j). *)
-        (* Variable P : Provide.sort ix P_t a. *)
-(* Check proj_p. *)
+    Context {ix j : interface}.
+    (* Context {pJ : MayProvide.type ix}. *)
+    (* Definition j : interface := (MayProvide.sort ix pJ). *)
+    Notation ixj := (iplus ix j).
+    Context {pT : Provide.type (ix)}.
+    Context {α : UU0}.
+    Definition i : interface := (Provide.sort (ix) pT).
+    (* Context {a : UU0} {f : pS a -> ixj a} {g : ixj a -> pS a}. *)
+    (* Context (canfg : forall e, f (g e) = e).  *)
 
-Check p_comb.
-
-Program Definition proj_plus_left (a : UU0) (e : ixj a) : option (i a) := _. 
-Next Obligation.
-move=>a _. apply:None.
-    Qed.
-(* Should be smth like : 
-match e with
-| in_left ei => proj_p a ei
-| _ => None
-end. *)
-
-(* HB.instance Definition iplus_left_MayProvide := IsMayProvide.Build (iplus ix j) i proj_plus_left. *)
-
-(* Definition inj_plus_left (a : UU0) (e : i a) : (iplus ix j) a := in_left (inj_p a e). *)
-
-(* Lemma proj_inj_plus_left_equ : forall (a : UU0) (e : i a), proj_plus_left a (inj_plus_left a e) = Some e.
-    by move=>a e; rewrite /proj_plus_left/inj_plus_left proj_inj_p_equ.
-Qed. *)
-
-(* HB.instance Definition iplus_left_Provide := IsProvide.Build (iplus ix j) i inj_plus_left proj_inj_plus_left_equ. *)
-
-End compose_left_s.    
-
-Section compose_right_s.
-
-        Variable jx i : interface.
-
-        Variable pt : Provide.type jx.
-        Notation j := (Provide.sort jx pt).
-(* Check proj_p. *)
-
-Definition proj_plus_right (a : UU0) (e : (iplus i jx) a) : option (j a) := match e with
-| in_right ej => proj_p a ej
+Check ixj.
+    
+Definition proj_plus_left : forall α, ixj α -> option (i α) := fun α e => match e with 
+| in_left e_l => proj_p (s:=i) α e_l
 | _ => None
 end.
 
-HB.instance Definition _ := IsMayProvide.Build (iplus i jx) j proj_plus_right.
+Check ixj.
 
-Definition inj_plus_right (a: UU0) (e : j a) : (iplus i jx) a := in_right (inj_p a e).
+(* #[non_forgetful_inheritance] *)
+HB.instance Definition iplus_left_MayProvide := IsMayProvide.Build ixj i proj_plus_left.
 
-Lemma proj_inj_plus_right_equ : forall a e, proj_plus_right a (inj_plus_right a e) = Some e.
-    by move=>a e; rewrite /proj_plus_right/inj_plus_right proj_inj_p_equ.
+Definition inj_plus_left (a: UU0) (e : i a) : ixj a := in_left (inj_p (s:=i) a e).
+
+Lemma proj_inj_plus_left_equ : forall (a:UU0) (e: i a), proj_plus_left a (inj_plus_left a e) = Some e.
+    move=>a e; rewrite /proj_plus_left/inj_plus_left. exact/proj_inj_p_equ.
 Qed.
 
+HB.instance Definition iplus_left_Provide := IsProvide.Build ixj i inj_plus_left proj_inj_plus_left_equ.
+
+Check rfl_m.proj_def.
+
+End compose_left_s.
+
+Section compose_right_s.
+
+    Context {i jx : interface}.
+    Notation ijx := (iplus i jx).
+    Context {pT : Provide.type (jx)}.
+    Let j : interface := (Provide.sort (jx) pT).
+    (* Context {a : UU0} {f : pS a -> ixj a} {g : ixj a -> pS a}. *)
+    (* Context (canfg : forall e, f (g e) = e).  *)
+
+Definition proj_plus_right (a : UU0) (e : ijx a) : option (j a) := match e with 
+| in_right e_r => proj_p (s:=j) a e_r
+| _ => None
+end.
+
+(* #[non_forgetful_inheritance] *)
+HB.instance Definition iplus_right_MayProvide := IsMayProvide.Build ijx j proj_plus_right.
+
+Definition inj_plus_right (a: UU0) (e : j a) : ijx a := in_right (inj_p (s:=j) a e).
+
+Let proj_inj_plus_right_equ : forall (a:UU0) (e: j a), proj_plus_right a (inj_plus_right a e) = Some e.
+    move=>a e; rewrite /proj_plus_right/inj_plus_right. exact/proj_inj_p_equ.
+Qed.
+
+HB.instance Definition iplus_right_Provide := IsProvide.Build ijx j inj_plus_right proj_inj_plus_right_equ.
+
+Check compose_m_j__canonical__Interface_Provide.
+
 End compose_right_s.
+End compose_m.
 
-(* Ltac find_may_provide := apply: refl_MayProvide*)
+HB.export compose_m.
 
+Check inj_plus_left.
+
+Module distinctions.
+
+    Section dist_s.
+
+
+
+        Context {ix jx : interface}.
+        Notation ixjx := (iplus ix jx).
+
+        Search Provide.type.
+
+Check Provide.Pack _ _ iplus_left_Provide.
+Check @iplus_left_Provide.
+
+Check @compose_m_i__canonical__Interface_Provide ix jx.
+
+
+        Print Provide.type.
+
+        Context {pI : Provide.type ix} {pJ : Provide.type jx}.
+        Definition i : interface := Provide.sort ix pI.
+
+Definition prov :=  @compose_m_i__canonical__Interface_Provide ix jx i.
+Check compose_m.i.
+Check prov.
+        Definition j : interface := Provide.sort jx pJ.
+
+
+Lemma dist : forall (a : UU0) e, rfl_m.proj_def _ j a (inj_plus_left (j:=jx) (pT:= prov) a e) = None.
+Proof.
+    move => a e.
+    by rewrite/rfl_m.proj_def.
+Qed.
+
+
+HB.about CanDistinguish.Build.
+
+HB.instance Definition refl_Dist := CanDistinguish.Build ixjx prov prov dist.
