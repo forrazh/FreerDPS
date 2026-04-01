@@ -2,7 +2,7 @@ From FreerDPS Require Export Init.
 From HB Require Import structures.
 From mathcomp Require Import ssrfun ssrbool.
 
-Notation interface := (UU0 -> UU0).
+Definition interface : UU0 := (UU0 -> UU0).
 
 (* Coercion iface : interface >-> (UU0 -> UU0). *)
 
@@ -16,51 +16,145 @@ Arguments Get {S}.
 Arguments Put [S] (s).
 
 (* Module zul. *)
-HB.mixin Record IsMayProvide (ix i: interface) := {
+HB.mixin Record IsMayProvide (i ix : interface) := {
   proj_p : forall (α : UU0), ix α -> option (i α)
 }.
 
-HB.structure Definition MayProvide (ix : interface) :=
-    { i of IsMayProvide ix i }. 
+HB.structure Definition MayProvide (i : interface) :=
+    { ix of IsMayProvide i ix }. 
 
-HB.mixin Record IsProvide ( ix i : interface ) of MayProvide ix i := {
+HB.mixin Record IsProvide ( i ix : interface ) of MayProvide i ix := {
   inj_p : forall {α : UU0}, i α -> ix α;
   proj_inj_p_equ :
     forall {α : UU0} (e : i α),
       proj_p α (inj_p e) = Some e
 }.
 
-HB.structure Definition Provide (ix : interface) :=
-    { i of IsProvide ix i & IsMayProvide ix i }. 
+HB.structure Definition Provide (i : interface) :=
+    { ix of IsProvide i ix & IsMayProvide i ix }. 
 
-HB.mixin Record CanDistinguish (ix : interface) (i : Provide.type ix) (j : MayProvide.type ix) : Prop := {
-    (* P_t: Provide.type ix ;
-    Mp_t : MayProvide.type ix; *)
-    distinguish : forall {α : UU0} e, proj_p (s:=j) α (inj_p α (s:=i) e) = None
+Check proj_p.
+(* 
+HB.factory Record IsProvide2
+  (i1 i2 ix : interface)
+  of Provide i1 ix & Provide i2 ix := {
+  }. *)
+
+HB.mixin Record IsCombinedProvider (i j ix : interface) of Provide i ix := {
+}.
+HB.structure Definition CombinedProvider (i j : interface) := 
+    {ix of IsCombinedProvider i j ix & IsProvide i ix & IsMayProvide j ix & IsMayProvide i ix }.
+
+
+HB.mixin Record IsProvide2 (i j ix : interface) of Provide i ix & Provide j ix := {
 }.
 
-Check CanDistinguish.distinguish.
+HB.structure Definition Provide2 (i j : interface) := 
+    {ix of IsProvide2 i j ix 
+        & Provide j ix & MayProvide j ix
+        & Provide i ix & MayProvide i ix 
+     }.
 
-Print CanDistinguish.axioms_.
-Print CanDistinguish.phant_Build.
-Print CanDistinguish.phant_axioms.
-Print CanDistinguish.identity_builder.
+Check Provide2.Interface_IsMayProvide_mixin.
 
-HB.structure Definition Distinguish (ix : interface) (i : Provide.type ix) := 
-    { j of CanDistinguish ix i j }.
+Check proj_p.
 
-Check CanDistinguish.distinguish.
-About Distinguish.Interface_CanDistinguish_mixin.
 
+(* HB.structure Definition Provide2 (i1 i2 : interface) := *)
+  (* { ix of IsProvide2 i1 i2 ix &}. *)
+
+(* HB.about IsProvide2.Build. *)
+
+
+    (* proj_p_i : forall (α : UU0) (e : ix α), proj_p (s:=MayProvide.type i) α e *)
+
+(* HB.structure Definition MultiProvider (i j : interface) :=  *)
+    (* {ix of IsMultiProvider i j ix & IsProvide i ix & IsMayProvide i ix & IsProvide j ix & IsMayProvide j ix }. *)
+
+(* HB.about IsMultiProvider.Build. *)
+
+Section t.
+    Variables (i j : interface) (ix : Provide2.type i j).
+    Variables (α : UU0) (e : i α).
+Check inj_p.
+(* 
+inj_p
+     : forall α0 : UU0, ?i α0 -> ?s α0
+where
+?i : [i : interface j : interface ix : Provide2.type i j α : UU0 e : i α |- interface]
+?s : [i : interface j : interface ix : Provide2.type i j α : UU0 e : i α
+|- Provide.type ?i]
+*)
+Check inj_p (s:=ix).
+(* 
+inj_p
+     : forall α : UU0, j α -> ix α
+ *)
+Fail Check proj_p (s:=ix) (i:=i).
+(* 
+The command has indeed failed with message:
+In environment
+i, j : interface
+ix : Provide2.type i j
+α : UU0
+e : i α
+The term "ix" has type "Provide2.type i j" while it is expected to have type
+"MayProvide.type i".
+*)
+(* HB.mixin Record CanDistinguish (i j : interface) (ix : CombinedProvider.type i j) : Prop := {
+    (* P_t: Provide.type ix ;
+    Mp_t : MayProvide.type ix; *)
+    distinguish : forall {α : UU0} (e : i α), proj_p (i:=j) α (inj_p α (s:=ix) e) = None
+}. *)
+
+HB.about Provide2.
+(* 
+HB: Provide2.type is a structure (from "(stdin)", line 3)
+HB: Provide2.type characterizing operations and axioms are:
+HB: Provide2 is a factory for the following mixins:
+    - IsMayProvide
+    - IsProvide
+    - IsProvide2 (* new, not from inheritance *)
+HB: Provide2 inherits from:
+    - MayProvide
+    - Provide
+HB: Provide2 is inherited by:
+*)
+
+HB.about MayProvide.
+(* 
+HB: MayProvide.type is a structure (from "(stdin)", line 19)
+HB: MayProvide.type characterizing operations and axioms are:
+    - proj_p
+HB: MayProvide is a factory for the following mixins:
+    - IsMayProvide (* new, not from inheritance *)
+HB: MayProvide inherits from:
+HB: MayProvide is inherited by:
+    - Provide
+    - CombinedProvider
+    - Provide2
+*)
+
+(* HB.structure Definition Distinguish (ix : interface) (i : Provide.type ix) :=  *)
+    (* { j of CanDistinguish ix i j }. *)
+
+(* Check CanDistinguish.distinguish. *)
+(* About Distinguish.Interface_CanDistinguish_mixin. *)
+End t.
 
 Module rfl_m.
-    Section rfl_s.
-        (* Variable a : UU0. *)
-        Variable i : interface.
-        Variable j : interface.
+    Section df.
+    (* Variable a : UU0. *)
+    Context {i j : interface}.
+        (* Variable i : interface. *)
+        (* Variable j : interface. *)
 
 Definition proj_def (a : UU0) (e : i a) : option (j a) := None.
-HB.instance Definition default_MayProvide := IsMayProvide.Build i j proj_def.
+HB.instance Definition default_MayProvide := IsMayProvide.Build j i proj_def.
+    End df.
+
+    Section rfl_s.
+        Variable i : interface.
 
 Definition proj_rfl (a : UU0) (e : i a) : option (i a) := Some e.
 
@@ -75,12 +169,14 @@ Qed.
 (* HB.about Provide_of.Build. *)
 
 HB.instance Definition refl_Provide := IsProvide.Build i i inj_rfl proj_inj_rfl_equ.
-
-Lemma dist : forall (a : UU0) e, proj_def a (inj_rfl a e) = None.
+About proj_def.
+Lemma dist : forall (a : UU0) e, proj_def (j:=i) a (inj_rfl a e) = None.
 Proof.
     move => a e.
     by rewrite/proj_def.
 Qed.
+
+HB.graph graph.f.
 
 HB.instance Definition refl_Dist := CanDistinguish.Build i i j dist.
 

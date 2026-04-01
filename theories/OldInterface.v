@@ -87,9 +87,12 @@ Class Provide (ix i : interface) `{MayProvide ix i} : Type :=
     ridiculously high priority number to ensure it is selected only if no other
     instances are found. *)
 
-Instance default_MayProvide (i j : interface) : MayProvide i j|1000 :=
-  { proj_p := fun _ _ => None
+Program Instance default_MayProvide (i j : interface) : MayProvide i j|1000 :=
+  { 
+    (* proj_p := fun _ _ => None *)
   }.
+
+  
 
 (** It is expected that, for an interface composite [ix] which provides [i] and
     may provide [j], [inj_p] and [proj_p] do not mix up [i] and [j]
@@ -103,6 +106,10 @@ Class Distinguish (ix i j : interface) `{Provide ix i, MayProvide ix j} : Prop :
   }.
 Unset Printing Implicit Defensive.
 Check @distinguish.
+
+Print default_MayProvide.
+Print Distinguish.
+Print proj_p.
 
 (** * Composing Interfaces *)
 
@@ -188,6 +195,7 @@ Instance iplus_right_Provide (i jx j : interface) `{Provide jx j}
   { inj_p := fun _ e => in_right (inj_p e)
   }.
 
+
 Next Obligation.
   now rewrite proj_inj_p_equ.
 Qed.
@@ -221,6 +229,8 @@ Instance iplus_left_default_Distinguish (ix jx i j : interface)
                  ( @iplus_left_MayProvide ix i jx M1)
                  ( @iplus_left_Provide ix i jx M1 P1)
                  ( @default_MayProvide _ j).
+
+Check Distinguish.
 
 #[program]
 Instance iplus_right_default_Distinguish (ix jx i j : interface)
