@@ -33,7 +33,39 @@ end.
 
 Reserved Infix "===" (at level 70, no associativity).
  
-Generalizable All Variables.
+Notation "m '~>>' n" :=
+  (forall (α : Type), m α -> n α)
+    (at level 80, no associativity)
+  : type_scope.
+
 
 Definition function_eq {a b} (r : b -> b -> Prop) (f g : a -> b) : Prop :=
   forall (x : a), r (f x) (g x).
+ 
+Generalizable All Variables.
+
+From Stdlib Require Export List RelationClasses Setoid Morphisms.
+Import ListNotations.
+
+Open Scope signature_scope.
+Close Scope nat_scope.
+Open Scope bool_scope.
+
+#[program]
+Instance function_eq_Equivalence a `(Equivalence b r)
+  : @Equivalence (a -> b) (function_eq r).
+
+Next Obligation.
+  now intros f x.
+Qed.
+
+Next Obligation.
+  intros f g equ x.
+  symmetry.
+  apply equ.
+Qed.
+
+Next Obligation.
+  intros f g h equ1 equ2 x.
+  transitivity (g x); [ apply equ1 | apply equ2 ].
+Qed. 
