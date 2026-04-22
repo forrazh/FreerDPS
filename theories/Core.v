@@ -5,6 +5,7 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 From FreerDPS Require Export
+     ProbInterface
      Interface
      Typeclasses
      Impure

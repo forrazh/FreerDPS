@@ -196,7 +196,8 @@ Lemma close_door_respectful `{Provide ix DOORS} {im : impureMonad ix} (ω : Ω) 
   : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (doors_contract) (close_door d))( ω).
 
 Proof.
-  prove impure with airlock; subst ; constructor.
+  prove impure with airlock ; subst ; constructor.
+
 
   (* This leaves us with one goal to prove:
 
@@ -316,14 +317,14 @@ Proof.
     (* move: H1 => /(_ x ω0) => H1. *)
      apply/(H1 x ω0) => //; [by apply hpre|].
     cbn in *.
-    inversion hpre; rewrite /=/gen_caller_obligation in H4.
+    inversion hpre. rewrite /= in H4. rewrite /gen_caller_obligation in H4.
     (* simplify_gens *)
     unfold gen_caller_obligation, gen_callee_obligation, gen_witness_update in *. 
     cbn in *.
     destruct (proj_p e) as [e'|].
     ++ destruct hpost as [o_callee equω].
        destruct e' as [d|d].
-       +++ rewrite H3.
+       +++ rewrite H3 /=.
            apply safe.
        +++ apply one_door_safe_all_doors_safe with (d := d);
              apply one_door_safe_all_doors_safe with (d' := d) in safe;
