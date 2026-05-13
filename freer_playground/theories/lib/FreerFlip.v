@@ -1,5 +1,5 @@
 From Stdlib Require Import ssrmatching Reals JMeq Relations Morphisms Eqdep.
-From mathcomp Require Import ssreflect ssrbool ssrnum ssralg reals. 
+From mathcomp Require Import ssreflect ssrbool ssrnum ssralg reals interval_inference. 
 From infotheo Require Import realType_ext.
 From HB Require Import structures.
 From monae Require Import preamble hierarchy monad_lib.
@@ -11,6 +11,8 @@ Local Open Scope monae_scope.
 Local Open Scope proba_scope.
 Local Open Scope reals_ext_scope.
 Local Open Scope freer_flip_scope.
+Local Open Scope ring_scope.
+Local Open Scope convex_scope.
 
 Reserved Notation "x <|| p ||> y" (at level 40, left associativity, y at next level).
 Reserved Notation "a === b" (at level 90).
@@ -51,8 +53,8 @@ Notation "x <|| p ||> y" :=
 
 (* 5th step : Flip equiv laws *)
 Inductive flip_rel :forall `[X : UU0] (m1 m2 : M X), Prop := 
-| rflip1 : flip_rel (flipf 1%:pr) (Ret true)
-| rflipNeg : forall p, flip_rel (flipf p) ((flipf (Prob.p p).~%:pr) >>= (fun x => Ret (~~ x)))
+| rflip1 : flip_rel (flipf 1%:i01) (Ret true)
+| rflipNeg : forall p, flip_rel (flipf p) ((flipf p%:num.~%:i01) >>= (fun x => Ret (~~ x)))
 | rflipmm : forall (A:UU0) p (a: (M A)), flip_rel (flipf p >> a) a 
     (* quasi associativity *)
 | rflipA : forall (T:UU0) (p q r s : {prob R}) (a b c : M T),  flip_rel
@@ -96,7 +98,7 @@ Proof.
   all: rewrite !denote_trigger/denote_flip_effect.
   - exact/fA0. 
   - exact/flipmm.
-  - under eq_bind do rewrite denote_ret; exact/flipNeg.
+  - under eq_bind do rewrite denote_ret. exact/flipNeg.
   - rewrite denote_ret; exact/flip1.
 Qed.
 
