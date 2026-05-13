@@ -26,7 +26,7 @@
     (coq-mathcomp-classical (= "latest"))
     (coq (= "9.0"))
     (coq-stdlib (= "9.0.0"))
-    (coq-infotheo (= "dev"))
+    (coq-infotheo (= "0.9.7"))
     ))
 
 ; monae and infotheo are in dev for now because we want 
