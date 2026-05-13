@@ -98,7 +98,7 @@ Proof.
   all: rewrite !denote_trigger/denote_flip_effect.
   - exact/fA0. 
   - exact/flipmm.
-  - under eq_bind do rewrite denote_ret; exact/flipNeg.
+  - under eq_bind do rewrite denote_ret. exact/flipNeg.
   - rewrite denote_ret; exact/flip1.
 Qed.
 

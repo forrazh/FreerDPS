@@ -1,7 +1,7 @@
 Ltac typeof X := type of X.
 
-From Stdlib Require Import ssrmatching.
-From mathcomp Require Import ssreflect ssrnum ssrbool ssralg reals interval_inference. 
+From Stdlib Require Import ssrmatching .
+From mathcomp Require Import ssreflect ssrnum ssrbool ssralg  reals interval_inference. 
 From infotheo Require Import realType_ext.
 
 From HB Require Import structures.
@@ -17,7 +17,6 @@ Unset Printing Implicit Defensive.
 Local Open Scope ring_scope.
 Local Open Scope reals_ext_scope.
 Local Open Scope convex_scope.
-
 (* 1st step : FlipMonad *)
 HB.mixin Record isMonadFlip {R : realType} (M : UU0 -> UU0) of Monad M := {
     flip : forall (p : {prob R}), M bool ;
