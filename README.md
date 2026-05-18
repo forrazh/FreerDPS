@@ -35,7 +35,7 @@ In case monae / infotheo can not be installed through opam, you can clone them f
 
 Versions known to work :
 - monae : dev
-- infotheo : 0.9.6 => [I have a local fork for now](https://github.com/forrazh/infotheo/tree/fix/0.9.6)
+- infotheo : 0.9.7
 
 You just need to clone the repositories and run : 
 
