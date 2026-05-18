@@ -29,7 +29,7 @@
     (coq-infotheo (= "0.9.7"))
     ))
 
-; monae and infotheo are in dev for now because we want 
+; monae is in dev and infotheo is in 0.9.7 for now because we want 
 ; to use the latest coq version available, which is not 
 ; possible using the current opam versions.
 
