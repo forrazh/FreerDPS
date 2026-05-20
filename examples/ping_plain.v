@@ -363,6 +363,9 @@ Proof.
     by cleanvert H5.
 Qed.
 
+    End client_faulty_s.
+End CLIENT_FAULTY_NETWORK_M.
+
 
 (* ------------------------------------------------------------------------------------ *)
 
@@ -375,6 +378,50 @@ Qed.
 
 **)
 (* ------------------------------------------------------------------------------------ *)
+
+Definition deliver_or_propagate_drop `{Provide ix IN} {im: impureMonad ix} (next : M -> im packet_transfer) : im packet_transfer := deliver >>= fun p => 
+match p with
+| DELIVERED m => next m
+| DROPPED => Ret DROPPED
+end. 
+
+Module SERVER_FAULTY_NETWORK_M.
+    Section server_faulty_s.
+
+        Definition faulty_sned `{Provide ix IS, Provide ix IN} {im: impureMonad ix} : im packet_transfer := < sned >. 
+
+        Program Definition prog `{Provide ix IS, Provide ix IN} {im: impureMonad ix} : im packet_transfer := 
+            deliver >>= fun p => _.
+        Next Obligation.
+            move => ix Hmp_s Hp_s Hmp_n Hp_n im; case => [m|].
+            - apply/bind => [| m']. apply/recv. apply/bind => [| m'']. apply/sned. apply/deliver.
+            apply/Ret/DROPPED.
+        Show Proof.
+        Defined. 
+
+Definition sn_contract := sharedcontractprod s_contract n_contract.
+
+Lemma sn_respectful `{Provide ix IC, Provide ix IN} {im : impureMonad ix}
+        : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (sn_contract) (prog)) (init_channel).
+Proof.
+        prove impure with ping_db.
+        by case : x0.
+Qed.
+
+Lemma sn_run `{Provide ix IC, Provide ix IN} {im : impureMonad ix} (m : M) (c : CHANNEL)
+        (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (sn_contract) (prog)) (init_channel) tt c)
+    : is_legal_state c.
+Proof.
+    run_simpl run; cleanvert run; cleanvert H3; cleanvert H4; cleanvert H3; cleanvert H4.
+    move : H5; case x0 => /= [m' |] H5.
+    - by cleanvert H5; cleanvert H3; cleanvert H4; cleanvert H3; cleanvert H5; cleanvert H4.
+
+    by cleanvert H5.
+Qed.
+
+    End server_faulty_s.
+End SERVER_FAULTY_NETWORK_M.
+
 
 (**
     Now, lets try to model this :
