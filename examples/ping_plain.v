@@ -262,7 +262,7 @@ Definition packet_transfer := option M.
 Definition packet_transfer := option M.
 
 Inductive IN : interface :=
-| DELIVER : IN packet_transfer.
+| DELIVER : M -> IN packet_transfer.
 (* Message may be dropped *)
 
 Definition n_step (c : CHANNEL) : forall X : UU0, IN X -> X -> CHANNEL.
@@ -273,25 +273,30 @@ Definition n_step (c : CHANNEL) : forall X : UU0, IN X -> X -> CHANNEL.
 Defined.
 
 Inductive n_o_caller (curr : CHANNEL) : forall X : UU0, IN X -> Prop := 
-| DELIVER_O : n_o_caller curr DELIVER.
+| DELIVER_O (m : M) : n_o_caller curr (DELIVER m).
 Hint Constructors n_o_caller : ping_db.
 
+Definition legal_delivery (p : packet_transfer) (m : M) : Prop := match p with
+| Some m' => m = m'
+| None => True
+end.
+
 Inductive n_o_callee (curr: CHANNEL) : forall X : UU0, IN X -> X -> Prop :=
-| O_DELIVER (p : packet_transfer) : n_o_callee curr DELIVER p.
+| O_DELIVER (m : M) (p : packet_transfer) (eq : legal_delivery p m) : n_o_callee curr (DELIVER m) p.
 Hint Constructors n_o_callee : ping_db.
 
-Definition deliver `{Provide ix IN} {im : impureMonad ix} := trigger (im:=im) (inj_p $ DELIVER).
+Definition deliver `{Provide ix IN} {im : impureMonad ix} (m : M) := trigger (im:=im) (inj_p $ DELIVER m).
 
 Definition n_contract := make_contract n_step n_o_caller n_o_callee.
 
-Lemma network_respectful `{Provide ix IN} {im : impureMonad ix} (c : CHANNEL)
-        : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (n_contract) (deliver)) (c).
+Lemma network_respectful `{Provide ix IN} {im : impureMonad ix} (c : CHANNEL) (m : M)
+        : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (n_contract) (deliver m)) (c).
 Proof. 
     prove impure with ping_db.
 Qed.
 
-Lemma network_run `{Provide ix IN} {im : impureMonad ix} (packet : packet_transfer) (initial_state_channel  final_state_channel: CHANNEL)
-        (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (n_contract) (deliver)) initial_state_channel packet final_state_channel) 
+Lemma network_run `{Provide ix IN} {im : impureMonad ix} (packet : packet_transfer) msg (initial_state_channel  final_state_channel: CHANNEL)
+        (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (n_contract) (deliver msg)) initial_state_channel packet final_state_channel) 
     : is_legal_state initial_state_channel -> is_legal_state final_state_channel.
 Proof.
     move => Hlegal.
@@ -302,7 +307,7 @@ Proof.
     move : H2.
     case : packet => /= [m |];
         rewrite /gen_witness_update/gen_callee_obligation; 
-        case (proj_p (inj_p DELIVER)) => //= i H'.
+        case (proj_p (inj_p $ DELIVER msg)) => //= i H'.
     all: inversion H'; ssubst => //=.
     
     exact: update_msg_yields_legal_state. 
@@ -328,7 +333,7 @@ Module CLIENT_FAULTY_NETWORK_M.
     Section client_faulty_s.
 
         Definition prog `{Provide ix IC, Provide ix IN} {im: impureMonad ix} : im unit:= 
-        send (im:=im) >> deliver >>= fun p => match p with
+        send (im:=im) >>= deliver >>= fun p => match p with
         | Some m => wait m
         | None => skip
         end.
@@ -368,29 +373,23 @@ End CLIENT_FAULTY_NETWORK_M.
 **)
 (* ------------------------------------------------------------------------------------ *)
 
-Definition deliver_or_propagate_drop `{Provide ix IN} {im: impureMonad ix} (next : M -> im packet_transfer) : im packet_transfer := deliver >>= fun p => 
-match p with
-| Some m => next m
-| None => Ret None
-end. 
-
 Module SERVER_FAULTY_NETWORK_M.
     Section server_faulty_s.
 
         (* Definition faulty_sned `{Provide ix IS, Provide ix IN} {im: impureMonad ix} : im packet_transfer := < sned >.  *)
 
-Fixpoint prog `{Provide ix IS, Provide ix IN} {im : impureMonad ix} (fuel : nat) : im unit := (*fun (X : im T) => *) 
+Fixpoint prog `{Provide ix IS, Provide ix IN} {im : impureMonad ix} (fuel : nat) (msg : M) : im unit := (*fun (X : im T) => *) 
     (* add message deliverance *)
-    deliver >>= fun p => match p with
+    deliver msg >>= fun p => match p with
     | Some m => recv m >> 
                 sned >> 
     (* add message deliverance... needed ? *)
                 match fuel with
-                    | S ful => prog ful 
+                    | S ful => prog ful msg
                     | 0%nat => skip
                 end
     | None => match fuel with
-                | S ful => prog ful 
+                | S ful => prog ful msg
                 | 0%nat => skip
             end
     end.
@@ -405,22 +404,26 @@ Fixpoint prog `{Provide ix IS, Provide ix IN} {im : impureMonad ix} (fuel : nat)
         Show Proof.
         Defined.  *)
 
+Let ping_sent := (Some ping, false).
+Print init_channel.
+
 Definition sn_contract := sharedcontractprod s_contract n_contract.
 
 Lemma sn_respectful `{Provide ix IS, Provide ix IN} {im : impureMonad ix} (fuel : nat)
-        : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (sn_contract) (prog fuel)) (init_channel).
+        : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (sn_contract) (prog fuel ping)) (ping_sent).
 Proof.
     elim: fuel => [|ful EH];
-        prove impure with ping_db;
+     prove impure with ping_db;
         (** 
           * probably lacks a // in tactic... but probably not tbf... 
           * The question might be 'do we want to make the tactic automatically destruct things ?'  *)
             case : x => // m.
+    
     prove impure with ping_db.
 Qed.
 
 Lemma sn_run `{Provide ix IS, Provide ix IN} {im : impureMonad ix} (fuel : nat) (c : CHANNEL)
-        (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (sn_contract) (prog fuel)) (init_channel) tt c)
+        (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (sn_contract) (prog fuel ping)) (ping_sent) tt c)
     : is_legal_state c.
 Proof.
     move: run;
@@ -452,14 +455,14 @@ Module V2_M.
 
 
 Definition prog `{Provide ix IC, Provide ix IS, Provide ix IN} {im: impureMonad ix} := 
-    (* C *) send (im:=im) >>= fun m_send =>
+    (* C *) send (im:=im) >>=
     (* N *) deliver >>= fun p => match p with 
         | Some m =>
-    (* S *) recv m_send >> 
-    (* S *) sned >>= fun m_sned =>  
+    (* S *) recv m >> 
+    (* S *) sned >>=   
     (* N *) deliver >>= fun p => match p with 
         | Some m' => 
-    (* C *) wait m_sned
+    (* C *) wait m'
         | None => skip
         end    
         | None => skip
