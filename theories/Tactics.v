@@ -80,6 +80,18 @@ Ltac simplify_gens :=
          end.
 
 #[local]
+Ltac destruct_option_match t :=
+  lazymatch t with
+  | context[(match ?x with
+             | Some _ => _
+             | None => _
+             end)] =>
+      let Hx := fresh "Hx" in
+      destruct x as [?|] eqn:Hx
+  end.
+
+
+#[local]
 Ltac prove_impure :=
   repeat (cbn -[
               to_hoare
@@ -106,6 +118,7 @@ Ltac prove_impure :=
     prove_impure
 
     | |- pre ?pcond ?ω =>
+        tryif destruct_option_match ω then prove_impure else
 
     lazymatch pcond with 
       | lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) ?p => let p := (eval hnf in p) in
