@@ -15,7 +15,5 @@
 ./theories/Semantics.v
 ./theories/Tactics.v
 ./theories/Typeclasses.v
-./examples/cloud_based_mtd/Common.v
-./examples/cloud_based_mtd/Boxed.v
-./examples/cloud_based_mtd/Cloud.v
-./examples/cloud_based_mtd/Trusted.v
+
+./examples/ping_plain.v
