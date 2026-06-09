@@ -5,8 +5,6 @@ From FreerDPS Require Import Init Interface Impure.
 
 Generalizable All Variables.
 
-Local Open Scope monae_scope.
-
 Module Export ProbIfaceMod.
     Section prob_sec.
         Context {R : realType}.

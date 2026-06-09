@@ -37,7 +37,7 @@ Definition flipf (p:{prob R}) := ( @trigger FlipEff M bool (flip_e p)).
 (* Let fa := flipacto R. *)
 Variable fl : flipMonad R.
 
-Definition denote_flip_effect : FlipEff ~~> fl := 
+Definition denote_flip_effect : FlipEff ~~> fl. := 
 fun X fx => match fx with 
 | flip_e p => flip p
 end.

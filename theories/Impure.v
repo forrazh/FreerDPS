@@ -20,7 +20,7 @@ From HB Require Import structures.
 From monae Require Import preamble hierarchy.
 From FreerDPS Require Export Interface.
 
-Local Open Scope monae_scope.
+(* Local Open Scope monae_scope. *)
 
 Set Implicit Arguments.
 Unset Strict Implicit.

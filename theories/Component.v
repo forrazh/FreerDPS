@@ -66,7 +66,7 @@ Definition bootstrap {i} {im : impureMonad iempty} (c : component i iempty) : se
     interface [j] within an impure computation of type [impure ix a]. The
     primitives of [j] will be handled by impure computations, i.e., a component.
     of type [c : compoment j ix s]. *)
-Local Open Scope monae_scope.
+(* Local Open Scope monae_scope. *)
 
 
 #[local]
