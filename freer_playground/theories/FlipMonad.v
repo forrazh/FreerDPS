@@ -1,7 +1,7 @@
 Ltac typeof X := type of X.
 
-From Stdlib Require Import ssrmatching Reals.
-From mathcomp Require Import ssreflect ssrbool ssralg reals. 
+From Stdlib Require Import ssrmatching.
+From mathcomp Require Import ssreflect ssrnum ssrbool ssralg reals interval_inference. 
 From infotheo Require Import realType_ext.
 
 From HB Require Import structures.
@@ -14,16 +14,17 @@ Local Open Scope proba_scope.
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
-
+Local Open Scope ring_scope.
 Local Open Scope reals_ext_scope.
+Local Open Scope convex_scope.
 
 (* 1st step : FlipMonad *)
 HB.mixin Record isMonadFlip {R : realType} (M : UU0 -> UU0) of Monad M := {
     flip : forall (p : {prob R}), M bool ;
     (* identity axiom *)
-    flip1 : flip 1%:pr = Ret true  ;
+    flip1 : flip 1%:i01 = Ret true  ;
     (* skewed commutativity *)
-    flipNeg : forall (p: {prob R}), flip p = flip (Prob.p p).~%:pr >>= (fun x => Ret (~~x)) ;
+    flipNeg : forall (p: {prob R}), flip p = flip p%:num.~%:i01 >>= (fun x => Ret (~~x)) ;
     (* idempotence *)
     flipmm : forall (A:UU0) p (a:M A), flip p >> a = a ;
     (* quasi associativity *)
@@ -34,7 +35,7 @@ HB.mixin Record isMonadFlip {R : realType} (M : UU0 -> UU0) of Monad M := {
     (* Prob.p p = (Prob.p r * Prob.p s)%R :> R -> ((Prob.p s).~ = (Prob.p p).~ * (Prob.p q).~)%R -> *)
 flip p >>= (fun x => if x then a else flip q >>= (fun x0 => if x0 then b else c)) = 
 flip [s_of p, q] >>= 
-  (fun x => if x then flip [r_of p, q] >>= (fun x0 => if x0 then a else b) else c) ;  
+  (fun x => if x then flip [r_of p, q] >>= (fun x0 => if x0 then a else b) else c) ;
 }.
 
 #[short(type=flipMonad)]
@@ -52,11 +53,11 @@ Module FlipLib.
 
 
 (*** identity laws ***)
-Let flip1 : flip_c 1%:pr = Ret true.
+Let flip1 : flip_c 1%:i01 = Ret true.
 Proof. exact: choice1. Qed.
 
 (*** negation law ***)
-Let flipNeg : forall p, flip_c p =  (flip_c ((Prob.p p).~ %:pr)) >>= (fun x => Ret (~~ x)).
+Let flipNeg : forall p, flip_c p =  (flip_c (p%:num.~ %:i01)) >>= (fun x => Ret (~~ x)).
 Proof.
   by move=>p; rewrite /flip_c/bcoin-choiceC choice_bindDl!bindretf.
 Qed.
@@ -93,13 +94,13 @@ Let choicef (p : {prob R}) (A:UU0) (a b : M A) : M A := flip p >>= (fun x => if 
 
 
 (*** identity laws ***)
-Let choice1 : forall (A:UU0) (a b : M A), choicef 1%:pr a b =  a.
+Let choice1 : forall (A:UU0) (a b : M A), choicef 1%:i01 a b =  a.
 Proof.
   move=>A a b/=. by rewrite /choicef flip1 bindretf.
 Qed.  
 
 (*** negation law ***)
-Let choiceC : forall (A : UU0) (p:{prob R}) (a b : M A), choicef p a b = choicef ((Prob.p p).~ %:pr) b a.
+Let choiceC : forall (A : UU0) (p:{prob R}) (a b : M A), choicef p a b = choicef (p%:num.~ %:i01) b a.
 Proof.
   move=> A p a b.
   rewrite /choicef flipNeg bindA. 
@@ -164,13 +165,13 @@ Notation pr := (probMonad R).
 Definition cflip (p : {prob R}) := @bcoin R flipacto p.
 
 (*** identity laws ***)
-Let flip1 : @cflip 1%:pr = ret R bool true.
+Let flip1 : @cflip 1%:i01 = ret R bool true.
 Proof. exact: choice1. Qed.
 
 Ltac rw_choicebind_dl:=rewrite /cflip choice_bindDl!bindretf/=.
 
 (*** negation law ***)
-Let flipNeg : forall p, cflip p = (cflip ((Prob.p p).~ %:pr) >>= (fun x => ret R bool (~~ x))).
+Let flipNeg : forall p, cflip p = (cflip (p%:num.~ %:i01) >>= (fun x => ret R bool (~~ x))).
 Proof. 
   move=>p. 
   rw_choicebind_dl;
