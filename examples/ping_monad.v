@@ -17,45 +17,46 @@ Local Open Scope monae_scope.
 
 Create HintDb ping_db.
 
-Inductive M := ping|pong.
-Definition msg_eq_dec (m m' : M) : { m = m' } + { ~ m = m' } :=
+Inductive Msg := ping|pong.
+Definition msg_eq_dec (m m' : Msg) : { m = m' } + { ~ m = m' } :=
   ltac:(decide equality).
 (* Channel contains the current message (optional) and whether it has been dropped or not *)
-Inductive CHANNEL_STATE := 
-| Nothing 
-| Something (m : M)
-| Error.
 
 Module ChannelHelper.
-Definition init_channel : CHANNEL_STATE := Nothing.
-Definition drop_msg : CHANNEL_STATE := Error.
-Definition update_msg (m : M) (curr : CHANNEL_STATE)  : CHANNEL_STATE := match curr with
-| Error => drop_msg
-| _ => Something m
+    Section sc.
+        (* Context {M: failMonad}. *)
+Inductive CHANNEL_STATE := Msg.
+
+Definition init_channel : CHANNEL := None.
+Definition drop_msg : CHANNEL := fail.
+Definition update_msg (m : Msg) (curr : CHANNEL)  : CHANNEL := match curr with
+| (_, true) => drop_msg
+| _ => (Some m, false)
 end.
 
-Definition is_channel_empty (c : CHANNEL_STATE) : Prop := match c with 
-| Something _ => False
+Definition is_channel_empty (c : CHANNEL) : Prop := match (c.1) with 
+| Some _ => False
 | _ => True
 end.
 
-Definition channel_contains (c : CHANNEL_STATE) (m : M) := match c with 
-| Nothing | Error => False
-| Something m' => match m, m' with 
+Definition channel_contains (c : CHANNEL) (m : Msg) := match c with 
+| (_, true) => False
+| (Some m', false) => match m, m' with 
     | ping, ping => True
     | pong, pong => True
     | _, _ => False
     end
+| _ => False
 end.
 
-(* Definition is_legal_state (c : CHANNEL_STATE) : Prop := match c with
+Definition is_legal_state (c : CHANNEL) : Prop := match c with
 | (Some _, true) => False
 (* | (Some _, false) => True *)
 (* | (None, false) *)
 | (_, _) => True
-end. *)
+end.
 
-(* Fact init_channel_is_legal : is_legal_state init_channel.
+Fact init_channel_is_legal : is_legal_state init_channel.
 Proof.
     done.
 Qed.
@@ -64,11 +65,11 @@ Fact drop_yields_legal_state : is_legal_state drop_msg.
     done.
 Qed.
 
-Fact update_msg_yields_legal_state : forall (c : CHANNEL_STATE) (m : M), is_legal_state $ update_msg m c.
+Fact update_msg_yields_legal_state : forall (c : CHANNEL) (m : Msg), is_legal_state $ update_msg m c.
     by case; case => [m'|]; case.
 Qed.
 
-Hint Resolve init_channel_is_legal drop_yields_legal_state update_msg_yields_legal_state : ping_db. *)
+Hint Resolve init_channel_is_legal drop_yields_legal_state update_msg_yields_legal_state : ping_db.
 
 
 End ChannelHelper.
@@ -81,10 +82,10 @@ Module CLIENT_M.
 
 Print interface.
 Inductive IC : interface :=
-| SEND : M -> IC unit
-| WAIT : IC M.
+| SEND : Msg -> IC unit
+| WAIT : IC Msg.
 
-Definition send `{Provide ix IC} {im : impureMonad ix} (m : M) := trigger (im:=im) (inj_p $ SEND m).
+Definition send `{Provide ix IC} {im : impureMonad ix} (m : Msg) := trigger (im:=im) (inj_p $ SEND m).
 Definition wait `{Provide ix IC} {im : impureMonad ix} := trigger (im:=im) (inj_p $ WAIT).
 
 Definition C `{Provide ix IC} {im : impureMonad ix} := 
@@ -100,39 +101,7 @@ make_contract
 (Ω -> forall α : UU0, i α -> α -> Prop) ->
 contract i Ω
 *)
-
-
-
-Definition client_update :=
-  fun (c : CHANNEL_STATE) (α : Type) (e : IC α) (x : α) =>
-    match e with
-    | WAIT => c
-    | SEND m => update_msg m c
-    end.
-
-(** Assuming the mutable variable is being initialized prior to any impure
-    computation interpretation, we do not have any obligations over the use of
-    [STORE s] primitives.  We will get back to this assertion once we have
-    defined our contract, but in the meantime, we define its callee obligation.
-
-    The logic of these callee obligations is as follows: [Get] is expected to
-    produce a result strictly equivalent to the witness, and we do not have any
-    obligations about the result of [Put] (which belongs to [unit] anyway, so
-    there is not much to tell). *)
-
-Inductive o_callee_store (c : CHANNEL_STATE) : forall (α : Type), IC α -> α -> Prop :=
-| get_o_callee (m : M) (equ : channel_contains c m) : o_callee_store c WAIT m
-| put_o_callee (m' : M) (u : unit) : o_callee_store c (SEND m') u.
-
-(** The actual contract can therefore be defined as follows: *)
-
-Definition store_specs : contract (IC) CHANNEL_STATE :=
-  {| witness_update := client_update
-  ;  caller_obligation := no_caller_obligation
-  ;  callee_obligation := o_callee_store
-  |}.
-  
-Definition c_step (c : CHANNEL_STATE) : forall X : UU0, IC X -> X -> CHANNEL_STATE := 
+Definition c_step (c : CHANNEL) : forall X : UU0, IC X -> X -> CHANNEL := 
 fun X e x =>
 match e with
 | SEND m => update_msg m c
@@ -143,14 +112,14 @@ end.
     apply/update_msg/c; [apply/ping | apply/pong].
 Defined. *)
 
-Inductive c_o_caller (curr : CHANNEL_STATE) : forall X : UU0, IC X -> Prop := 
-| SEND_O (eq : is_channel_empty curr) (m : M) (eq_cond : m = ping) : c_o_caller curr (SEND m)
-| WAIT_O (eq : curr <> drop_msg) (m : M) (eq_cond : m = pong) : c_o_caller curr (WAIT).
+Inductive c_o_caller (curr : CHANNEL) : forall X : UU0, IC X -> Prop := 
+| SEND_O (eq : is_channel_empty curr) (m : Msg) (eq_cond : m = ping) : c_o_caller curr (SEND m)
+| WAIT_O (eq : curr <> drop_msg) (m : Msg) (eq_cond : m = pong) : c_o_caller curr (WAIT).
 Hint Constructors c_o_caller : ping_db.
 
-Inductive c_o_callee (curr: CHANNEL_STATE) : forall X : UU0, IC X -> X -> Prop :=
+Inductive c_o_callee (curr: CHANNEL) : forall X : UU0, IC X -> X -> Prop :=
 | O_SEND (eq : channel_contains curr ping) m : c_o_callee curr (SEND m) tt
-| O_WAIT (m : M) (eq_cond : m = pong) : c_o_callee curr (WAIT) m.
+| O_WAIT (m : Msg) (eq_cond : m = pong) : c_o_callee curr (WAIT) m.
 Hint Constructors c_o_callee : ping_db.
 
 Definition c_contract := make_contract c_step c_o_caller c_o_callee.
@@ -160,15 +129,14 @@ Lemma client_respectful `{Provide ix IC} {im : impureMonad ix}
         : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (c_contract) (C)) (init_channel).
 Proof.
         (* rework to put only 'prove impure' ? *)
-    prove impure with ping_db. 
-    - by constructor.
+    prove impure with ping_db . constructor => //.
     inversion o_caller0; ssubst.
     inversion eq.
 Qed.
 
-Lemma client_run `{Provide ix IC} {im : impureMonad ix} (m : M) (c : CHANNEL_STATE)
+Lemma client_run `{Provide ix IC} {im : impureMonad ix} (m : Msg) (c : CHANNEL)
         (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (c_contract) (C)) (init_channel) m c) 
-    : is_channel_empty c \/ channel_contains c ping.
+    : is_legal_state c.
 Proof.
         (* rework to put only 'unroll_post' *)
     by run_simpl run;
@@ -182,17 +150,17 @@ End CLIENT_M.
 Module SERVER_M.
     Section server_s.
 Inductive IS : interface :=
-| RECV : IS M
-| SNED : M -> IS unit.
+| RECV : IS Msg
+| SNED : Msg -> IS unit.
 
-Definition sned `{Provide ix IS} {im : impureMonad ix} (m : M) := trigger (im:=im) (inj_p $ SNED m).
+Definition sned `{Provide ix IS} {im : impureMonad ix} (m : Msg) := trigger (im:=im) (inj_p $ SNED m).
 Definition recv `{Provide ix IS} {im : impureMonad ix} := trigger (im:=im) (inj_p $ RECV).
 
 (**
  * Here we model a recursive server (using fuel as functions must terminate).
  * For convenience purposes, a message is passed to all rounds.
  *)
-Fixpoint S_ `{Provide ix IS} {im : impureMonad ix} (fuel : nat) (m : M) : im unit := (*fun (X : im T) => *) 
+Fixpoint S_ `{Provide ix IS} {im : impureMonad ix} (fuel : nat) (m : Msg) : im unit := (*fun (X : im T) => *) 
     recv (im:=im) >> 
     sned m >> 
     match fuel with
@@ -200,7 +168,7 @@ Fixpoint S_ `{Provide ix IS} {im : impureMonad ix} (fuel : nat) (m : M) : im uni
         | 0%nat => skip
     end.
 
-Definition s_step (c : CHANNEL_STATE) : forall X : UU0, IS X -> X -> CHANNEL_STATE :=
+Definition s_step (c : CHANNEL) : forall X : UU0, IS X -> X -> CHANNEL :=
 fun X e x => 
 match e with 
 | RECV => c
@@ -210,19 +178,19 @@ end.
     (* apply/update_msg/c; [apply/ping | apply/pong]. *)
 (* Defined. *)
 
-(* Inductive s_o_caller (curr : CHANNEL_STATE) : forall X : UU0, IS X -> Prop :=  *)
-(* | RECV_O (m : M) : s_o_caller curr (RECV) *)
+(* Inductive s_o_caller (curr : CHANNEL) : forall X : UU0, IS X -> Prop :=  *)
+(* | RECV_O (m : Msg) : s_o_caller curr (RECV) *)
 (* | SNED_O : s_o_caller curr SNED. *)
 (* Hint Constructors s_o_caller : ping_db. *)
 
-Inductive s_o_callee (curr: CHANNEL_STATE) : forall X : UU0, IS X -> X -> Prop :=
-| O_RECV (eq : channel_contains curr ping) (m : M) : s_o_callee curr (RECV) m
-| O_SNED (eq : channel_contains curr pong) (m : M) : s_o_callee curr (SNED pong) tt.
+Inductive s_o_callee (curr: CHANNEL) : forall X : UU0, IS X -> X -> Prop :=
+| O_RECV (eq : channel_contains curr ping) (m : Msg) : s_o_callee curr (RECV) m
+| O_SNED (eq : channel_contains curr pong) (m : Msg) : s_o_callee curr (SNED pong) tt.
 Hint Constructors s_o_callee : ping_db.
 
 Definition s_contract := make_contract s_step no_caller_obligation s_o_callee.
 
-Let ping_sent := Something ping.
+Let ping_sent := (Some ping, false).
 
 Lemma server_respectful `{Provide ix IS} {im : impureMonad ix} (fuel : nat)
         : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (s_contract) (S_ fuel ping)) (ping_sent).
@@ -230,7 +198,7 @@ Proof.
     elim : fuel => [|ful EH]; prove impure with ping_db.
 Qed.
 
-Lemma server_run `{Provide ix IS} {im : impureMonad ix} (m : M) (c : CHANNEL_STATE) (fuel : nat)
+Lemma server_run `{Provide ix IS} {im : impureMonad ix} (m : Msg) (c : CHANNEL) (fuel : nat)
         (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (s_contract) (S_ fuel ping)) (ping_sent) tt c) 
     : is_legal_state c.
 Proof.
@@ -275,7 +243,7 @@ Proof.
         prove impure with ping_db.
 Qed.
 
-Lemma v1_run `{Provide ix IC, Provide ix IS} {im : impureMonad ix} (m : M) (c : CHANNEL_STATE)
+Lemma v1_run `{Provide ix IC, Provide ix IS} {im : impureMonad ix} (m : Msg) (c : CHANNEL)
         (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (cs_contract) (prog)) (init_channel) m c)
     : is_legal_state c.
 Proof.
@@ -291,11 +259,11 @@ End V1_M.
 
 (* ------------------------------------------------------------------------------------ *)
 (* Inductive IN : interface :=
-| DLVR (m : M) : IN M
-| DROP (m : M) : IN M.
+| DLVR (m : Msg) : IN Msg
+| DROP (m : Msg) : IN Msg.
 
-Definition deliver `{Provide ix IN} {im : impureMonad ix} (m : M) := trigger (im:=im) (inj_p $ DLVR m).
-Definition drop `{Provide ix IN} {im : impureMonad ix} (m : M) := trigger (im:=im) (inj_p $ DROP m). *)
+Definition deliver `{Provide ix IN} {im : impureMonad ix} (m : Msg) := trigger (im:=im) (inj_p $ DLVR m).
+Definition drop `{Provide ix IN} {im : impureMonad ix} (m : Msg) := trigger (im:=im) (inj_p $ DROP m). *)
 
 Module NETWORK_M.
     Section network_s.
@@ -303,49 +271,49 @@ Module NETWORK_M.
 (**
     A message may be dropped or delivered. This sounds like an option, could be :
     ```
-Definition packet_transfer := option M.
+Definition packet_transfer := option Msg.
     ```
 
     Maybe a simple bool is better.
  *)
 
 
-Definition packet_transfer := option M.
+Definition packet_transfer := option Msg.
 
 Inductive IN : interface :=
-| DELIVER : M -> IN bool.
+| DELIVER : Msg -> IN bool.
 (* Message may be dropped *)
 
 (* Channel devrait ptet être une monade *)
-Definition n_step (c : CHANNEL_STATE) : forall X : UU0, IN X -> X -> CHANNEL_STATE.
+Definition n_step (c : CHANNEL) : forall X : UU0, IN X -> X -> CHANNEL.
     move => X e produ.
         inversion e; subst.
         case eq : produ;
             [ apply: update_msg H c | apply/drop_msg ].
 Defined.
 
-(* Inductive n_o_caller (curr : CHANNEL_STATE) : forall X : UU0, IN X -> Prop := 
-| DELIVER_O (m : M) : n_o_caller curr (DELIVER m).
+(* Inductive n_o_caller (curr : CHANNEL) : forall X : UU0, IN X -> Prop := 
+| DELIVER_O (m : Msg) : n_o_caller curr (DELIVER m).
 Hint Constructors n_o_caller : ping_db. *)
 
-Definition legal_delivery (p : bool) (c : CHANNEL_STATE) : Prop := c.2 <> p.
+Definition legal_delivery (p : bool) (c : CHANNEL) : Prop := c.2 <> p.
 
-Inductive n_o_callee (curr: CHANNEL_STATE) : forall X : UU0, IN X -> X -> Prop :=
-| O_DELIVER (m : M) (p : packet_transfer) (eq : legal_delivery p curr) : n_o_callee curr (DELIVER m) p.
+Inductive n_o_callee (curr: CHANNEL) : forall X : UU0, IN X -> X -> Prop :=
+| O_DELIVER (m : Msg) (p : packet_transfer) (eq : legal_delivery p curr) : n_o_callee curr (DELIVER m) p.
 Hint Constructors n_o_callee : ping_db. 
 
-Definition deliver `{Provide ix IN} {im : impureMonad ix} (m : M) := trigger (im:=im) (inj_p $ DELIVER m).
+Definition deliver `{Provide ix IN} {im : impureMonad ix} (m : Msg) := trigger (im:=im) (inj_p $ DELIVER m).
 
 (* Definition n_contract := make_contract n_step n_o_caller n_o_callee. *)
 Definition n_contract := make_contract n_step no_caller_obligation n_o_callee.
 
-Lemma network_respectful `{Provide ix IN} {im : impureMonad ix} (c : CHANNEL_STATE) (m : M)
+Lemma network_respectful `{Provide ix IN} {im : impureMonad ix} (c : CHANNEL) (m : Msg)
         : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (n_contract) (deliver m)) (c).
 Proof. 
     prove impure with ping_db.
 Qed.
 
-Lemma network_run `{Provide ix IN} {im : impureMonad ix} (packet : packet_transfer) msg (initial_state_channel  final_state_channel: CHANNEL_STATE)
+Lemma network_run `{Provide ix IN} {im : impureMonad ix} (packet : packet_transfer) msg (initial_state_channel  final_state_channel: CHANNEL)
         (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (n_contract) (deliver msg)) initial_state_channel packet final_state_channel) 
     : is_legal_state initial_state_channel -> is_legal_state final_state_channel.
 Proof.
@@ -397,7 +365,7 @@ Proof.
         by prove impure with ping_db; case x0.
 Qed.
 
-Lemma cn_run `{Provide ix IC, Provide ix IN} {im : impureMonad ix} (m : M) (c : CHANNEL_STATE)
+Lemma cn_run `{Provide ix IC, Provide ix IN} {im : impureMonad ix} (m : Msg) (c : CHANNEL)
         (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (cn_contract) (prog)) (init_channel) tt c)
     : is_legal_state c.
 Proof.
@@ -429,7 +397,7 @@ Module SERVER_FAULTY_NETWORK_M.
 
         (* Definition faulty_sned `{Provide ix IS, Provide ix IN} {im: impureMonad ix} : im packet_transfer := < sned >.  *)
 
-Fixpoint prog `{Provide ix IS, Provide ix IN} {im : impureMonad ix} (fuel : nat) (msg : M) : im unit := (*fun (X : im T) => *) 
+Fixpoint prog `{Provide ix IS, Provide ix IN} {im : impureMonad ix} (fuel : nat) (msg : Msg) : im unit := (*fun (X : im T) => *) 
     (* add message deliverance *)
     deliver msg >>= fun p => match p with
     | true => recv >> 
@@ -473,7 +441,7 @@ Proof.
     (* prove impure with ping_db. *)
 Qed.
 
-Lemma sn_run `{Provide ix IS, Provide ix IN} {im : impureMonad ix} (fuel : nat) (c : CHANNEL_STATE)
+Lemma sn_run `{Provide ix IS, Provide ix IN} {im : impureMonad ix} (fuel : nat) (c : CHANNEL)
         (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (sn_contract) (prog fuel ping)) (ping_sent) tt c)
     : is_legal_state c.
 Proof.
@@ -529,7 +497,7 @@ Proof.
         case : x2. *)
 Qed.
 
-Lemma cns_run `{Provide ix IC, Provide ix IS, Provide ix IN} (c : CHANNEL_STATE)
+Lemma cns_run `{Provide ix IC, Provide ix IS, Provide ix IN} (c : CHANNEL)
         (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (cns_contract) (prog)) (init_channel) tt c)
     : is_legal_state c.
 Proof.

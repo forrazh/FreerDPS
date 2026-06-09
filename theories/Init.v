@@ -7,7 +7,7 @@
 (** * Utils Functions *)
 (* From HB Require Export structures. *)
 From monae Require Export preamble hierarchy.
-From mathcomp Require Export ssreflect. 
+From mathcomp Require Export ssreflect seq. 
 Ltac done :=
   trivial; hnf; intros; solve
    [ do ![solve [trivial | simple refine (@sym_equal _ _ _ _); trivial]
@@ -15,7 +15,7 @@ Ltac done :=
    | match goal with H : ~ _ |- _ => solve [case H; trivial] end 
    | auto with freespec
    ].
-Local Open Scope monae_scope.
+Global Open Scope monae_scope.
 
 Definition when {X} {M : monad}  (b : bool) (m : M X) : M unit := if b then m >> skip else skip. 
 Notation "f $ x" := (f x) (at level 60, right associativity, only parsing).
@@ -44,8 +44,9 @@ Definition function_eq {a b} (r : b -> b -> Prop) (f g : a -> b) : Prop :=
  
 Generalizable All Variables.
 
-From Stdlib Require Export List RelationClasses Setoid Morphisms.
-Import ListNotations.
+From Stdlib Require Export RelationClasses Setoid Morphisms.
+(* From Stdlib Require Export List. *)
+(* Import ListNotations. *)
 
 Open Scope signature_scope.
 Close Scope nat_scope.
