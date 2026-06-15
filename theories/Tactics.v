@@ -11,29 +11,21 @@ From FreerDPS Require Import Init Interface Contract Impure Hoare HoareFacts.
 Ltac destruct_if_when :=
   let equ_cond := fresh "equ_cond" in
   match goal with
-  | |- context[when (negb ?B) _] => case_eq B; intros equ_cond; cbn
-  | |- context[when ?B _] => case_eq B; intros equ_cond; cbn
-  | |- context[if (negb ?B) then _ else _] => case_eq B; intros equ_cond; cbn
-  | |- context[if ?B then _ else _] => case_eq B; intros equ_cond; cbn
-  | _ => idtac
+  | |- context[when (negb ?B) _] => destruct B eqn:equ_cond; cbn
+  | |- context[when ?B _] => destruct B eqn:equ_cond; cbn
+  | |- context[if (negb ?B) then _ else _] => destruct B eqn:equ_cond; cbn
+  | |- context[if ?B then _ else _] => destruct B eqn:equ_cond; cbn
+  | _ => fail 1
   end.
 
 Ltac destruct_if_when_in hyp :=
   let equ_cond := fresh "equ" in
-  match type of hyp with
-  | context[when (negb ?B) _] => case_eq B;
-                                 intro equ_cond;
-                                 rewrite equ_cond in hyp
-  | context[when ?B _] => case_eq B;
-                          intro equ_cond;
-                          rewrite equ_cond in hyp
-  | context[if (negb ?B) then _ else _] => case_eq B;
-                                           intro equ_cond;
-                                           rewrite equ_cond in hyp
-  | context[if ?B then _ else _] => case_eq B;
-                                    intro equ_cond;
-                                    rewrite equ_cond in hyp
-  | _ => idtac
+  match goal with
+  | H : context[when (negb ?B) _] |- _ => destruct B eqn:equ_cond
+  | H : context[when ?B _] |- _ => destruct B eqn:equ_cond
+  | H : context[if (negb ?B) then _ else _] |- _ => destruct B eqn:equ_cond
+  | H : context[if ?B then _ else _] |- _ => destruct B eqn:equ_cond
+  | _ => fail 1
   end.
 
 Ltac simplify_gens :=
@@ -92,21 +84,23 @@ Ltac destruct_option_match t :=
 
 
 #[local]
-Ltac prove_impure :=
-  repeat (cbn -[
+Ltac prove_impure_by solver :=
+  cbn -[
               to_hoare
               gen_caller_obligation
               gen_callee_obligation
               gen_witness_update
               lifter
           ] in *;
-          simplify_gens;
-          destruct_if_when);
+  try unfold when in *;
+  try unfold skip in *;
+  simplify_gens;
+  repeat destruct_if_when;
   lazymatch goal with
 
   | |- _ /\ _ =>
     split;
-    prove_impure
+    prove_impure_by solver
 
   | |- forall _ _, _ /\ _ = _ -> _ =>
     let x := fresh "x" in
@@ -115,10 +109,10 @@ Ltac prove_impure :=
     let equ := fresh "equ" in
     intros x ω' [o_caller equ];
     repeat rewrite -> equ in *; clear equ; clear ω';
-    prove_impure
+    prove_impure_by solver
 
     | |- pre ?pcond ?ω =>
-        tryif destruct_option_match ω then prove_impure else
+        tryif destruct_option_match ω then prove_impure_by solver else
 
     lazymatch pcond with 
       | lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) ?p => let p := (eval hnf in p) in
@@ -126,20 +120,20 @@ Ltac prove_impure :=
         | request_then ?e ?f =>
           let o_caller := fresh "o_caller" in
           assert (o_caller : gen_caller_obligation c ω e) ; 
-          [ prove_impure | constructor; prove_impure]
+          [ prove_impure_by solver | constructor; prove_impure_by solver]
         | local _ => constructor
         | impure_bind (impure_bind ?p ?f) ?g =>
           rewrite (bindA p f g);
-          prove_impure
+          prove_impure_by solver
         | bind ?p ?f =>
-          apply to_hoare_pre_bind_assoc; [ eauto with freespec
+          apply to_hoare_pre_bind_assoc; [ solver
                                         | let x := fresh "x" in
                                           let ω' := fresh "ω" in
                                           let hpost := fresh "hpost" in
                                           intros x ω' hpost;
-                                          prove_impure
+                                          prove_impure_by solver
                                         ]
-        | _ => eauto with freespec
+        | _ => solver
         end
 
     | to_hoare ?c ?p => let p := (eval hnf in p) in
@@ -147,133 +141,146 @@ Ltac prove_impure :=
       | request_then ?e ?f =>
         let o_caller := fresh "o_caller" in
         assert (o_caller : gen_caller_obligation c ω e) ; 
-        [ prove_impure | constructor; prove_impure]
+        [ prove_impure_by solver | constructor; prove_impure_by solver]
       | local _ => constructor
       | impure_bind (impure_bind ?p ?f) ?g =>
         rewrite (bindA p f g);
-        prove_impure
+        prove_impure_by solver
       | bind ?p ?f =>
-        apply to_hoare_pre_bind_assoc; [ eauto with freespec
+        apply to_hoare_pre_bind_assoc; [ solver
                                       | let x := fresh "x" in
                                         let ω' := fresh "ω" in
                                         let hpost := fresh "hpost" in
                                         intros x ω' hpost;
-                                        prove_impure
+                                        prove_impure_by solver
                                       ]
-      | _ => eauto with freespec
+      | _ => solver
       end
-    | _ => idtac "==>not handled"
+    | _ => solver
     end 
   | |- ?a =>
-    eauto with freespec
+    solver
 
   end.
 
-Tactic Notation "prove" "impure" := prove_impure.
-Tactic Notation "prove" "impure" "with" ident(db) := prove_impure; eauto with db.
+Ltac prove_impure := prove_impure_by ltac:(cbn; eauto with freespec).
 
-Ltac unroll_post run :=
-  repeat (cbn -[
+Tactic Notation "prove" "impure" := prove_impure.
+Tactic Notation "prove" "impure" "with" ident(db) :=
+  prove_impure_by ltac:(cbn; eauto with freespec db).
+
+Ltac cleanvert hyp := inversion hyp; ssubst; clear hyp.
+
+Ltac unroll_post_core run :=
+  cbn -[
               to_hoare
               gen_caller_obligation
               gen_callee_obligation
               gen_witness_update
           ] in *;
-          simplify_gens;
-          destruct_if_when_in run);
+  try unfold when in *;
+  try unfold skip in *;
+  simplify_gens;
+  repeat destruct_if_when_in run;
   lazymatch type of run with
 
   | post (to_hoare ?c ?p) ?ω ?x ?ω' =>
     let p := (eval hnf in p) in
     lazymatch p with
     | request_then ?e ?f =>
-      inversion run; ssubst;
-      clear run;
+      cleanvert run;
       lazymatch goal with
-      | next : exists _, post (interface_to_hoare c _ e) _ _ _ /\ _ |- _ =>
+      | next : exists _, post _ _ _ _ /\ _ |- _ =>
         let ω'' := fresh "ω" in
         let o_callee := fresh "o_callee" in
         let run := fresh "run" in
-        destruct next as [ω'' [o_callee run]];
-        unroll_post run
+        destruct next as [ω'' [o_callee run]]
       | _ => idtac
       end
 
     | local ?x =>
-      inversion run; ssubst;
-      clear run
+      cleanvert run
 
-    | bind ?p ?f =>
-      apply (bindA c p f) in run;
+    | impure_bind ?p ?f =>
       let run1 := fresh "run" in
       let run2 := fresh "run" in
       let x := fresh "x" in
       let ω := fresh "ω" in
-      destruct run as [x [ω [run1 run2]]];
-      unroll_post run1; unroll_post run2
+      let hbind := fresh "hbind" in
+      pose proof (FreerDPS.HoareFacts.to_hoare_post_bind_assoc c p f run) as hbind;
+      destruct hbind as [x [ω [run1 run2]]];
+      clear run
+
+    | bind ?p ?f =>
+      let run1 := fresh "run" in
+      let run2 := fresh "run" in
+      let x := fresh "x" in
+      let ω := fresh "ω" in
+      let hbind := fresh "hbind" in
+      pose proof (FreerDPS.HoareFacts.to_hoare_post_bind_assoc c p f run) as hbind;
+      destruct hbind as [x [ω [run1 run2]]];
+      clear run
 
     | ?a => idtac
     end
 
+  | post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (request_then ?e ?f)) ?ω ?x ?ω' =>
+    cleanvert run;
+    lazymatch goal with
+    | next : exists _, post _ _ _ _ /\ _ |- _ =>
+      let ω'' := fresh "ω" in
+      let o_callee := fresh "o_callee" in
+      let run := fresh "run" in
+      destruct next as [ω'' [o_callee run]]
+    | _ => idtac
+    end
+
+  | post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (local ?y)) ?ω ?x ?ω' =>
+    cleanvert run
+
+  | post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (Ret ?y)) ?ω ?x ?ω' =>
+    cleanvert run
+
+  | post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (match ?b with true => ?p | false => ?q end)) ?ω ?x ?ω' =>
+    let equ := fresh "equ" in
+    destruct b eqn:equ
+
+  | post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (impure_bind ?p ?f)) ?ω ?x ?ω' =>
+    let run1 := fresh "run" in
+    let run2 := fresh "run" in
+    let y := fresh "x" in
+    let ω0 := fresh "ω" in
+    let hbind := fresh "hbind" in
+    pose proof (FreerDPS.HoareFacts.to_hoare_post_bind_assoc c p f run) as hbind;
+    destruct hbind as [y [ω0 [run1 run2]]];
+    clear run
+
+  | post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (bind ?p ?f)) ?ω ?x ?ω' =>
+    let run1 := fresh "run" in
+    let run2 := fresh "run" in
+    let y := fresh "x" in
+    let ω0 := fresh "ω" in
+    let hbind := fresh "hbind" in
+    pose proof (FreerDPS.HoareFacts.to_hoare_post_bind_assoc c p f run) as hbind;
+    destruct hbind as [y [ω0 [run1 run2]]];
+    clear run
+
+  | post (bind ?p ?f) ?ω ?x ?ω' =>
+    let run1 := fresh "run" in
+    let run2 := fresh "run" in
+    let y := fresh "x" in
+    let ω0 := fresh "ω" in
+    destruct run as [y [ω0 [run1 run2]]]
+
   | ?a => idtac
   end.
 
-  Ltac cleanvert hyp := inversion hyp; ssubst; move:hyp=>_.
-
-Ltac easy_simpl hyp := idtac "--simpl"; do ? [cbn -[
+Ltac easy_simpl hyp := cbn -[
               to_hoare
               gen_caller_obligation
               gen_callee_obligation
               gen_witness_update
-] in *; simplify_gens; do ? destruct_if_when_in hyp].
+] in *; try unfold when in *; try unfold skip in *; simplify_gens; repeat destruct_if_when_in hyp.
 
-Ltac run_simpl run := 
-  idtac "run_simpl: " run;
-  easy_simpl run ;
-  match type of run with
-| post (to_hoare ?c ?p) ?ω ?x ?ω' => 
-  idtac "=> to_hoare" "c: " c " ; p: " p;
-  let p := (eval hnf in p) in
-  idtac "=> hnf of p: " p;
-  match p with
-  | request_then ?e ?f =>
-    idtac "=> => impure!";
-    cleanvert run;
-    idtac "=> => inverted";
-    match goal with
-    | next : exists _, post (interface_to_hoare c (A:=_) e) _ _ _ /\ _ |- _ => 
-        idtac "=> => => found next: " next;
-        let ω'' := fresh "ω" in 
-        let o_callee := fresh "o_callee" in 
-        let run := fresh "run" in
-        case: next =>ω'' [o_callee run];
-        idtac "=> => => destructed as : [" ω'' "[" o_callee ", " run"]]";
-        run_simpl run; 
-        idtac "<== <== after run"
-    | _ => idtac "<== branched out exists match"
-    end
-  | local ?x => idtac "=> => PURE!"; cleanvert run
-  | _ => idtac "<== freer out" 
-  end
-| post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (bind ?f ?g)) _ _ _  =>  
-      idtac "=> lifter bind";
-      let run1 := fresh "lrun" in
-      let run2 := fresh "rrun" in
-      let ω := fresh "ω" in 
-      let x := fresh "x" in 
-      idtac "=> var names : " run1 run2 ω x;
-      move: run => /(to_hoare_post_bind_assoc c f g);
-      idtac "=> thpba applied"; 
-      move => [x [ω [run1 run2]]]; 
-      idtac "=> destructed run";
-      idtac "=>> run first:";
-      run_simpl run1; 
-      idtac "<<= finished first";
-      idtac "=>> run second:";
-      run_simpl run2;
-      idtac "<<= finished second"
-      (* idtac *)
-      (* destruct run as [x [ω [run1 run2]]]; *)
-      (* run_simpl run1; run_simpl run2 *)
-| ?a => idtac "not post"
-end.
+Tactic Notation "unroll_post" hyp(run) := unroll_post_core run.
+Tactic Notation "run_simpl" hyp(run) := unroll_post_core run.

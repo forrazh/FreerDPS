@@ -228,18 +228,18 @@ Lemma close_door_run `{Provide ix DOORS} (ω : Ω) (d : door) (ω' : Ω) (x : un
   (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) doors_contract (close_door d)) ω x ω')
   : sel d ω' = false.
 Proof.
-  run_simpl run;
+  unroll_post run.
+  cleanvert o_callee.
+  simplify_gens.
   cleanvert H1.
+  run_simpl run.
+  - run_simpl run0.
+    cleanvert o_callee.
+    run_simpl run1.
+    simplify_gens.
+    by rewrite tog_equ_1 equ.
   cleanvert run.
-  cleanvert H1.
-  run_simpl H2.
-
-  cleanvert H2.
-  (* cleanvert H4. *)
-
-  -  cleanvert H1.
-    by rewrite tog_equ_1 H5.
-  by  cleanvert run.
+  by rewrite equ.
 Qed.
 
  Hint Resolve close_door_run : airlock.
@@ -312,29 +312,29 @@ Proof.
   induction p; intros ω hpre run safe.
   + by unroll_post run.
   + run_simpl run. 
-    have hpost : post (interface_to_hoare doors_contract (A:=β) e) ω x ω0 
-      by split; [apply H2| by rewrite H3].
+    have hpost : post (interface_to_hoare doors_contract (A:=β) e) ω x ω0
+      by exact o_callee.
     (* move: H1 => /(_ x ω0) => H1. *)
-     apply/(H1 x ω0) => //; [by apply hpre|].
+     apply/(H1 x ω0) => //.
+    - by case: hpre => _ hnext; apply: hnext.
+    destruct hpost as [step_callee equω].
+    subst ω0.
+    destruct hpre as [o_caller _].
+    unfold gen_callee_obligation, gen_witness_update in *.
     cbn in *.
-    inversion hpre. rewrite /= in H4. rewrite /gen_caller_obligation in H4.
-    (* simplify_gens *)
-    unfold gen_caller_obligation, gen_callee_obligation, gen_witness_update in *. 
-    cbn in *.
-    destruct (proj_p e) as [e'|].
-    ++ destruct hpost as [o_callee equω].
-       destruct e' as [d|d].
-       +++ rewrite H3 /=.
-           apply safe.
+    destruct (proj_p e) as [e'|] eqn:proj_e.
+    ++ destruct e' as [d|d].
+       +++ exact: safe.
        +++ apply one_door_safe_all_doors_safe with (d := d);
              apply one_door_safe_all_doors_safe with (d' := d) in safe;
-             subst.
-             inversion H4.
+             unfold gen_caller_obligation in o_caller;
+             rewrite proj_e in o_caller;
+             cbn in o_caller;
+             inversion o_caller; subst.
            cbn.
            by destruct safe as [safe|safe];
-            right; rewrite tog_equ_2//. 
-    ++ rewrite H3;
-       exact: safe.
+             right; rewrite tog_equ_2.
+    ++ exact: safe.
 Qed.
 
 (** ** Main Theorem *)
@@ -376,3 +376,5 @@ Proof.
   split=>//=.
   by apply/(respectful_run_inv _ _ _ _ _ _ run). 
 Qed.
+
+End a.

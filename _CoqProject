@@ -16,4 +16,4 @@
 ./theories/Tactics.v
 ./theories/Typeclasses.v
 
-./examples/ping_plain.v
+
