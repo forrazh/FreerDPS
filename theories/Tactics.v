@@ -171,7 +171,7 @@ Tactic Notation "prove" "impure" "with" ident(db) :=
 
 Ltac cleanvert hyp := inversion hyp; ssubst; clear hyp.
 
-Ltac unroll_post_core run :=
+Ltac unroll_post_core hrun :=
   cbn -[
               to_hoare
               gen_caller_obligation
@@ -181,14 +181,14 @@ Ltac unroll_post_core run :=
   try unfold when in *;
   try unfold skip in *;
   simplify_gens;
-  repeat destruct_if_when_in run;
-  lazymatch type of run with
+  repeat destruct_if_when_in hrun;
+  lazymatch type of hrun with
 
   | post (to_hoare ?c ?p) ?ω ?x ?ω' =>
     let p := (eval hnf in p) in
     lazymatch p with
     | request_then ?e ?f =>
-      cleanvert run;
+      cleanvert hrun;
       lazymatch goal with
       | next : exists _, post _ _ _ _ /\ _ |- _ =>
         let ω'' := fresh "ω" in
@@ -199,7 +199,7 @@ Ltac unroll_post_core run :=
       end
 
     | local ?x =>
-      cleanvert run
+      cleanvert hrun
 
     | impure_bind ?p ?f =>
       let run1 := fresh "run" in
@@ -207,9 +207,9 @@ Ltac unroll_post_core run :=
       let x := fresh "x" in
       let ω := fresh "ω" in
       let hbind := fresh "hbind" in
-      pose proof (FreerDPS.HoareFacts.to_hoare_post_bind_assoc c p f run) as hbind;
+      pose proof (FreerDPS.HoareFacts.to_hoare_post_bind_assoc c p f hrun) as hbind;
       destruct hbind as [x [ω [run1 run2]]];
-      clear run
+      clear hrun
 
     | bind ?p ?f =>
       let run1 := fresh "run" in
@@ -217,15 +217,15 @@ Ltac unroll_post_core run :=
       let x := fresh "x" in
       let ω := fresh "ω" in
       let hbind := fresh "hbind" in
-      pose proof (FreerDPS.HoareFacts.to_hoare_post_bind_assoc c p f run) as hbind;
+      pose proof (FreerDPS.HoareFacts.to_hoare_post_bind_assoc c p f hrun) as hbind;
       destruct hbind as [x [ω [run1 run2]]];
-      clear run
+      clear hrun
 
     | ?a => idtac
     end
 
   | post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (request_then ?e ?f)) ?ω ?x ?ω' =>
-    cleanvert run;
+    cleanvert hrun;
     lazymatch goal with
     | next : exists _, post _ _ _ _ /\ _ |- _ =>
       let ω'' := fresh "ω" in
@@ -236,10 +236,19 @@ Ltac unroll_post_core run :=
     end
 
   | post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (local ?y)) ?ω ?x ?ω' =>
-    cleanvert run
+    cleanvert hrun
 
   | post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (Ret ?y)) ?ω ?x ?ω' =>
-    cleanvert run
+    cleanvert hrun
+
+  | post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (when ?b ?p)) ?ω ?x ?ω' =>
+    unfold when in hrun;
+    unroll_post_core hrun
+
+  | post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (impure_bind (local ?y) ?f)) ?ω ?x ?ω' =>
+    change (post (lifter (i:=ifce) (M:=m) (interface_to_hoare c) (A:=_) (f y)) ω x ω') in hrun;
+    cbn beta in hrun;
+    unroll_post_core hrun
 
   | post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (match ?b with true => ?p | false => ?q end)) ?ω ?x ?ω' =>
     let equ := fresh "equ" in
@@ -251,9 +260,9 @@ Ltac unroll_post_core run :=
     let y := fresh "x" in
     let ω0 := fresh "ω" in
     let hbind := fresh "hbind" in
-    pose proof (FreerDPS.HoareFacts.to_hoare_post_bind_assoc c p f run) as hbind;
+    pose proof (FreerDPS.HoareFacts.to_hoare_post_bind_assoc c p f hrun) as hbind;
     destruct hbind as [y [ω0 [run1 run2]]];
-    clear run
+    clear hrun
 
   | post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (bind ?p ?f)) ?ω ?x ?ω' =>
     let run1 := fresh "run" in
@@ -261,16 +270,16 @@ Ltac unroll_post_core run :=
     let y := fresh "x" in
     let ω0 := fresh "ω" in
     let hbind := fresh "hbind" in
-    pose proof (FreerDPS.HoareFacts.to_hoare_post_bind_assoc c p f run) as hbind;
+    pose proof (FreerDPS.HoareFacts.to_hoare_post_bind_assoc c p f hrun) as hbind;
     destruct hbind as [y [ω0 [run1 run2]]];
-    clear run
+    clear hrun
 
   | post (bind ?p ?f) ?ω ?x ?ω' =>
     let run1 := fresh "run" in
     let run2 := fresh "run" in
     let y := fresh "x" in
     let ω0 := fresh "ω" in
-    destruct run as [y [ω0 [run1 run2]]]
+    destruct hrun as [y [ω0 [run1 run2]]]
 
   | ?a => idtac
   end.
@@ -281,6 +290,65 @@ Ltac easy_simpl hyp := cbn -[
               gen_callee_obligation
               gen_witness_update
 ] in *; try unfold when in *; try unfold skip in *; simplify_gens; repeat destruct_if_when_in hyp.
+
+(*
+  Disabled for now: this newer recursive "unroll everything" pass changed the
+  proof-state shape and broke older proof scripts that rely on predictable
+  generated names such as [run], [run0], and [o_callee].
+
+Ltac unroll_post_all :=
+  repeat multimatch goal with
+         | H : post (interface_to_hoare ?c (A:=_) ?e) ?ω ?x ?ω' |- _ =>
+             let o_callee := fresh "o_callee" in
+             let equ := fresh "equ" in
+             destruct H as [o_callee equ];
+             subst;
+             simplify_gens
+         | H : post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (local ?y)) ?ω ?x ?ω' |- _ =>
+             cleanvert H
+         | H : post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (Ret ?y)) ?ω ?x ?ω' |- _ =>
+             cleanvert H
+         | H : post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (request_then ?e ?f)) ?ω ?x ?ω' |- _ =>
+             cleanvert H;
+             match goal with
+             | next : exists _, post _ _ _ _ /\ _ |- _ =>
+                 let ω'' := fresh "ω" in
+                 let o_callee := fresh "o_callee" in
+                 let run := fresh "run" in
+                 destruct next as [ω'' [o_callee run]]
+             end
+         | H : post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (when ?b ?p)) ?ω ?x ?ω' |- _ =>
+             unfold when in H;
+             unroll_post_all
+         | H : post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (impure_bind (local ?y) ?f)) ?ω ?x ?ω' |- _ =>
+             change (post (lifter (i:=ifce) (M:=m) (interface_to_hoare c) (A:=_) (f y)) ω x ω') in H
+             ; cbn beta in H
+         | H : post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (match ?b with true => ?p | false => ?q end)) ?ω ?x ?ω' |- _ =>
+             let equ := fresh "equ" in
+             destruct b eqn:equ;
+             unroll_post_all
+         | H : post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (impure_bind ?p ?f)) ?ω ?x ?ω' |- _ =>
+             let run1 := fresh "run" in
+             let run2 := fresh "run" in
+             let y := fresh "x" in
+             let ω0 := fresh "ω" in
+             let hbind := fresh "hbind" in
+             pose proof (FreerDPS.HoareFacts.to_hoare_post_bind_assoc c p f H) as hbind;
+             destruct hbind as [y [ω0 [run1 run2]]];
+             clear H
+         | H : post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) ?p) ?ω ?x ?ω' |- _ =>
+             let p' := (eval hnf in p) in
+             tryif constr_eq p p'
+             then fail 1
+             else change (post (lifter (i:=ifce) (M:=m) (interface_to_hoare c) (A:=_) p') ω x ω') in H
+         | H : post (bind ?p ?f) ?ω ?x ?ω' |- _ =>
+             let run1 := fresh "run" in
+             let run2 := fresh "run" in
+             let y := fresh "x" in
+             let ω0 := fresh "ω" in
+             destruct H as [y [ω0 [run1 run2]]]
+         end.
+*)
 
 Tactic Notation "unroll_post" hyp(run) := unroll_post_core run.
 Tactic Notation "run_simpl" hyp(run) := unroll_post_core run.

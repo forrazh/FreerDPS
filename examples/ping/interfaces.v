@@ -148,6 +148,7 @@ Module ccm.
       Lemma c_respect `{Provide ix client_api} {im : impureMonad ix} (network : N)
         : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (c_contract) (C)) network.
       Proof.
+        rewrite /C /send /wait.
         prove impure with ping_db.
       Qed.
 
@@ -156,16 +157,17 @@ Module ccm.
         (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (c_contract) (C)) initial_network m final_network)
         : m = pong.
       Proof.
-        unroll_post run.
-        run_simpl run.
-        cleanvert H1.
-        simplify_gens.
-        destruct run0 as [wait_callee wait_state].
-        simplify_gens.
-        inversion wait_callee; subst.
-        cleanvert run1.
-        done.
-    Qed.
+  unroll_post run.
+  run_simpl run.
+  cleanvert H1.
+  simplify_gens.
+  destruct run0 as [wait_callee wait_state].
+  simplify_gens.
+  inversion wait_callee; subst.
+  cleanvert run1.
+  done.
+
+      Qed.
   End ccs.
 End ccm.
 
@@ -276,40 +278,6 @@ Import ccm scm.
 (b)    +---+ <== (4) dlvr pong <== +---+ <== (4) send pong <== +---+
 
 **)
-
-(* State transition system *)
-
-(* 1 *)
-
-
-(* Taking the protocol into account *)
-
-(************************************************************* 
- ** So, in Disel, its composed in a few steps:              **
- ** -> First,   we model the SendTransitions                **
- ** -> Then,    we model the RecvTransitions                **
- ** -> Finally, we model the protocol wrt those transitions **
- *************************************************************)
-
-(************************************************************* 
- ** On our side, we have the following:                     **
- ** -> 1/ Client's Send/Recv transitions                    **
- ** -> 2/ Server's Send/Recv transitions                    **
- ** -> 3/ a program modeling each                           **
- **                                                         **
- ** Now, the question(s) is :                               **
- ** > How do we put those inside the protocol ?             **
- ** > And how do we model the automatata ?                  **
- *************************************************************)
-
- (* ok so actually, I was just in the wrong, I thought there 
-    was a way to model the whole protocol interactions but we 
-    don't really do this. State-of-the-Art does it per machine 
-    but not protocol-wide I think... *)
-
-
-(* 2 *)
-
 
 (* ======================================================================== *)
 
