@@ -1,5 +1,5 @@
 From Stdlib Require Import ssrmatching Reals JMeq Relations Morphisms Eqdep.
-From mathcomp Require Import ssreflect ssrbool ssrnum ssralg reals interval_inference. 
+From mathcomp Require Import ssreflect ssrbool ssrnum ssralg reals interval_inference.
 From infotheo Require Import realType_ext.
 From HB Require Import structures.
 From monae Require Import preamble hierarchy monad_lib.
@@ -37,7 +37,7 @@ Definition flipf (p:{prob R}) := ( @trigger FlipEff M bool (flip_e p)).
 (* Let fa := flipacto R. *)
 Variable fl : flipMonad R.
 
-Definition denote_flip_effect : FlipEff ~~> fl. := 
+Definition denote_flip_effect : FlipEff ~~> fl :=
 fun X fx => match fx with 
 | flip_e p => flip p
 end.
@@ -54,7 +54,7 @@ Notation "x <|| p ||> y" :=
 (* 5th step : Flip equiv laws *)
 Inductive flip_rel :forall `[X : UU0] (m1 m2 : M X), Prop := 
 | rflip1 : flip_rel (flipf 1%:i01) (Ret true)
-| rflipNeg : forall p, flip_rel (flipf p) ((flipf p%:num.~%:i01) >>= (fun x => Ret (~~ x)))
+| rflipNeg : forall p, flip_rel (flipf p) ((flipf (p%:num.~%:i01)) >>= (fun x => Ret (~~ x)))
 | rflipmm : forall (A:UU0) p (a: (M A)), flip_rel (flipf p >> a) a 
     (* quasi associativity *)
 | rflipA : forall (T:UU0) (p q r s : {prob R}) (a b c : M T),  flip_rel
@@ -116,6 +116,3 @@ HB.export FreerFlipModel.
 Arguments flip_rel {_ _ _}.
 Arguments flipf {_ _}.
 Arguments choicef {_ _ _}.
-
-
-

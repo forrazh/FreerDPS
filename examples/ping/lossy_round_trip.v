@@ -1,6 +1,7 @@
 From mathcomp Require Import ssreflect ssrbool eqtype ssrnum ssralg reals
   interval_inference.
-From infotheo Require Import realType_ext.
+From mathcomp Require Import finmap.
+From infotheo Require Import realType_ext convex fsdist.
 From monae Require Import preamble hierarchy monad_lib proba_lib proba_model.
 
 Set Implicit Arguments.
@@ -12,6 +13,8 @@ Local Open Scope proba_scope.
 Local Open Scope proba_monad_scope.
 Local Open Scope ring_scope.
 Local Open Scope reals_ext_scope.
+
+Import GRing.Theory.
 
 (**
   A tiny probabilistic model of a lossy ping-pong round trip.
@@ -100,7 +103,7 @@ Section lossy_round_trip.
   Lemma ping_pong_retry_certain fuel :
     ping_pong_retry 1%:i01 fuel = Ret GotPong :> M _.
   Proof.
-    elim: fuel => [|fuel IH] /=.
+    elim: fuel => [|fuel IH] //=.
     - exact: ping_pong_once_certain.
     by rewrite ping_pong_once_certain bindretf.
   Qed.
@@ -169,7 +172,7 @@ Section lossy_round_trip.
   Lemma round_trip_success_probabilityE (loss : {prob R}) :
     (round_trip_success_probability loss)%:num =
     (delivery_probability loss)%:num * (delivery_probability loss)%:num :> R.
-  Proof. by rewrite /round_trip_success_probability p_of_rsE. Qed.
+  Proof.  by rewrite /round_trip_success_probability p_of_rsE. Qed.
 
   (* Observing success collapses the three-outcome distribution to a boolean
      coin.  The degenerate delivery cases 0 and 1 are handled separately; in
@@ -231,24 +234,98 @@ Section lossy_round_trip.
     by rewrite choiceA choicemm.
   Qed.
 
-  Definition expected_attempts (loss : {prob R}) : R :=
-    ((round_trip_success_probability loss)%:num)^-1.
-
-  (* The expected number of attempts for independent retries is [1 / q], where
-     [q] is the one-attempt success probability.  Rewriting [q] gives
-     [1 / (delivery * delivery)]. *)
-  Lemma expected_attemptsE (loss : {prob R}) :
-    expected_attempts loss =
-    ((delivery_probability loss)%:num * (delivery_probability loss)%:num)^-1.
-  Proof. by rewrite /expected_attempts round_trip_success_probabilityE. Qed.
-
-  (* Since [delivery_probability] is [1 - loss], the previous lemma is the
-     paper formula [1 / (1 - p)^2], written with Monae/MathComp's complement
-     notation. *)
-  Lemma expected_attempts_pdf (loss : {prob R}) :
-    expected_attempts loss = (loss%:num.~ * loss%:num.~)^-1.
-  Proof. by rewrite expected_attemptsE /delivery_probability. Qed.
-
 End lossy_round_trip.
+
+Section concrete_lossy_round_trip.
+  Context {R : realType}.
+
+  Definition concrete_ping_pong_once (loss : {prob R}) : acto R outcome :=
+    ping_pong_once (M := acto R) (delivery_probability loss).
+
+  Definition concrete_ping_pong_once_success (loss : {prob R}) : acto R bool :=
+    ping_pong_once_success (M := acto R) loss.
+
+  Definition concrete_ping_pong_retry_success (loss : {prob R}) (fuel : nat)
+    : acto R bool :=
+    ping_pong_retry_success (M := acto R) loss fuel.
+
+  Lemma concrete_ping_pong_once_success_probability_shape (loss : {prob R}) :
+    concrete_ping_pong_once loss =
+    one_attempt_distribution (M := acto R) loss.
+  Proof. exact: ping_pong_once_success_probability_shape. Qed.
+
+  Lemma concrete_ping_pong_once_success_probability (loss : {prob R}) :
+    concrete_ping_pong_once_success loss =
+    bcoin (M := acto R) (round_trip_success_probability loss).
+  Proof. exact: ping_pong_once_success_probability. Qed.
+
+  Lemma concrete_ping_pong_retry_success_probability (loss : {prob R}) fuel :
+    concrete_ping_pong_retry_success loss fuel =
+    bcoin (M := acto R) (retry_success_probability loss fuel).
+  Proof. exact: ping_pong_retry_success_probability. Qed.
+
+  Definition concrete_round_trip_success_value (loss : {prob R}) : R :=
+    finmap.fun_of_fsfun (FSDist.f (concrete_ping_pong_once_success loss :
+      R.-dist (monad_model.choice_of_Type bool))) true.
+
+  Lemma concrete_round_trip_success_valueE (loss : {prob R}) :
+    concrete_round_trip_success_value loss =
+    (round_trip_success_probability loss)%:num.
+  Proof.
+    rewrite /concrete_round_trip_success_value
+            concrete_ping_pong_once_success_probability /bcoin.
+    rewrite fsdist_convE !fsdist1E /=.
+    pose ctrue : choice.Choice.sort (monad_model.choice_of_Type bool) := true.
+    pose cfalse : choice.Choice.sort (monad_model.choice_of_Type bool) := false.
+    rewrite (_ : ctrue \in fset1 ctrue = true); last exact: fset11.
+    rewrite (_ : ctrue \in fset1 cfalse = false);
+      last by apply/negP => /fset1P.
+    by rewrite avgRE mulr1 mulr0 addr0.
+  Qed.
+
+  Lemma concrete_round_trip_success_value_pdf (loss : {prob R}) :
+    concrete_round_trip_success_value loss =
+    (delivery_probability loss)%:num * (delivery_probability loss)%:num :> R.
+  Proof.
+    by rewrite concrete_round_trip_success_valueE
+               round_trip_success_probabilityE.
+  Qed.
+
+  Definition concrete_expected_attempts_before_success (loss : {prob R}) : R :=
+    (concrete_round_trip_success_value loss)^-1.
+
+  Definition expected_attempts_equation (success expected : R) : Prop :=
+    expected = 1 + success.~ * expected.
+
+  Lemma concrete_expected_attempts_before_successE (loss : {prob R}) :
+    concrete_expected_attempts_before_success loss =
+    ((round_trip_success_probability loss)%:num)^-1.
+  Proof.
+    by rewrite /concrete_expected_attempts_before_success
+               concrete_round_trip_success_valueE.
+  Qed.
+
+  Lemma concrete_expected_attempts_before_success_pdf (loss : {prob R}) :
+    concrete_expected_attempts_before_success loss =
+    ((delivery_probability loss)%:num *
+     (delivery_probability loss)%:num)^-1.
+  Proof.
+    by rewrite concrete_expected_attempts_before_successE
+               round_trip_success_probabilityE.
+  Qed.
+
+  Lemma concrete_expected_attempts_before_success_yields (loss : {prob R}) :
+    (round_trip_success_probability loss)%:num != 0 ->
+    expected_attempts_equation
+      (round_trip_success_probability loss)%:num
+      (concrete_expected_attempts_before_success loss).
+  Proof.
+    move=> success_nonzero.
+    rewrite /expected_attempts_equation concrete_expected_attempts_before_successE.
+    set success := (round_trip_success_probability loss)%:num.
+    rewrite /onem mulrBl mul1r mulrC mulVf //.
+    by rewrite addrC subrK.
+  Qed.
+End concrete_lossy_round_trip.
 
 End LossyRoundTrip.

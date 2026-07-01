@@ -5,3 +5,4 @@
 ./theories/FlipMonad.v
 ./theories/lib/ActoFreerCoproduct.v
 ./theories/lib/FreerFlip.v
+./theories/LossyRoundTripFlip.v
