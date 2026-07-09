@@ -1,6 +1,7 @@
-**/Makefile.conf
+**/Makefile.rocq.conf
 **/.CoqMakefile.d
-**/.Makefile.d
+**/.Makefile.rocq.d
+**/.Makefile.rocq
 **/*.glob
 **/*.vo
 **/*.vok
@@ -8,3 +9,4 @@
 **/.*.aux
 _opam
 _build
+freer_playground/Makefile
