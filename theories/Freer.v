@@ -45,10 +45,6 @@ Inductive freer (F : effect) (α : Type) : Type :=
 Arguments pure [F α] (x).
 Arguments impure [F α β] (op f).
 
-Register freer as freespec.core.freer.type.
-Register pure as freespec.core.freer.pure.
-Register impure as freespec.core.freer.impure.
-
 Fixpoint freer_bind (F : effect) {α β} (p : freer F α) (f : α -> freer F β)
     : freer F β :=
   match p with

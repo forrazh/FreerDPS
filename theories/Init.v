@@ -8,17 +8,18 @@
 From monae Require Export preamble hierarchy.
 From HB Require Export structures.
 From mathcomp Require Export ssreflect boolp.
-Ltac done :=
+(* Ltac done :=
   trivial; hnf; intros; solve
    [ do ![solve [trivial | simple refine (@sym_equal _ _ _ _); trivial]
          | discriminate | contradiction | split]
-   | match goal with H : ~ _ |- _ => solve [case H; trivial] end 
+   | match goal with H : ~ _ |- _ => solve [case H; trivial] end
    | auto with freespec
-   ].
+   ]. *)
 Global Close Scope nat_scope.
 Global Open Scope monae_scope.
 
-Definition when {X} {M : monad}  (b : bool) (m : M X) : M unit := if b then m >> skip else skip. 
+Definition when {X} {M : monad}  (b : bool) (m : M X) : M unit :=
+  if b then m >> skip else skip.
 Notation "f $ x" := (f x) (at level 60, right associativity, only parsing).
 
 (** * Tactics *)
@@ -34,7 +35,7 @@ Ltac ssubst :=
 end.
 
 Reserved Infix "===" (at level 70, no associativity).
- 
+
 Generalizable All Variables.
 
 Definition function_eq {a b} (r : b -> b -> Prop) (f g : a -> b) : Prop :=

@@ -40,13 +40,13 @@ Arguments mk_semantics [F] (f).
     [eempty], the empty effect. *)
 
 Definition eempty_semantics : semantics eempty :=
-  mk_semantics (fun α (e : eempty α) => match e with end).
+  mk_semantics (fun α (op : eempty α) => match op with end).
 
 (** We also provide a semantics for the [STORE s] effect: *)
 
 CoFixpoint store {s} (init : s) : semantics (STORE s) :=
-  mk_semantics (fun α (e : STORE s α) =>
-                  match e with
+  mk_semantics (fun α (op : STORE s α) =>
+                  match op with
                   | Get => (init, store init)
                   | Put next => (tt, store next)
                   end).
@@ -54,17 +54,17 @@ CoFixpoint store {s} (init : s) : semantics (STORE s) :=
 (** We provide several helper functions to interpret primitives with
     semantics. *)
 
-Definition run_effect {F α} (sem : semantics F) (e : F α) : α * semantics F :=
-  match sem with mk_semantics f => f α e end.
+Definition run_effect {F α} (sem : semantics F) (op : F α) : α * semantics F :=
+  match sem with mk_semantics f => f α op end.
 
-Definition eval_effect {F α} (sem : semantics F) (e : F α) : α :=
-  fst (run_effect sem e).
+Definition eval_effect {F α} (sem : semantics F) (op : F α) : α :=
+  fst (run_effect sem op).
 
-Definition exec_effect {F α} (sem : semantics F) (e : F α) : semantics F :=
-  snd (run_effect sem e).
+Definition exec_effect {F α} (sem : semantics F) (op : F α) : semantics F :=
+  snd (run_effect sem op).
 
-Lemma run_effect_equation {F α} (sem : semantics F) (e : F α)
-  : run_effect sem e = (eval_effect sem e, exec_effect sem e).
+Lemma run_effect_equation {F α} (sem : semantics F) (op : F α)
+  : run_effect sem op = (eval_effect sem op, exec_effect sem op).
 
 Proof.
   unfold eval_effect, exec_effect.
@@ -74,16 +74,16 @@ Qed.
 (** Besides, and similarly to effects, operational semantics can and should
     be composed together.  To that end, we provide the [semprod] operator. *)
 
-CoFixpoint semprod {F E} (sem_i : semantics F) (sem_j : semantics E)
+CoFixpoint semprod {F E} (semF : semantics F) (semE : semantics E)
   : semantics (F + E) :=
-  mk_semantics (fun _ e =>
-                  match e with
-                  | in_left e =>
-                    let (x, out) := run_effect sem_i e in
-                    (x, semprod out sem_j)
-                  | in_right e =>
-                    let (x, out) := run_effect sem_j e in
-                    (x, semprod sem_i out)
+  mk_semantics (fun _ op =>
+                  match op with
+                  | in_left op =>
+                    let (x, out) := run_effect semF op in
+                    (x, semprod out semE)
+                  | in_right op =>
+                    let (x, out) := run_effect semE op in
+                    (x, semprod semF out)
                   end).
 
 Declare Scope semantics_scope.
@@ -114,12 +114,13 @@ Infix "*" := semprod : semantics_scope.
 Notation interp F := (StateMonad.acto (semantics F)).
 
 Definition effect_to_state {F : effect} : F ~~> interp F :=
-  fun a e => (fun sem => run_effect sem e).
+  fun _ op sem => run_effect sem op.
 
 
 Definition to_state {F} {im : freerMonad F} : im ~~> interp F :=
   denote _ effect_to_state.
 
+Arguments to_state {F α} _ : rename.
 Arguments to_state {F α} _ : rename.
 
 Definition run_impure {F a} {im : freerMonad F}
@@ -138,14 +139,15 @@ Definition exec_impure {F a} {im : freerMonad F}
 
 
 Fixpoint with_semantics {Fx E α}
-    (sem : semantics E) (p : freer (Fx + E) α) : freer Fx α :=
+    (sem : semantics E) (p : freer (Fx + E) α)
+  : freer Fx α :=
   match p with
-  | pure x => Freer.pure x
-  | impure _ (in_right e) f =>
-    let (res, next) := run_effect sem e in
-    with_semantics next (f res)
-  | impure _ (in_left e) f =>
-    impure e (fun x => with_semantics sem (f x))
+  | pure x => pure x
+  | impure _ (in_right op) k =>
+    let (res, next) := run_effect sem op in
+    with_semantics next (k res)
+  | impure _ (in_left op) k =>
+    impure op (fun x => with_semantics sem (k x))
   end.
 
 (** We provide [with_store], a helper function to locally provide a mutable

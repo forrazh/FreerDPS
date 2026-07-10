@@ -55,6 +55,10 @@ Arguments Put [s] (x).
     parameterized by [F ⊕ E] can therefore leverage the primitives of both [F]
     and [E]. *)
 
+Inductive NonDetEff : effect :=
+| select_e : NonDetEff bool
+.
+
 (** * Polymorphic Effect Composites *)
 
 (** When defining general-purpose impure computations that we expect to reuse in
@@ -72,12 +76,12 @@ Arguments Put [s] (x).
     [Provide]. *)
 
 Class MayProvide (Fx F : effect) : Type :=
-  { proj_p {α} (e : Fx α) : option (F α)
+  { proj_p {α} (op : Fx α) : option (F α)
   }.
 
 Class Provide (Fx F : effect) `{MayProvide Fx F} : Type :=
-  { inj_p {α} (e : F α) : Fx α
-  ; proj_inj_p_equ {α} (e : F α) : proj_p (inj_p e) = Some e
+  { inj_p {α} (op : F α) : Fx α
+  ; proj_inj_p_equ {α} (op : F α) : proj_p (inj_p op) = Some op
   }.
 
 (** We provide a default instance for [MayProvide] in the form of a function
@@ -91,30 +95,27 @@ Instance default_MayProvide (F E : effect) : MayProvide F E|1000 :=
 
 (** It is expected that, for an effect composite [Fx] which provides [F] and
     may provide [E], [inj_p] and [proj_p] do not mix up [F] and [E]
-    primitives. That is, injecting a primitive [e] of [F] inside [Fx], then
+    primitives. That is, injecting a primitive [op] of [F] inside [Fx], then
     projecting the resulting primitive into [E] returns [None] as long as [F]
     and [E] are two different effects. *)
 
 Class Distinguish (Fx F E : effect) `{Provide Fx F, MayProvide Fx E} : Prop :=
-  { distinguish : forall {α} (e : F α), proj_p (F := E) (inj_p (Fx := Fx) e) = None
+  { distinguish : forall {α} (op : F α),
+      proj_p (F := E) (inj_p (Fx := Fx) op) = None
   }.
 
 (** * Composing Effects *)
 
-(** We provide the [eplus] operator to compose effects together. That is,
+(** We provide the [eplus] operator to compose effect together. That is,
     [eplus] can be used to build _concrete_ (as opposed to polymorphic)
     effect composite. *)
 
 Inductive eplus (F E : effect) (α : Type) :=
-| in_left (e : F α) : eplus F E α
-| in_right (e : E α) : eplus F E α.
+| in_left (op : F α) : eplus F E α
+| in_right (op : E α) : eplus F E α.
 
-Arguments in_left [F E α] (e).
-Arguments in_right [F E α] (e).
-
-Register eplus as freespec.core.eplus.type.
-Register in_left as freespec.core.eplus.in_left.
-Register in_right as freespec.core.eplus.in_right.
+Arguments in_left [F E α] (op).
+Arguments in_right [F E α] (op).
 
 Infix "+" := eplus : effect_scope.
 
@@ -140,19 +141,19 @@ with_state true (with_state false get)
     will return false (that is, the variable in the inner store). *)
 
 Instance refl_MayProvide (F : effect) : MayProvide F F :=
-  { proj_p := fun _ e => Some e
+  { proj_p := fun _ op => Some op
   }.
 
 #[program]
 Instance refl_Provide (F : effect) : @Provide F F (refl_MayProvide F) :=
-  { inj_p := fun (a : Type) (e : F a) => e
+  { inj_p := fun (a : Type) (op : F a) => op
   }.
 
 Instance eplus_left_MayProvide (Fx F E : effect) `{MayProvide Fx F}
   : MayProvide (Fx + E) F :=
-  { proj_p := fun _ e =>
-                match e with
-                | in_left e => proj_p e
+  { proj_p := fun _ op =>
+                match op with
+                | in_left op => proj_p op
                 | _ => None
                 end
   }.
@@ -160,7 +161,7 @@ Instance eplus_left_MayProvide (Fx F E : effect) `{MayProvide Fx F}
 #[program]
 Instance eplus_left_Provide (Fx F E : effect) `{Provide Fx F}
   : @Provide (Fx + E) F (eplus_left_MayProvide Fx F E) :=
-  { inj_p := fun (a : Type) (e : F a) => in_left (inj_p e)
+  { inj_p := fun (a : Type) (op : F a) => in_left (inj_p op)
   }.
 
 Next Obligation.
@@ -169,9 +170,9 @@ Qed.
 
 Instance eplus_right_MayProvide (F Ex E : effect) `{MayProvide Ex E}
   : MayProvide (F + Ex) E :=
-  { proj_p := fun _ e =>
-                match e with
-                | in_right e => proj_p e
+  { proj_p := fun _ op =>
+                match op with
+                | in_right op => proj_p op
                 | _ => None
                 end
   }.
@@ -179,7 +180,7 @@ Instance eplus_right_MayProvide (F Ex E : effect) `{MayProvide Ex E}
 #[program]
 Instance eplus_right_Provide (F Ex E : effect) `{Provide Ex E}
   : @Provide (F + Ex) E (eplus_right_MayProvide F Ex E) :=
-  { inj_p := fun _ e => in_right (inj_p e)
+  { inj_p := fun _ op => in_right (inj_p op)
   }.
 
 Next Obligation.
@@ -207,7 +208,8 @@ Ltac find_may_provide :=
 
 #[program]
 Instance refl_Distinguish (F E : effect)
-  : @Distinguish F F E  ( @refl_MayProvide F) ( @refl_Provide F) ( @default_MayProvide F E).
+  : @Distinguish F F E (@refl_MayProvide F) (@refl_Provide F)
+      (@default_MayProvide F E).
 
 #[program]
 Instance eplus_left_default_Distinguish (Fx Ex F E : effect)

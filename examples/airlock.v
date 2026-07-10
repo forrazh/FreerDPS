@@ -4,12 +4,14 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
-From Coq Require Import Arith.
 From FreerDPS Require Import Init.
-From FreerDPS Require Import Core Freer Hoare.
+(* WARNING: Move this import to its MathComp counterpart. *)
+From Stdlib Require Import Arith.
+From mathcomp Require Import all_boot classical_sets.
+From FreerDPS Require Import Core Freer Hoare HoareFacts.
+From examples Require Import airlock_helper.
 
-#[local] Open Scope nat_scope.
-#[local] Open Scope monae_scope.
+Import SpecializedHoareModule.
 
 Create HintDb airlock.
 
@@ -19,8 +21,7 @@ Create HintDb airlock.
 
 Inductive door : Type := left | right.
 
-Definition door_eq_dec (d d' : door) : { d = d' } + { ~ d = d' } :=
-  ltac:(decide equality).
+HB.instance Definition _ := gen_eqMixin door.
 
 Inductive DOORS : effect :=
 | IsOpen : door -> DOORS bool
@@ -28,24 +29,22 @@ Inductive DOORS : effect :=
 
 Generalizable All Variables.
 
-Arguments request {_ } _ _ _.
+Section airlock_s.
 
-Check request.
+Import FreerFuns.
 
-Section a.
-
-Definition is_open `{Provide Fx DOORS} {im : freerMonad Fx}
-    (d : door) : im bool :=
+Definition is_open `{Provide Fx DOORS} {im : freerMonad Fx} (d : door) :
+    im bool :=
   trigger (inj_p $ IsOpen d).
 
-Definition toggle `{Provide Fx DOORS} {im : freerMonad Fx}
-    (d : door) : im unit :=
+Definition toggle `{Provide Fx DOORS} {im : freerMonad Fx} (d : door) :
+    im unit :=
   trigger (inj_p $ Toggle d).
 
 Definition open_door `{Provide Fx DOORS} {im : freerMonad Fx}
     (d : door) : im unit :=
   is_open d >>= fun open =>
-  when (negb open) (toggle d).
+  when (~~ open) (toggle d).
 
 Definition close_door `{Provide Fx DOORS} {im : freerMonad Fx}
     (d : door) : im unit :=
@@ -71,11 +70,13 @@ Definition co (d : door) : door :=
   | right => left
   end.
 
+Lemma co_leftE : co left = right.
+Proof. by []. Qed.
+
 Definition controller `{Provide Fx DOORS, Provide Fx (STORE nat)}
-    {im : freerMonad Fx}
-  : component (im:=im) CONTROLLER Fx
+    {im : freerMonad Fx} : component (im:=im) CONTROLLER Fx
   (* .
-  move=>X; case=>[|d].
+  move=> X; case=> [|d].
   - apply/bind=>[|cpt].
     + apply/iget.
     + apply/when.
@@ -96,14 +97,14 @@ Definition controller `{Provide Fx DOORS, Provide Fx (STORE nat)}
     match op with
     | Tick =>
       iget >>= fun cpt =>
-      when (15 <? cpt) $
+      when (15 <? cpt)%nat $
         close_door left >>
         close_door right >>
-        iput 0
+        iput 0%nat
     | RequestOpen d =>
-        close_door (co d) >>
-        open_door d >>
-        iput 0
+      close_door (co d) >>
+      open_door d >>
+      iput 0%nat
     end.
 
 (** * Verifying the Airlock Controller *)
@@ -113,6 +114,7 @@ Definition controller `{Provide Fx DOORS, Provide Fx (STORE nat)}
 (** *** Witness States *)
 
 Definition Ω : Type := bool * bool.
+(*         S : Type := left * rght. *)
 
 Definition sel (d : door) : Ω -> bool :=
   match d with
@@ -122,23 +124,17 @@ Definition sel (d : door) : Ω -> bool :=
 
 Definition tog (d : door) (ω : Ω) : Ω :=
   match d with
-  | left => (negb (fst ω), snd ω)
-  | right => (fst ω, negb (snd ω))
+  | left => (~~ (fst ω), snd ω)
+  | right => (fst ω, ~~ (snd ω))
   end.
 
 Lemma tog_equ_1 (d : door) (ω : Ω)
-  : sel d (tog d ω) = negb (sel d ω).
-
-Proof.
-  by case:d.
-Qed.
+  : sel d (tog d ω) = ~~ (sel d ω).
+Proof. by case: d. Qed.
 
 Lemma tog_equ_2 (d : door) (ω : Ω)
   : sel (co d) (tog d ω) = sel (co d) ω.
-
-Proof.
-  destruct d; reflexivity.
-Qed.
+Proof. by case: d. Qed.
 
 (** From now on, we will reason about [tog] using [tog_equ_1] and [tog_equ_2].
     FreeSpec tactics rely heavily on [cbn] to simplify certain terms, so we use
@@ -150,130 +146,208 @@ Qed.
     theorems. *)
 
 #[local] Opaque tog.
+Opaque denote.
 
-Definition step (ω : Ω) (a : Type) (e : DOORS a) (x : a) :=
-  match e with
-  | Toggle d => tog d ω
-  | _ => ω
-  end.
+(* Ω = bool * bool : doors state *)
+Definition step (ω : Ω) (a : Type) (op : DOORS a) (_ : a) : Ω :=
+  if op is Toggle d then tog d ω else ω.
 
-(** *** Requirements *)
-
+(** *** Requirements / Precondition *)
 Inductive doors_o_caller : Ω -> forall (a : Type), DOORS a -> Prop :=
-
 (** - Given the door [d] of o system [ω], it is always possible to ask for the
       state of [d]. *)
-
 | req_is_open (d : door) (ω : Ω)
   : doors_o_caller ω bool (IsOpen d)
-
 (** - Given the door [d] of o system [ω], if [d] is closed, then the second door
       [co d] has to be closed too for a request to toggle [d] to be valid. *)
-
-| req_toggle (d : door) (ω : Ω) (H : sel d ω = false -> sel (co d) ω = false)
+| req_toggle (d : door) (ω : Ω) (H : sel (co d) ω -> sel d ω)
   : doors_o_caller ω unit (Toggle d).
+  (* H : ~~ sel (co d) ω *)
 
-Hint Constructors doors_o_caller : airlock.
-
-(** *** Promises *)
-
+(** *** Promises / PostCondition *)
 Inductive doors_o_callee : Ω -> forall (a : Type), DOORS a -> a -> Prop :=
-
 (** - When a system in a state [ω] reports the state of the door [d], it shall
       reflect the true state of [d]. *)
-
 | doors_o_callee_is_open (d : door) (ω : Ω) (x : bool) (equ : sel d ω = x)
   : doors_o_callee ω bool (IsOpen d) x
-
-(** - There is no particular doors_o_calleeises on the result [x] of a request for [ω] to
-      close the door [d]. *)
-
+(** - There is no particular requirement on the result [x] of a request for
+      [ω] to close the door [d]. *)
 | doors_o_callee_toggle (d : door) (ω : Ω) (x : unit)
   : doors_o_callee ω unit (Toggle d) x.
 
- Hint Constructors doors_o_callee : airlock.
-
 Definition doors_contract : contract DOORS Ω :=
   make_contract step doors_o_caller doors_o_callee.
+(* => {{door_caller}} p%step {{door_callee}} *)
+
+Lemma doors_effect_preE {Fx a} `{MayProvide Fx DOORS}
+    (op : Fx a) (ω : Ω) :
+  pre (hoare_of_contract doors_contract op) ω <->
+  match proj_p op with
+  | Some door_op => doors_o_caller ω a door_op
+  | None => True
+  end.
+Proof. by rewrite /hoare_of_contract /= /gen_caller_obligation. Qed.
+
+Lemma doors_o_caller_preE `{Provide Fx DOORS} {a}
+    (ω : Ω) (op : DOORS a) :
+  pre (hoare_of_contract doors_contract (inj_p op)) ω <->
+  doors_o_caller ω a op.
+Proof. by rewrite doors_effect_preE proj_inj_p_equ. Qed.
+
+Lemma doors_o_caller_preI `{Provide Fx DOORS} {a}
+    (ω : Ω) (op : DOORS a) :
+  doors_o_caller ω a op ->
+  pre (hoare_of_contract doors_contract (inj_p op)) ω.
+Proof. by rewrite doors_o_caller_preE. Qed.
+
+Lemma doors_effect_postE {Fx a} `{MayProvide Fx DOORS}
+    (op : Fx a) (ω : Ω) (x : a) (ω' : Ω) :
+  post (hoare_of_contract doors_contract op) ω x ω' <->
+  match proj_p op with
+  | Some door_op =>
+      ω' = step ω a door_op x /\ doors_o_callee ω a door_op x
+  | None => ω' = ω
+  end.
+Proof.
+rewrite /hoare_of_contract /= /gen_witness_update
+  /gen_callee_obligation.
+case: (proj_p op)=> [door_op |] /=.
+- by [].
+by split=> [[-> _] | ->].
+Qed.
+
+Lemma doors_o_callee_postE `{Provide Fx DOORS} {a}
+    (ω : Ω) (op : DOORS a) (x : a) (ω' : Ω) :
+  post (hoare_of_contract doors_contract (inj_p op)) ω x ω' <->
+  ω' = step ω a op x /\ doors_o_callee ω a op x.
+Proof. by rewrite doors_effect_postE proj_inj_p_equ. Qed.
+
+Lemma doors_other_effect_postE {Fx a} `{MayProvide Fx DOORS}
+    (op : Fx a) (other : proj_p op = None)
+    (ω : Ω) (x : a) (ω' : Ω) :
+  post (hoare_of_contract doors_contract op) ω x ω' <-> ω' = ω.
+Proof.
+by rewrite doors_effect_postE other.
+Qed.
+
+Opaque hoare_of_contract.
 
 (** ** Intermediary Lemmas *)
+Lemma doors_is_open_calleeE (ω : Ω) (d : door) (x : bool) :
+  doors_o_callee ω bool (IsOpen d) x -> sel d ω = x.
+Proof. by case: x=> postc; inversion postc; ssubst. Qed.
+
+Lemma doors_is_open_effect_retE `{Provide Fx DOORS}
+    (ω : Ω) (d : door) (opened : bool) (ω' : Ω) :
+  post (hoare_of_contract doors_contract
+          (A := bool) (inj_p (IsOpen d))) ω opened ω' <->
+  post (@ret (hoare Ω) bool (sel d ω)) ω opened ω'.
+Proof.
+rewrite doors_o_callee_postE hoare_pure_postE /=.
+split=> [ [-> callee] | [<- <-] ]; split=> //.
+- exact: doors_is_open_calleeE callee.
+- exact: doors_o_callee_is_open.
+Qed.
+
+Lemma doors_is_open_effect_ret_callerE `{Provide Fx DOORS}
+    (ω : Ω) (d : door) :
+  pre (hoare_of_contract doors_contract
+          (A := bool) (inj_p (IsOpen d))) ω <->
+  pre (@ret (hoare Ω) bool (sel d ω)) ω.
+Proof.
+by rewrite hoare_pure_preE; split=> // _;
+  apply: doors_o_caller_preI; exact: req_is_open.
+Qed.
+
+Lemma doors_toggle_effect_postE `{Provide Fx DOORS}
+  (ω : Ω) (d : door) (u : unit) (ω' : Ω) :
+  post (hoare_of_contract doors_contract
+          (A := unit) (inj_p (Toggle d))) ω u ω' <->
+  ω' = tog d ω.
+Proof.
+by rewrite doors_o_callee_postE;
+  split=> [ [-> _] | ->] //; split=>//;
+  exact: doors_o_callee_toggle.
+Qed.
+
+Lemma doors_toggle_effect_ret_callerE `{Provide Fx DOORS}
+    (ω : Ω) (d : door)
+    (* Safe : porte 1 ferméE -> porte 2 ferméE *)
+    (* (safe : sel d ω = false -> sel (co d) ω = false) *)
+    (safe : sel (co d) ω -> sel d ω) :
+  pre (hoare_of_contract doors_contract
+          (A := unit) (inj_p (Toggle d))) ω <->
+  pre (@ret (hoare Ω) unit tt) ω.
+Proof.
+by rewrite hoare_pure_preE; split=> // _;
+  apply: doors_o_caller_preI; exact: req_toggle safe.
+Qed.
+
+
+Lemma doors_toggle_callerE (ω : Ω) (d : door) :
+  doors_o_caller ω unit (Toggle d) ->
+  sel (co d) ω -> sel d ω.
+Proof. by move: ω d=> [[|] [|]] [|] //=; inversion 1. Qed.
 
 (** Closing a door [d] in any system [ω] is always a respectful operation. *)
+Local Open Scope classical_set_scope.
 
+
+(* TODO(cleanup): Check whether this proof can be shortened. *)
 Lemma close_door_respectful `{Provide Fx DOORS} {im : freerMonad Fx}
-    (ω : Ω) (d : door)
-  : pre (to_hoare
-      (im:=freer Fx)
-      doors_contract (close_door d)) ω.
-
+    (d : door) :
+  pre (to_hoare (im:=im) doors_contract (close_door d)) = [set: _].
 Proof.
-  prove impure with airlock; subst ; constructor.
-
-  (* This leaves us with one goal to prove:
-
-       [sel d ω = false -> sel (co d) ω = false]
-
-     Yet, thanks to our call to [IsOpen d], we can predict that
-
-       [sel d ω = true] *)
-
-  inversion o_caller0; ssubst.
-  now rewrite H3.
+rewrite /close_door -subTset=> ω _; apply: to_hoare_bind_preI.
+- by rewrite to_hoare_requestE doors_is_open_effect_ret_callerE.
+move=> [|] ω';
+  rewrite to_hoare_when_preE // to_hoare_requestE doors_is_open_effect_retE
+  => -[d_open <-].
+by rewrite to_hoare_requestE;
+  apply/(doors_toggle_effect_ret_callerE ω d).
 Qed.
 
- Hint Resolve close_door_respectful : airlock.
-
-Lemma open_door_respectful `{Provide Fx DOORS} (ω : Ω)
-    (d : door) (safe : sel (co d) ω = false)
-  : pre (to_hoare
-      (im:=freer Fx)
-      doors_contract (open_door (Fx:=Fx) d)) ω.
-
+(* TODO(cleanup): Check whether this proof can be shortened. *)
+Lemma open_door_respectful `{Provide Fx DOORS} {im : freerMonad Fx}
+    (ω : Ω) (d : door) (safe : ~~ sel (co d) ω) :
+  pre (to_hoare (im:=im) doors_contract
+    (open_door (Fx := Fx) d)) ω.
 Proof.
-  prove impure; repeat constructor; subst.
-  by inversion o_caller0; ssubst.
+rewrite /open_door; apply: to_hoare_bind_preI.
+- by rewrite to_hoare_requestE doors_is_open_effect_ret_callerE.
+move=> [|] ω'; rewrite to_hoare_when_preE //
+  to_hoare_requestE doors_is_open_effect_retE
+  => -[_ <-].
+rewrite to_hoare_requestE;
+  apply/(doors_toggle_effect_ret_callerE ω d)=>//.
+by move: safe=> /[swap] ->.
 Qed.
 
- Hint Resolve open_door_respectful : airlock.
-
-Lemma close_door_run `{Provide Fx DOORS} (ω : Ω) (d : door) (ω' : Ω) (x : unit)
-  (run : post
-    (to_hoare (im:=freer Fx)
-      doors_contract (close_door d)) ω x ω')
-  : sel d ω' = false.
+Lemma close_door_run `{Provide Fx DOORS} {im : freerMonad Fx}
+  (ω : Ω) (d : door) (ω' : Ω) (x : unit)
+  (run : post (to_hoare (im:=im) doors_contract (close_door d)) ω x ω') :
+~~ sel d ω'.
 Proof.
-  run_simpl run;
-  cleanvert H1.
-  cleanvert run.
-  cleanvert H1.
-  run_simpl H2.
-
-  cleanvert H2.
-  (* cleanvert H4. *)
-
-  -  cleanvert H1.
-    by rewrite tog_equ_1 H5.
-  by  cleanvert run.
+move: run; rewrite /close_door to_hoare_bind_postE.
+move=> [opened [? [ ]]].
+rewrite to_hoare_requestE doors_is_open_effect_retE to_hoare_when_postE
+  => -[+ <-].
+case: opened.
+- by move=> + [[] ];
+  rewrite to_hoare_requestE doors_toggle_effect_postE=> /[swap] ->;
+  rewrite tog_equ_1=> ->.
+by move=> /[swap] -> ->.
 Qed.
-
- Hint Resolve close_door_run : airlock.
 
 #[local] Opaque close_door.
 #[local] Opaque open_door.
 #[local] Opaque Nat.ltb.
 
 Remark one_door_safe_all_doors_safe (ω : Ω) (d : door)
-    (safe : sel d ω = false \/ sel (co d) ω = false)
-  : forall (d' : door), sel d' ω = false \/ sel (co d') ω = false.
-
+    (safe : ~~sel d ω \/ ~~sel (co d) ω)
+  : forall (d' : door), ~~sel d' ω \/ ~~sel (co d') ω.
 Proof.
-  intros d'.
-  destruct d; destruct d'; auto.
-  + cbn -[sel].
-    now rewrite or_comm.
-  + cbn -[sel].
-    fold (co right).
-    now rewrite or_comm.
+by move: d safe=> + /[swap]; case; case=>//=; rewrite or_comm.
 Qed.
 
 (** The objective of this lemma is to prove that, if either the right door or
@@ -281,19 +355,60 @@ Qed.
     [p] that interacts with doors, this fact remains true. *)
 
 #[local] Opaque sel.
+Definition doors_safe (ω : Ω) :=
+  ~~ sel left ω \/ ~~ sel right ω.
+
+(* TODO(cleanup): Check whether this proof can be shortened. *)
+Lemma doors_request_preserves_safe `{Provide Fx DOORS}
+    {im : freerMonad Fx}
+    `(op : Fx a) (ω : Ω) (x : a) (ω' : Ω) :
+  pre (to_hoare (im:=im) doors_contract (trigger op)) ω ->
+  post (to_hoare (im:=im) doors_contract (trigger op)) ω x ω' ->
+  doors_safe ω -> doors_safe ω'.
+Proof.
+rewrite to_hoare_requestE doors_effect_preE doors_effect_postE.
+case: (proj_p op)=> [door_op |] /=; last first.
+- by move=> _ ->.
+move=> + [-> _].
+move: door_op x; case=> d [] caller safe //=.
+apply: (one_door_safe_all_doors_safe _ d).
+move: safe=> /one_door_safe_all_doors_safe /(_ d).
+case=> [d_closed | ?]; right; rewrite tog_equ_2 //.
+apply/negP=> co_open; move/negP: d_closed=> d_closed.
+by inversion caller as [|?? Hsafe]; subst;
+  move: co_open Hsafe d_closed=> -> ->.
+Qed.
+
+Lemma doors_handler_preserves_safe `{Provide Fx DOORS}
+    {im : freerMonad Fx} {A} (op : Fx A) :
+  preserves_invariant doors_safe
+    (hoare_of_contract doors_contract op).
+Proof.
+by move=> state result state' op_pre op_post state_safe;
+  apply: (doors_request_preserves_safe (im:=im) op state result state');
+  rewrite ?to_hoare_requestE.
+Qed.
+
+Lemma doors_run_preserves_safe `{Provide Fx DOORS}
+    {A} (p : freer Fx A) :
+  preserves_invariant doors_safe
+    (p |= doors_contract).
+Proof.
+elim: p=> [value | X op k IH].
+- by rewrite to_hoare_localE; exact: preserves_invariant_ret.
+exact: (preserves_invariant_bind
+  (doors_handler_preserves_safe (im:=freer Fx) op) IH).
+Qed.
 
 Lemma respectful_run_inv `{Provide Fx DOORS} {A} (p : freer Fx A)
-    (ω : Ω) (safe : sel left ω = false \/ sel right ω = false)
+    (ω : Ω) (safe : ~~ sel left ω \/ ~~ sel right ω)
     (a : A) (ω' : Ω)
-    (hpre : pre
-      (to_hoare (im:=freer Fx)
-        doors_contract p) ω)
-    (hpost : post
-      (to_hoare (im:=freer Fx)
-        doors_contract p) ω a ω')
-  : sel left ω' = false \/ sel right ω' = false.
-
-(** We reason by induction on the impure computation [p]:
+    (hpre : pre (to_hoare (im:=freer Fx) doors_contract p) ω)
+    (hpost : post (to_hoare (im:=freer Fx) doors_contract p) ω a ω') :
+  ~~ sel left ω' \/ ~~ sel right ω'.
+(** The induction in [doors_run_preserves_safe] reduces this proof to showing
+    that every handled request preserves [doors_safe]. It accounts for the
+    following two cases:
 
     - Either [p] is a pure computation; in such a case, the doors state
       does not change, hence the proof is trivial.
@@ -322,67 +437,46 @@ Lemma respectful_run_inv `{Provide Fx DOORS} {A} (p : freer Fx A)
          closed after the request has been handled.  Because there is at least
          one door closed ([co d]), we can conclude that either the right or the
          left door is closed thanks to [one_door_safe_all_doors_safe]. *)
-
 Proof.
-  fold (co left) in *.
-  revert ω hpre hpost safe.
-  (* elim p=>[a'|B e f IH] ω pre run safe. *)
-  induction p; intros ω hpre run safe.
-  + by unroll_post run.
-  + run_simpl run.
-    have hpost : post (hoare_of_contract doors_contract (A:=β) op) ω x ω0
-      by split; [apply H2| by rewrite H3].
-    (* move: H1 => /(_ x ω0) => H1. *)
-     apply/(H1 x ω0) => //; [by apply hpre|].
-    cbn in *.
-    inversion hpre; rewrite /=/gen_caller_obligation in H4.
-    (* simplify_gens *)
-    unfold gen_caller_obligation, gen_callee_obligation, gen_witness_update in *.
-    cbn in *.
-    destruct (proj_p op) as [e'|].
-    ++ destruct hpost as [o_callee equω].
-       destruct e' as [d|d].
-       +++ rewrite H3.
-           apply safe.
-       +++ apply one_door_safe_all_doors_safe with (d := d);
-             apply one_door_safe_all_doors_safe with (d' := d) in safe;
-             subst.
-             inversion H4.
-           cbn.
-           by destruct safe as [safe|safe];
-            right; rewrite tog_equ_2//.
-    ++ rewrite H3;
-       exact: safe.
+by move: hpre hpost safe; exact: doors_run_preserves_safe.
 Qed.
 
-Lemma controller_correct `{StrictProvide2 Fx DOORS (STORE nat)}
-  : correct_component
-      (im:=freer Fx) controller
-                      (no_contract CONTROLLER)
-                      doors_contract
-                      (fun _ ω => sel left ω = false \/ sel right ω = false).
+(** ** Main Theorem *)
+(* TODO(cleanup): Check whether this proof can be shortened. *)
+Theorem controller_correct
+    `{StrictProvide2 Fx DOORS (STORE nat)}
+  : correct_component controller
+    (im:=freer Fx)
+    (no_contract CONTROLLER)
+    doors_contract
+    (fun _ ω => ~~ sel left ω \/ ~~ sel right ω).
 Proof.
-  move=>ωc ωd pred A eff req.
-  have hpre : pre
-      (to_hoare (im:=freer Fx)
-        doors_contract (controller A eff)) ωd.
-    {
-      case eff; do ! [prove impure with airlock; ssubst; constructor => //].
-
-
-      (* case eff=> [|d]//; prove impure with airlock; ssubst; constructor=>//. *)
-        (* do ! [prove impure with airlock; ssubst; constructor=>//=].  *)
-      - by inversion o_caller; ssubst; rewrite H6.
-      - by inversion o_caller1; ssubst; rewrite H6.
-      - by inversion o_caller0; ssubst; rewrite H6.
-      - by inversion o_caller; ssubst; rewrite H6.
-      - by inversion o_caller1; ssubst;inversion o_caller; ssubst; rewrite H6 tog_equ_1/=H7.
-      - by inversion o_caller; ssubst.
-    }
-
-  split=>[|a ωE' run]//=;
-  split=>//=.
-  by apply/(respectful_run_inv _ _ _ _ _ _ run).
+rewrite /correct_component=> ωF ω safe α op _.
+have controller_pre :
+    pre (to_hoare doors_contract
+      (controller (im:=freer Fx) α op)) ω.
+  case: op=> [|d]; rewrite /controller.
+  - apply: to_hoare_bind_preI.
+    + exact: to_hoare_distinguished_request_preI.
+    move=> cpt state /to_hoare_distinguished_request_postE ->.
+    rewrite to_hoare_when_preE.
+    case: (15 <? cpt)%nat=> //=.
+    apply: to_hoare_bind_preI.
+    + by apply: to_hoare_bind_preI=>
+        [|result state' close_post]; rewrite close_door_respectful.
+    by move=> result state' closes_post;
+      exact: to_hoare_distinguished_request_preI.
+  apply: to_hoare_bind_preI.
+  - apply: to_hoare_bind_preI.
+    + by rewrite close_door_respectful.
+    move=> result state close_post.
+    exact: (open_door_respectful (Fx:=Fx) (im:=freer Fx) state d
+      (close_door_run ω (co d) state result close_post)).
+  by move=> result state body_post;
+    exact: to_hoare_distinguished_request_preI.
+split=> // x ω' run; split; first exact: mk_no_callee_obligation.
+exact: (respectful_run_inv (Fx:=Fx)
+  (controller (im:=freer Fx) α op) ω safe x ω' controller_pre run).
 Qed.
 
-End a.
+End airlock_s.
