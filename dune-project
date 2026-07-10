@@ -14,7 +14,7 @@
  (synopsis "A FreeSpec rewrite to bring the power of equational reasoning and probabilities.")
  (description "A longer description")
  (depends 
-    (coq-monae (= "dev"))
+    (coq-monae (= "latest"))
     (coq-equations (="latest"))
     (coq-hierarchy-builder (= "latest"))
     (coq-mathcomp-ssreflect (= "latest"))
