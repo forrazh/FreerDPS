@@ -121,6 +121,53 @@ End hoare_mon.
 
 HB.export hoare_mon.
 
+(** ** Primitive Views *)
+
+Lemma hoare_pureE {Σ α} (x : α) :
+  @ret (hoare Σ) α x = @hoare_pure Σ α x.
+Proof. by []. Qed.
+
+Lemma hoare_bindE {Σ α β} (h : hoare Σ α) (k : α -> hoare Σ β) :
+  @bind (hoare Σ) α β h k = hoare_bind h k.
+Proof. by []. Qed.
+
+Lemma hoare_pure_preE {Σ α} (x : α) s :
+  pre (@hoare_pure Σ α x) s <-> True.
+Proof. by split. Qed.
+
+Lemma hoare_pure_postE {Σ α} (x y : α) s s' :
+  post (@hoare_pure Σ α x) s y s' <-> x = y /\ s = s'.
+Proof. by split. Qed.
+
+Lemma hoare_bind_preE {Σ α β} (h : hoare Σ α) (k : α -> hoare Σ β) s :
+  pre (hoare_bind h k) s <->
+  pre h s /\ (forall x s', post h s x s' -> pre (k x) s').
+Proof. by split. Qed.
+
+Lemma hoare_bind_postE {Σ α β} (h : hoare Σ α) (k : α -> hoare Σ β) s x s'' :
+  post (hoare_bind h k) s x s'' <->
+  exists y s', post h s y s' /\ post (k y) s' x s''.
+Proof. by split. Qed.
+
+Lemma hoare_ext {Σ α} (h1 h2 : hoare Σ α) :
+  (forall s, pre h1 s <-> pre h2 s) ->
+  (forall s x s', post h1 s x s' <-> post h2 s x s') ->
+  h1 = h2.
+Proof.
+  case: h1 => pre1 post1.
+  case: h2 => pre2 post2.
+  move=> Hpre Hpost /=.
+  congr mk_hoare.
+  - apply/boolp.funext=> s.
+    apply/boolp.propext.
+    exact: (Hpre s).
+  apply/boolp.funext=> s.
+  apply/boolp.funext=> x.
+  apply/boolp.funext=> s'.
+  apply/boolp.propext.
+  exact: (Hpost s x s').
+Qed.
+
 (** * Reasoning about Programs *)
 
 Definition interface_to_hoare `{MayProvide ix i} `(c : contract i Ω)
