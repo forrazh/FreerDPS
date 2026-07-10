@@ -9,6 +9,52 @@ From FreerDPS Require Import Interface Impure Contract Hoare.
 From monae Require Import preamble hierarchy.
 Generalizable All Variables.
 
+(** * Primitive Request Views *)
+
+Lemma interface_to_hoare_preE `{MayProvide ix i} `(c : contract i Ω)
+    `(e : ix a) (ω : Ω) :
+  pre (interface_to_hoare c e) ω <-> gen_caller_obligation c ω e.
+Proof. by split. Qed.
+
+Lemma interface_to_hoare_postE `{MayProvide ix i} `(c : contract i Ω)
+    `(e : ix a) (ω : Ω) (x : a) (ω' : Ω) :
+  post (interface_to_hoare c e) ω x ω' <->
+  gen_callee_obligation c ω e x /\
+  ω' = gen_witness_update c ω e x.
+Proof. by split. Qed.
+
+Lemma interface_to_hoare_postI `{MayProvide ix i} `(c : contract i Ω)
+    `(e : ix a) (ω : Ω) (x : a) :
+  gen_callee_obligation c ω e x ->
+  post (interface_to_hoare c e) ω x
+       (gen_witness_update c ω e x).
+Proof. by move=> step; split. Qed.
+
+Lemma to_hoare_requestE `{MayProvide ix i} {im : impureMonad ix}
+    `(c : contract i Ω) `(e : ix a) :
+  to_hoare (im:=im) c (request a e) = interface_to_hoare c e.
+Proof. exact: impure_lift_request. Qed.
+
+Lemma to_hoare_request_preE `{MayProvide ix i} {im : impureMonad ix}
+    `(c : contract i Ω) `(e : ix a) (ω : Ω) :
+  pre (to_hoare (im:=im) c (request a e)) ω <->
+  gen_caller_obligation c ω e.
+Proof. by rewrite to_hoare_requestE interface_to_hoare_preE. Qed.
+
+Lemma to_hoare_request_postE `{MayProvide ix i} {im : impureMonad ix}
+    `(c : contract i Ω) `(e : ix a) (ω : Ω) (x : a) (ω' : Ω) :
+  post (to_hoare (im:=im) c (request a e)) ω x ω' <->
+  gen_callee_obligation c ω e x /\
+  ω' = gen_witness_update c ω e x.
+Proof. by rewrite to_hoare_requestE interface_to_hoare_postE. Qed.
+
+Lemma to_hoare_request_postI `{MayProvide ix i} {im : impureMonad ix}
+    `(c : contract i Ω) `(e : ix a) (ω : Ω) (x : a) :
+  gen_callee_obligation c ω e x ->
+  post (to_hoare (im:=im) c (request a e)) ω x
+       (gen_witness_update c ω e x).
+Proof. by rewrite to_hoare_requestE; exact: interface_to_hoare_postI. Qed.
+
 (** * General Lemmas *)
 
 Lemma to_hoare_step `{MayProvide ix i} `(c : contract i Ω)
