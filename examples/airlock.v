@@ -5,7 +5,7 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 From Coq Require Import Arith.
-From FreerDPS Require Import Core Impure Hoare.
+From FreerDPS Require Import Core Impure Hoare HoareFacts Tactics.
 From monae Require Import preamble hierarchy.
 
 #[local] Open Scope nat_scope.
@@ -206,7 +206,7 @@ Proof.
 
        [sel d ω = true] *)
 
-  inversion o_caller0; ssubst.
+  inversion o_callee; ssubst.
   now rewrite H3.
 Qed.
 
@@ -218,7 +218,7 @@ Lemma open_door_respectful `{Provide ix DOORS} (ω : Ω)
 
 Proof.
   prove impure; repeat constructor; subst.
-  by inversion o_caller0; ssubst.
+  by move=> _.
 Qed.
 
  Hint Resolve open_door_respectful : airlock.
@@ -227,18 +227,36 @@ Lemma close_door_run `{Provide ix DOORS} (ω : Ω) (d : door) (ω' : Ω) (x : un
   (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) doors_contract (close_door d)) ω x ω')
   : sel d ω' = false.
 Proof.
-  run_simpl run;
-  cleanvert H1.
-  cleanvert run.
-  cleanvert H1.
-  run_simpl H2.
-
-  cleanvert H2.
-  (* cleanvert H4. *)
-
-  -  cleanvert H1.
-    by rewrite tog_equ_1 H5.
-  by  cleanvert run.
+  move: run => /(to_hoare_post_bind_assoc doors_contract
+                    (@is_open ix H H0
+                       (ImpureModule_acto__canonical__Impure_MonadImpure ix) d)
+                    (fun open => when open
+                       (@toggle ix H H0
+                          (ImpureModule_acto__canonical__Impure_MonadImpure ix) d))).
+  move=> [open [ω1 [opened tail]]].
+  move: opened => /to_hoare_request_postE [reported witness].
+  unfold gen_witness_update in witness.
+  repeat rewrite proj_inj_p_equ in witness.
+  cbn in witness.
+  subst ω1.
+  unfold gen_callee_obligation in reported.
+  repeat rewrite proj_inj_p_equ in reported.
+  cbn in reported.
+  inversion reported; ssubst.
+  case is_open_equ: (sel d ω) tail => tail.
+  - cbn in tail.
+    move: tail => /to_hoare_request_then_postE
+      [toggle_result [toggle_ok done]].
+    move: done => /to_hoare_local_postE [_ witness].
+    subst ω'.
+    unfold gen_witness_update.
+    repeat rewrite proj_inj_p_equ.
+    cbn.
+    by rewrite tog_equ_1 is_open_equ.
+  cbn in tail.
+  move: tail => /to_hoare_local_postE [_ witness].
+  subst ω'.
+  exact: is_open_equ.
 Qed.
 
  Hint Resolve close_door_run : airlock.
@@ -309,31 +327,29 @@ Proof.
   revert ω hpre hpost safe.
   (* elim p=>[a'|B e f IH] ω pre run safe. *)
   induction p; intros ω hpre run safe.
-  + by unroll_post run.
-  + run_simpl run. 
-    have hpost : post (interface_to_hoare doors_contract (A:=β) e) ω x ω0 
-      by split; [apply H2| by rewrite H3].
-    (* move: H1 => /(_ x ω0) => H1. *)
-     apply/(H1 x ω0) => //; [by apply hpre|].
+  + move: run => /to_hoare_local_postE [_ witness].
+    subst ω'.
+    exact: safe.
+  + move: run => /to_hoare_request_then_postE [x [hpost run]].
+    move: hpre => /to_hoare_request_then_preE [caller next].
+    apply/(H1 x (gen_witness_update doors_contract ω e x)) => //.
+    exact: next hpost.
     cbn in *.
-    inversion hpre; rewrite /=/gen_caller_obligation in H4.
-    (* simplify_gens *)
     unfold gen_caller_obligation, gen_callee_obligation, gen_witness_update in *. 
     cbn in *.
     destruct (proj_p e) as [e'|].
-    ++ destruct hpost as [o_callee equω].
-       destruct e' as [d|d].
-       +++ rewrite H3.
-           apply safe.
+    ++ destruct e' as [d|d].
+       +++ apply safe.
        +++ apply one_door_safe_all_doors_safe with (d := d);
-             apply one_door_safe_all_doors_safe with (d' := d) in safe;
-             subst.
-             inversion H4.
+             apply one_door_safe_all_doors_safe with (d' := d) in safe.
+           inversion caller; ssubst.
+           inversion hpost; ssubst.
            cbn.
-           by destruct safe as [safe|safe];
-            right; rewrite tog_equ_2//. 
-    ++ rewrite H3;
-       exact: safe.
+           destruct safe as [closed|other_closed]; right;
+             rewrite tog_equ_2.
+           + exact: H4 closed.
+           + exact: other_closed.
+    ++ exact: safe.
 Qed.
 
 (** ** Main Theorem *)
@@ -375,3 +391,5 @@ Proof.
   split=>//=.
   by apply/(respectful_run_inv _ _ _ _ _ _ run). 
 Qed.
+
+End a.

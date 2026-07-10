@@ -55,6 +55,68 @@ Lemma to_hoare_request_postI `{MayProvide ix i} {im : impureMonad ix}
        (gen_witness_update c ω e x).
 Proof. by rewrite to_hoare_requestE; exact: interface_to_hoare_postI. Qed.
 
+(** * Canonical Impure Views *)
+
+Lemma to_hoare_local_preI `{MayProvide ix i} `(c : contract i Ω)
+    `(x : a) (ω : Ω) :
+  pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+                c (local x : impure ix a)) ω.
+Proof. by []. Qed.
+
+Lemma to_hoare_local_postE `{MayProvide ix i} `(c : contract i Ω)
+    `(x : a) (y : a) (ω ω' : Ω) :
+  post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+                 c (local x : impure ix a)) ω y ω' <->
+  x = y /\ ω = ω'.
+Proof. by split. Qed.
+
+Lemma to_hoare_request_then_preE `{MayProvide ix i} `(c : contract i Ω)
+    `(e : ix a) `(f : a -> impure ix b) (ω : Ω) :
+  pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+                c (request_then e f)) ω <->
+  gen_caller_obligation c ω e /\
+  forall x, gen_callee_obligation c ω e x ->
+    pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+                  c (f x)) (gen_witness_update c ω e x).
+Proof.
+  split.
+  - move=> [caller next]; split=> // x callee.
+    apply: next.
+    exact: interface_to_hoare_postI.
+  move=> [caller next]; split=> // x ω' step.
+  move: step => /interface_to_hoare_postE [callee ->].
+  exact: next.
+Qed.
+
+Lemma to_hoare_request_then_preI `{MayProvide ix i} `(c : contract i Ω)
+    `(e : ix a) `(f : a -> impure ix b) (ω : Ω) :
+  gen_caller_obligation c ω e ->
+  (forall x, gen_callee_obligation c ω e x ->
+    pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+                  c (f x)) (gen_witness_update c ω e x)) ->
+  pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+                c (request_then e f)) ω.
+Proof. by move=> caller next; apply/to_hoare_request_then_preE; split. Qed.
+
+Lemma to_hoare_request_then_postE `{MayProvide ix i} `(c : contract i Ω)
+    `(e : ix a) `(f : a -> impure ix b) (ω : Ω) (y : b) (ω' : Ω) :
+  post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+                 c (request_then e f)) ω y ω' <->
+  exists x, gen_callee_obligation c ω e x /\
+    post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+                   c (f x)) (gen_witness_update c ω e x) y ω'.
+Proof.
+  split.
+  - move=> [x [ω'' [step suffix]]].
+    move: step => /interface_to_hoare_postE [callee witness].
+    subst ω''.
+    by exists x.
+  move=> [x [callee suffix]].
+  exists x, (gen_witness_update c ω e x); split.
+  - exact: interface_to_hoare_postI.
+  exact: suffix.
+Qed.
+
 Lemma pair_eqE {A B} (x x' : A) (y y' : B) :
   (x, y) = (x', y') -> x = x' /\ y = y'.
 Proof. by move=> [] /=; split. Qed.
