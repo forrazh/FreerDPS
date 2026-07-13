@@ -5,13 +5,12 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 (* From ExtLib Require Import Functor Applicative Monad. *)
-From FreerDPS Require Import Interface Impure Contract.
-From monae Require Import preamble hierarchy.
-From mathcomp Require Import ssreflect.
 From HB Require Import structures.
+From FreerDPS Require Import Interface Impure Contract mathcomp_extra.
+From mathcomp Require Import all_boot boolp classical_sets.
+From monae Require Import preamble hierarchy.
 
 Generalizable All Variables.
-
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -30,17 +29,16 @@ Unset Printing Implicit Defensive.
 
 (** * Definition *)
 
-Record hoare (Σ : Type) (α : Type) : Type :=
-  mk_hoare { pre : Σ -> Prop
-           ; post : Σ -> α -> Σ -> Prop
-           }.
+Record hoare (Σ : Type) (α : Type) : Type := mk_hoare {
+  pre : set Σ ;
+  post : Σ -> α -> set Σ }.
 
 Arguments mk_hoare {Σ α} (pre post).
 Arguments pre {Σ α} (_ _).
 Arguments post {Σ α} (_ _ _).
 
 Definition hoare_pure {Σ α} (x : α) : hoare Σ α :=
-  mk_hoare (fun _ => True) (fun s y s' => x = y /\ s = s').
+  mk_hoare [set: Σ] (fun s y s' => x = y /\ s = s').
 
 Definition hoare_bind {Σ α β} (h : hoare Σ α) (k : α -> hoare Σ β) : hoare Σ β :=
   mk_hoare (fun s => pre h s /\ (forall x s', post h s x s' -> pre (k x) s'))
@@ -61,90 +59,78 @@ Definition hoare_apply {Σ α β} (hf : hoare Σ (α -> β)) (h : hoare Σ α)
 
 (** ** Monad *)
 Module hoare_mon.
-  Section hm.
-    Variable Σ: UU0.
-    Let ret := @hoare_pure Σ.
-    Let bind := @hoare_bind Σ.
+Section hm.
+Variable Σ : UU0.
+Let ret := @hoare_pure Σ.
+Let bind := @hoare_bind Σ.
 
-    Let right_neutral :  BindLaws.right_neutral  bind ret.
-    Proof.
-      move=>A. rewrite/bind/ret/hoare_bind/hoare_pure/=.
-      case=>pr po.
-      congr mk_hoare; apply/boolp.funext=>s. 
-      - apply/boolp.propext; tauto.
-      apply/boolp.funext=>a;
-      apply/boolp.funext=>s'.
-      rewrite boolp.propeqE.
-      split. case=>a'; case=>s''.
-      all: move=>/=H.
-      - firstorder congruence.
-      by exists a;  exists s'.  
-       (* Prop exten *)
-    Qed.
+Let right_neutral : BindLaws.right_neutral bind ret.
+Proof.
+move=> A [pr po].
+rewrite /bind /ret /hoare_bind /hoare_pure/=; congr mk_hoare.
+- by apply/funext => s/=; apply/propext; split; tauto.
+- apply/eq3_fun => s a s''.
+  under eq2_exists do rewrite andA.
+  by rewrite ex2C ex2_eqr ex_eqr.
+Qed.
 
 (* Local Open Scope ssripat_scope. *)
 
-    Let left_neutral : BindLaws.left_neutral  bind ret.
-    Proof.
-      move=>A B a f. rewrite/bind/ret/hoare_bind/hoare_pure/=.
-      case eFA: (f a).
-      congr mk_hoare; apply/boolp.funext=>s.
-      - apply/boolp.propext=>/=; firstorder.
-        (* How to specialize ? *)
-        + by move: H0 eFA => /(_ a s) /[swap]  -> /=; exact.
-        + by subst; rewrite eFA.
-      - apply/boolp.funext=>b; apply/boolp.funext=>s'.
-        rewrite boolp.propeqE. 
-      split. 
-      - case=>a'; case=>s''.
-      all: move=>/=H.
-      - firstorder. by rewrite -H-H1 eFA in H0.
-      
-      exists a;  exists s.
-      rewrite eFA/=;
-        firstorder.  
-    Qed. 
+Let left_neutral : BindLaws.left_neutral bind ret.
+Proof.
+move=> A B a f; rewrite /bind /ret /hoare_bind /hoare_pure/=.
+move fa : (f a) => [pr po]; congr mk_hoare.
+- apply/funext=> s; rewrite andTP; apply/propext; split.
+  + by move=> /(_ a s); rewrite fa/=; exact.
+  + by move=> prs _ _ [<- <-]; rewrite fa.
+- apply/eq3_fun => s b s'.
+  under eq2_exists do rewrite andC andA.
+  rewrite ex2C.
+  under eq_exists do rewrite ex_andl.
+  by rewrite ex_eqr_sym ex_eqr_sym fa.
+Qed.
 
-    Let assoc : BindLaws.associative  bind.
-    Proof.
-      move=>A B C m f g. rewrite/bind/ret/hoare_bind/hoare_pure/=.
-      case: m=>prA poA. 
-      congr mk_hoare; apply/boolp.funext=>s.
-      - apply/boolp.propext=>/=; firstorder.
-        move:x s' x0 s'0 H0  H  H1 H2 H3=>a s' b s'' Hcomb _ _ Hpostm Hpostf.
-        case eGB : (g b).
-         (* => /=[prC poC]. *)
-        move: Hcomb eGB=>/(_ b s'')/[swap]->; apply.
-        exists a; exists s'.
-        by split.        
-      apply/boolp.funext=>c;
-        apply/boolp.funext=>s'''.
-      apply/boolp.propext=>/=.
-      firstorder; 
-        move:x x0 x1 x2 H H0 H1=>x s'' y s' HpostA Hpostf Hpostg;
-        exists y; 
-        exists s'; 
-        firstorder.
-    Qed.
+Let assoc : BindLaws.associative bind.
+Proof.
+move=> A B C m f g; rewrite /bind /ret /hoare_bind /hoare_pure/=.
+case: m => prA poA/=; congr mk_hoare.
+- apply/funext => s; apply/propext; split.
+  + move=> [[prAs poApre postpre]].
+    split => // a s1 sas1; split=> [|b s2 s'bs2].
+      exact: poApre.
+    by apply: postpre; exists a, s1.
+  + move=> [prAs poApre]; split.
+      by split=> // a s1 /poApre[].
+    move=> b s1 [x [s2]] [] /poApre [fxs2] /[swap] s2bs1.
+    exact.
+- apply: eq3_fun => s c s1.
+  under eq2_exists do rewrite -ex_andl.
+  rewrite ex3C; apply: eq_exists => a.
+  under eq2_exists do rewrite -ex_andl.
+  rewrite ex3C; apply: eq_exists => s2.
+  rewrite -ex_andr.
+  under [in RHS]eq_exists do rewrite -ex_andr.
+  by under [in RHS]eq2_exists do rewrite andA.
+Qed.
 
-    HB.instance Definition _ := isMonad_ret_bind.Build (hoare Σ) left_neutral right_neutral assoc.
+HB.instance Definition _ := isMonad_ret_bind.Build (hoare Σ)
+  left_neutral right_neutral assoc.
 
-  End hm.
+End hm.
 End hoare_mon.
 
 HB.export hoare_mon.
 
 (** * Reasoning about Programs *)
 
-Definition interface_to_hoare `{MayProvide ix i} `(c : contract i Ω) : ix ~~> hoare Ω :=
-  fun a e =>
-    {| pre := fun ω => gen_caller_obligation c ω e
-     ; post := fun ω x ω' => gen_callee_obligation c ω e x
-                             /\ ω' = gen_witness_update c ω e x
-    |}.
+Definition interface_to_hoare `{MayProvide ix i} `(c : contract i Ω)
+    : ix ~~> hoare Ω :=
+  fun a e => mk_hoare
+    (fun ω => gen_caller_obligation c ω e)
+    (fun ω x ω' => gen_callee_obligation c ω e x /\
+                   ω' = gen_witness_update c ω e x).
 
 Definition to_hoare `{MayProvide ix i} {im : impureMonad ix} `(c : contract i Ω)
-  : im ~~> hoare Ω :=
+    : im ~~> hoare Ω :=
   impure_lift _ (interface_to_hoare c).
-
 Arguments to_hoare {ix i _ im Ω} c {α} : rename.

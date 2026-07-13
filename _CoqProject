@@ -4,6 +4,7 @@
 ./theories/Component.v
 ./theories/Contract.v
 ./theories/Core.v
+./theories/mathcomp_extra.v
 ./theories/Hoare.v
 ./theories/HoareFacts.v
 ./theories/Impure.v
