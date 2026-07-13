@@ -6,7 +6,7 @@
 
 (* From ExtLib Require Import Functor Applicative Monad. *)
 From HB Require Import structures.
-From FreerDPS Require Import Interface Impure Contract.
+From FreerDPS Require Import Interface Impure Contract mathcomp_extra.
 From mathcomp Require Import all_boot boolp classical_sets.
 From monae Require Import preamble hierarchy.
 
@@ -56,64 +56,6 @@ Definition hoare_map {Σ α β} (f : α -> β) (h : hoare Σ α) : hoare Σ β :
 Definition hoare_apply {Σ α β} (hf : hoare Σ (α -> β)) (h : hoare Σ α)
   : hoare Σ β :=
   hoare_bind hf (fun f => hoare_map f h).
-
-(* TODO: move to MCA *)
-Lemma eq4_exists T S R N
-  (U V : forall (x : T) (y : S x) (z : R x y), N x y z -> Prop) :
-  (forall x y z n, U x y z n = V x y z n) ->
-  (exists x y z n, U x y z n) = (exists x y z n, V x y z n).
-Proof. by move=> UV; apply/eq3_exists => x y z; exact/eq_exists. Qed.
-
-Lemma andTP (P : Prop) : (True /\ P) = P.
-Proof. by apply/propext; split => // -[]. Qed.
-
-Lemma ex2C A B (P : A -> B -> Prop) :
-  (exists a b, P a b) = (exists b a, P a b).
-Proof. by apply/propeqP; split=> -[x [y zy]]; [exists y, x|exists y, x]. Qed.
-
-Lemma ex3C A B C (P : A -> B -> C -> Prop) :
-  (exists a b c, P a b c) = (exists c b a, P a b c).
-Proof.
-by apply/propeqP; split=> -[x [y [z xyz]]]; [exists z, y, x|exists z, y, x].
-Qed.
-
-Lemma ex3AC A B C (P : A -> B -> C -> Prop) :
-  (exists a b c, P a b c) = (exists a c b, P a b c).
-Proof.
-apply/propeqP; split => [[a [b [c abc]]]|[a [c [b abc]]]].
-  by exists a, c, b.
-by exists a, b, c.
-Qed.
-
-Lemma ex_andl A (P : A -> Prop) (Q : Prop) :
-  (exists a, P a /\ Q) = ((exists a, P a) /\ Q).
-Proof.
-apply/propeqP; split=> [[a [Pa q]]|[[a Pa] q]].
-  by split => //; exists a.
-by exists a.
-Qed.
-
-Lemma ex_andr A (P : Prop) (Q : A -> Prop) :
-  (exists a, P /\ Q a) = (P /\ (exists a, Q a)).
-Proof.
-under eq_exists do rewrite andC.
-by rewrite ex_andl andC.
-Qed.
-
-Lemma ex_eqr A (a' : A) (P : A -> Prop) : (exists a, P a /\ a = a') = P a'.
-Proof. by apply/propeqP; split=> [[a [Pa <-//]]|Pa']; exists a'. Qed.
-
-Lemma ex_eqr_sym A (a' : A) (P : A -> Prop) : (exists a, P a /\ a' = a) = P a'.
-Proof. by apply/propeqP; split=> [[a [Pa ->//]]|Pa']; exists a'. Qed.
-
-Lemma ex2_eqr A B (a' : A) (P : A -> B -> Prop) :
-  (exists a b, P a b /\ a = a') = (exists b, P a' b).
-Proof. by rewrite ex2C; apply: eq_exists => b; rewrite ex_eqr. Qed.
-
-Lemma ex2_eqr_sym A B (a' : A) (P : A -> B -> Prop) :
-  (exists a b, P a b /\ a' = a) = (exists b, P a' b).
- by rewrite ex2C; apply: eq_exists => b; rewrite ex_eqr_sym. Qed.
-(* /TODO: move to MCA *)
 
 (** ** Monad *)
 Module hoare_mon.
