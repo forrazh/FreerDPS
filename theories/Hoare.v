@@ -58,13 +58,26 @@ Definition hoare_apply {Σ α β} (hf : hoare Σ (α -> β)) (h : hoare Σ α)
   hoare_bind hf (fun f => hoare_map f h).
 
 (* TODO: move to MCA *)
-Lemma ex3_exchangeC A B C (P : A -> B -> C -> Prop) :
+Lemma eq4_exists T S R N
+  (U V : forall (x : T) (y : S x) (z : R x y), N x y z -> Prop) :
+  (forall x y z n, U x y z n = V x y z n) ->
+  (exists x y z n, U x y z n) = (exists x y z n, V x y z n).
+Proof. by move=> UV; apply/eq3_exists => x y z; exact/eq_exists. Qed.
+
+Lemma andTP (P : Prop) : (True /\ P) = P.
+Proof. by apply/propext; split => // -[]. Qed.
+
+Lemma ex2C A B (P : A -> B -> Prop) :
+  (exists a b, P a b) = (exists b a, P a b).
+Proof. by apply/propeqP; split=> -[x [y zy]]; [exists y, x|exists y, x]. Qed.
+
+Lemma ex3C A B C (P : A -> B -> C -> Prop) :
   (exists a b c, P a b c) = (exists c b a, P a b c).
 Proof.
 by apply/propeqP; split=> -[x [y [z xyz]]]; [exists z, y, x|exists z, y, x].
 Qed.
 
-Lemma ex3_exchangeAC A B C (P : A -> B -> C -> Prop) :
+Lemma ex3AC A B C (P : A -> B -> C -> Prop) :
   (exists a b c, P a b c) = (exists a c b, P a b c).
 Proof.
 apply/propeqP; split => [[a [b [c abc]]]|[a [c [b abc]]]].
@@ -87,11 +100,19 @@ under eq_exists do rewrite andC.
 by rewrite ex_andl andC.
 Qed.
 
-Lemma eq4_exists T S R N
-  (U V : forall (x : T) (y : S x) (z : R x y), N x y z -> Prop) :
-  (forall x y z n, U x y z n = V x y z n) ->
-  (exists x y z n, U x y z n) = (exists x y z n, V x y z n).
-Proof. by move=> UV; apply/eq3_exists => x y z; exact/eq_exists. Qed.
+Lemma ex_eqr A (a' : A) (P : A -> Prop) : (exists a, P a /\ a = a') = P a'.
+Proof. by apply/propeqP; split=> [[a [Pa <-//]]|Pa']; exists a'. Qed.
+
+Lemma ex_eqr_sym A (a' : A) (P : A -> Prop) : (exists a, P a /\ a' = a) = P a'.
+Proof. by apply/propeqP; split=> [[a [Pa ->//]]|Pa']; exists a'. Qed.
+
+Lemma ex2_eqr A B (a' : A) (P : A -> B -> Prop) :
+  (exists a b, P a b /\ a = a') = (exists b, P a' b).
+Proof. by rewrite ex2C; apply: eq_exists => b; rewrite ex_eqr. Qed.
+
+Lemma ex2_eqr_sym A B (a' : A) (P : A -> B -> Prop) :
+  (exists a b, P a b /\ a' = a) = (exists b, P a' b).
+ by rewrite ex2C; apply: eq_exists => b; rewrite ex_eqr_sym. Qed.
 (* /TODO: move to MCA *)
 
 (** ** Monad *)
@@ -107,30 +128,29 @@ move=> A [pr po].
 rewrite /bind /ret /hoare_bind /hoare_pure/=; congr mk_hoare.
 - by apply/funext => s/=; apply/propext; split; tauto.
 - apply/eq3_fun => s a s''.
-  apply/propext; split => [[a' [s' [_ [<- <-]]]]//|sas''].
-  by exists a, s''.
+  under eq2_exists do rewrite andA.
+  by rewrite ex2C ex2_eqr ex_eqr.
 Qed.
 
 (* Local Open Scope ssripat_scope. *)
 
 Let left_neutral : BindLaws.left_neutral bind ret.
 Proof.
-move=> A B a f.
-rewrite /bind /ret /hoare_bind /hoare_pure/=.
+move=> A B a f; rewrite /bind /ret /hoare_bind /hoare_pure/=.
 move fa : (f a) => [pr po]; congr mk_hoare.
-- apply/funext=> s; apply/propext; split=> [[_]|].
+- apply/funext=> s; rewrite andTP; apply/propext; split.
   + by move=> /(_ a s); rewrite fa/=; exact.
-  + by move=> prs; split => // _ _ [<- <-]; rewrite fa.
+  + by move=> prs _ _ [<- <-]; rewrite fa.
 - apply/eq3_fun => s b s'.
-  apply/propext; split => [[_ [_ [[<- <-]]]]|sbs'].
-  + by rewrite fa.
-  + by exists a, s; rewrite fa.
+  under eq2_exists do rewrite andC andA.
+  rewrite ex2C.
+  under eq_exists do rewrite ex_andl.
+  by rewrite ex_eqr_sym ex_eqr_sym fa.
 Qed.
 
 Let assoc : BindLaws.associative bind.
 Proof.
-move=> A B C m f g.
-rewrite /bind /ret /hoare_bind /hoare_pure/=.
+move=> A B C m f g; rewrite /bind /ret /hoare_bind /hoare_pure/=.
 case: m => prA poA/=; congr mk_hoare.
 - apply/funext => s; apply/propext; split.
   + move=> [[prAs poApre postpre]].
@@ -143,11 +163,9 @@ case: m => prA poA/=; congr mk_hoare.
     exact.
 - apply: eq3_fun => s c s1.
   under eq2_exists do rewrite -ex_andl.
-  rewrite ex3_exchangeC.
-  apply: eq_exists => a.
+  rewrite ex3C; apply: eq_exists => a.
   under eq2_exists do rewrite -ex_andl.
-  rewrite ex3_exchangeC.
-  apply: eq_exists => s2.
+  rewrite ex3C; apply: eq_exists => s2.
   rewrite -ex_andr.
   under [in RHS]eq_exists do rewrite -ex_andr.
   by under [in RHS]eq2_exists do rewrite andA.
