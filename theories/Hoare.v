@@ -57,6 +57,43 @@ Definition hoare_apply {Σ α β} (hf : hoare Σ (α -> β)) (h : hoare Σ α)
   : hoare Σ β :=
   hoare_bind hf (fun f => hoare_map f h).
 
+(* TODO: move to MCA *)
+Lemma ex3_exchangeC A B C (P : A -> B -> C -> Prop) :
+  (exists a b c, P a b c) = (exists c b a, P a b c).
+Proof.
+by apply/propeqP; split=> -[x [y [z xyz]]]; [exists z, y, x|exists z, y, x].
+Qed.
+
+Lemma ex3_exchangeAC A B C (P : A -> B -> C -> Prop) :
+  (exists a b c, P a b c) = (exists a c b, P a b c).
+Proof.
+apply/propeqP; split => [[a [b [c abc]]]|[a [c [b abc]]]].
+  by exists a, c, b.
+by exists a, b, c.
+Qed.
+
+Lemma ex_andl A (P : A -> Prop) (Q : Prop) :
+  (exists a, P a /\ Q) = ((exists a, P a) /\ Q).
+Proof.
+apply/propeqP; split=> [[a [Pa q]]|[[a Pa] q]].
+  by split => //; exists a.
+by exists a.
+Qed.
+
+Lemma ex_andr A (P : Prop) (Q : A -> Prop) :
+  (exists a, P /\ Q a) = (P /\ (exists a, Q a)).
+Proof.
+under eq_exists do rewrite andC.
+by rewrite ex_andl andC.
+Qed.
+
+Lemma eq4_exists T S R N
+  (U V : forall (x : T) (y : S x) (z : R x y), N x y z -> Prop) :
+  (forall x y z n, U x y z n = V x y z n) ->
+  (exists x y z n, U x y z n) = (exists x y z n, V x y z n).
+Proof. by move=> UV; apply/eq3_exists => x y z; exact/eq_exists. Qed.
+(* /TODO: move to MCA *)
+
 (** ** Monad *)
 Module hoare_mon.
 Section hm.
@@ -80,7 +117,7 @@ Let left_neutral : BindLaws.left_neutral bind ret.
 Proof.
 move=> A B a f.
 rewrite /bind /ret /hoare_bind /hoare_pure/=.
-case fa : (f a); congr mk_hoare.
+move fa : (f a) => [pr po]; congr mk_hoare.
 - apply/funext=> s; apply/propext; split=> [[_]|].
   + by move=> /(_ a s); rewrite fa/=; exact.
   + by move=> prs; split => // _ _ [<- <-]; rewrite fa.
@@ -105,11 +142,15 @@ case: m => prA poA/=; congr mk_hoare.
     move=> b s1 [x [s2]] [] /poApre [fxs2] /[swap] s2bs1.
     exact.
 - apply: eq3_fun => s c s1.
-  apply/propext; split => [|].
-  + move=> [b [s2]] [[a [s3 [sas3 s3bs2 gbs2cs1]]]].
-    by exists a, s3; split => //; exists b, s2.
-  + move=> [a [s2]] [sbs2 [b [s3 [s2ys3 s3cs1]]]].
-    by exists b, s3; split => //; exists a, s2.
+  under eq2_exists do rewrite -ex_andl.
+  rewrite ex3_exchangeC.
+  apply: eq_exists => a.
+  under eq2_exists do rewrite -ex_andl.
+  rewrite ex3_exchangeC.
+  apply: eq_exists => s2.
+  rewrite -ex_andr.
+  under [in RHS]eq_exists do rewrite -ex_andr.
+  by under [in RHS]eq2_exists do rewrite andA.
 Qed.
 
 HB.instance Definition _ := isMonad_ret_bind.Build (hoare Σ)
