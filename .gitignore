@@ -1,7 +1,6 @@
+**/Makefile.rocq
 **/Makefile.rocq.conf
-**/.CoqMakefile.d
 **/.Makefile.rocq.d
-**/.Makefile.rocq
 **/*.glob
 **/*.vo
 **/*.vok
