@@ -22,8 +22,8 @@ Proof. by split. Qed.
 
 Lemma interface_to_hoare_postE `(e : ix a) (ω : Ω) (x : a) (ω' : Ω) :
   post (interface_to_hoare c e) ω x ω' <->
-  gen_callee_obligation c ω e x /\
-  ω' = gen_witness_update c ω e x.
+  ω' = gen_witness_update c ω e x /\
+  gen_callee_obligation c ω e x.
 Proof. by split. Qed.
 
 Lemma interface_to_hoare_postI `(e : ix a) (ω : Ω) (x : a) :
@@ -73,8 +73,7 @@ Proof. by rewrite to_hoare_requestE interface_to_hoare_preE. Qed.
 
 Lemma to_hoare_request_postE `(e : ix a) (ω : Ω) (x : a) (ω' : Ω) :
   post (to_hoare (im:=im) c (request a e)) ω x ω' <->
-  gen_callee_obligation c ω e x /\
-  ω' = gen_witness_update c ω e x.
+  ω' = gen_witness_update c ω e x /\ gen_callee_obligation c ω e x.
 Proof. by rewrite to_hoare_requestE interface_to_hoare_postE. Qed.
 
 Lemma to_hoare_request_postI `(e : ix a) (ω : Ω) (x : a) :
@@ -135,7 +134,7 @@ split.
   + by move=> x callee; apply: next; exact/interface_to_hoare_postI.
 - move=> [caller next]; apply/hoare_bind_preE; split.
   + exact/interface_to_hoare_preE.
-  + by move=> x ω' /interface_to_hoare_postE [callee ->]; exact: next.
+  + by move=> x ω' /interface_to_hoare_postE [-> callee]; exact: next.
 Qed.
 
 Lemma to_hoare_impure_preI `{MayProvide ix i} `(c : contract i Ω)
@@ -149,8 +148,8 @@ Proof. by move=> caller next; apply/to_hoare_impure_preE; split. Qed.
 Lemma to_hoare_impure_postE `{MayProvide ix i} `(c : contract i Ω)
     `(e : ix a) `(f : a -> freer ix b) (ω : Ω) (y : b) (ω' : Ω) :
   post (to_hoare c (impure e f)) ω y ω' <->
-  exists x, gen_callee_obligation c ω e x /\
-    post (to_hoare c (f x)) (gen_witness_update c ω e x) y ω'.
+  exists x,
+    post (to_hoare c (f x)) (gen_witness_update c ω e x) y ω' /\ gen_callee_obligation c ω e x.
 Proof.
 split.
 - move=> /hoare_bind_postE [x [ω'' [+ suffix]]].
@@ -257,7 +256,7 @@ rewrite /= /gen_caller_obligation /gen_callee_obligation
 rewrite (caller_equ ω1 B e).
 setoid_rewrite (callee_equ ω1 B e).
 split => [[ocaller onext] | [ocaller onext]];
-  split => // x ω1' [ocallee owitness].
+  split => // x ω1' [owitness ocallee].
 - by rewrite owitness -witness_equ -IH; eauto.
 rewrite IH; eauto.
 rewrite owitness /= witness_equ; eauto.
@@ -274,12 +273,12 @@ Lemma contract_equ_post `(c1 : contract i Ω1) `(c2 : contract i Ω2)
 Proof.
 elim: equ => [f g iso1 iso2 caller_equ callee_equ witness_equ].
 move: p x ω1 ω1' post1.
-elim=> [in_a | B e k IH]=> a ω1 ω1' [b witness] /=.
-- by subst a; subst ω1'; split.
-- move: witness=> [ω1'' [[ocallee owitness] +]] /= => /IH post1.
-  exists b, (f ω1''); split; [split|exact: post1].
-  + exact/(callee_equ ω1 B e).
-  + by rewrite owitness witness_equ.
+elim=> [in_a | B e k ih].
+- by move=> a ω1 ω1' [<- <-].
+move=> a ω1 ω1' [b [ω1'' [[ow oc] +]]] /= => /ih post1.
+exists b, (f ω1''); split; [split|exact: post1].
+- by rewrite ow witness_equ.
+- exact/(callee_equ ω1 B e).
 Qed.
 
 #[global] Hint Resolve contract_equ_post : freespec.

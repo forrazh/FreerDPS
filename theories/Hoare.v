@@ -170,8 +170,8 @@ Definition interface_to_hoare `{MayProvide ix i} `(c : contract i Ω)
     : ix ~~> hoare Ω :=
   fun a e => mk_hoare
     (gen_caller_obligation c ^~ e)
-    (fun ω x ω' => gen_callee_obligation c ω e x /\
-                   ω' = gen_witness_update c ω e x).
+    (fun ω x ω' => ω' = gen_witness_update c ω e x /\
+                  gen_callee_obligation c ω e x).
 
 Definition to_hoare `{MayProvide ix i} {im : freerMonad ix} `(c : contract i Ω)
     : im ~~> hoare Ω :=

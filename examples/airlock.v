@@ -206,7 +206,6 @@ have isopen_post_equ := doors_is_open_calleeE ω d opened isopen_post.
 move: isopen_post isopen_post_equ=> _.
 rewrite /when /toggle; case: opened=> isopen_post_equ; last first.
 - exact: to_hoare_skip_preI.
-Check to_hoare_skip_preI.
 apply/to_hoare_impure_preI.
 - rewrite /gen_caller_obligation proj_inj_p_equ /=; apply: req_toggle.
   by rewrite isopen_post_equ.
@@ -239,52 +238,43 @@ Qed.
 
 Lemma store_request_preI `{StrictProvide2 ix DOORS (STORE nat)}
     `(e : STORE nat a) (ω : Ω) :
-  pre (to_hoare (im:=freer ix)
-         doors_contract (trigger (inj_p e))) ω.
+  pre (to_hoare (im:=freer ix) doors_contract (trigger (inj_p e))) ω.
 Proof.
 by apply/to_hoare_request_preE; rewrite /gen_caller_obligation /= distinguish.
 Qed.
 
 Lemma doors_is_open_postE `{Provide ix DOORS} (ω : Ω) (d : door)
     (opened : bool) (ω' : Ω) :
-  post (to_hoare
-          (im:=freer ix)
-          doors_contract (is_open d)) ω opened ω' ->
+  post (to_hoare (im:=freer ix)doors_contract (is_open d)) ω opened ω' ->
   sel d ω = opened /\ ω' = ω.
 Proof.
-rewrite /is_open.
-move=> /to_hoare_request_postE [isopen_post witness].
-rewrite /gen_callee_obligation proj_inj_p_equ /= in isopen_post.
-rewrite /gen_witness_update proj_inj_p_equ /= in witness.
+rewrite /is_open to_hoare_request_postE /gen_callee_obligation /gen_witness_update.
+rewrite proj_inj_p_equ /= => -[w po].
 split.
-- exact: doors_is_open_calleeE ω d opened isopen_post.
-- exact: witness.
+- exact: doors_is_open_calleeE ω d opened po.
+- exact: w.
 Qed.
 
 Lemma doors_toggle_postE `{Provide ix DOORS} (ω : Ω) (d : door)
     (result : unit) (ω' : Ω) :
-  post (to_hoare
-          (im:=freer ix)
-          doors_contract (toggle d)) ω result ω' ->
+  post (to_hoare (im:=freer ix) doors_contract (toggle d)) ω result ω' ->
   ω' = tog d ω.
 Proof.
 rewrite /toggle to_hoare_request_postE /gen_witness_update proj_inj_p_equ /=.
-by move=> [_ ->].
+by move=> [-> _].
 Qed.
 
-Lemma close_door_run `{Provide ix DOORS} (ω : Ω) (d : door)
-    (ω' : Ω) (x : unit)
-    (run : post (to_hoare
-      (im:=freer ix)
-      doors_contract (close_door d)) ω x ω') :
-  sel d ω' = false.
+Lemma close_door_run `{Provide ix DOORS} (ω : Ω) (d : door) (ω' : Ω) (x : unit)
+  (run : post (to_hoare (im:=freer ix) doors_contract (close_door d)) ω x ω') :
+sel d ω' = false.
 Proof.
 move: run.
 rewrite /close_door to_hoare_bind_postE.
-move=>[opened [? [+ +]]]=> /doors_is_open_postE [+ ->]/=.
+move=>[opened [? []]]=> /doors_is_open_postE [+ ->]/=.
 case is_open_equ: (sel d ω)=> <-; last first.
 - by rewrite to_hoare_local_postE=> -[_ <-].
-rewrite to_hoare_bind_postE=> -[a [w' [/doors_toggle_postE +]]]=> -> /to_hoare_local_postE [_ <-].
+rewrite to_hoare_bind_postE=> -[a [w' [/doors_toggle_postE +]]].
+move=> -> /to_hoare_local_postE [_ <-].
 by rewrite tog_equ_1 is_open_equ.
 Qed.
 
@@ -318,27 +308,20 @@ Definition doors_safe (ω : Ω) :=
 Lemma doors_request_preserves_safe {ix a} {mp : MayProvide ix DOORS}
     {provided : @Provide ix DOORS mp}
     (e : ix a) (ω : Ω) (x : a) (ω' : Ω) :
-  pre (to_hoare
-         (im:=freer ix)
-         doors_contract (trigger e)) ω ->
-  post (to_hoare
-          (im:=freer ix)
-          doors_contract (trigger e)) ω x ω' ->
-  doors_safe ω ->
-  doors_safe ω'.
+  pre (to_hoare (im:=freer ix) doors_contract (trigger e)) ω ->
+  post (to_hoare (im:=freer ix) doors_contract (trigger e)) ω x ω' ->
+  doors_safe ω -> doors_safe ω'.
 Proof.
 case projected: (@proj_p ix DOORS mp a e) => [door_request |];
 rewrite to_hoare_request_preE to_hoare_request_postE;
 rewrite /gen_caller_obligation /gen_callee_obligation /gen_witness_update
   projected //=; last first.
-- by move=> _ [_ ->].
+- by move=> _ [-> _].
 
 move: door_request projected x=> + _.
-
 case=> d x prec postc safe; apply one_door_safe_all_doors_safe with (d := d);
   apply one_door_safe_all_doors_safe with (d' := d) in safe;
-  case: postc=> [postc ->] //=.
-
+  case: postc=> [-> postc] //.
 case: safe=> [left_safe | right_safe]; right; rewrite tog_equ_2 //=.
 exact: doors_toggle_callerE.
 Qed.
@@ -346,12 +329,8 @@ Qed.
 Lemma respectful_run_inv `{Provide ix DOORS} {A} (p : freer ix A)
     (ω : Ω) (safe : sel left ω = false \/ sel right ω = false)
     (a : A) (ω' : Ω)
-    (hpre : pre (to_hoare
-      (im:=freer ix)
-      doors_contract p) ω)
-    (hpost : post (to_hoare
-      (im:=freer ix)
-      doors_contract p) ω a ω') :
+    (hpre : pre (to_hoare (im:=freer ix) doors_contract p) ω)
+    (hpost : post (to_hoare (im:=freer ix) doors_contract p) ω a ω') :
   sel left ω' = false \/ sel right ω' = false.
 (** We reason by induction on the impure computation [p]:
 
@@ -391,7 +370,7 @@ elim=> [result | b e f ih] ω + + safe.
   subst ω'.
   exact: safe.
 rewrite to_hoare_impure_preE to_hoare_impure_postE.
-move=> [caller next] [x [step run]].
+move=> [caller next] [x [run step]].
 apply: (ih x (gen_witness_update doors_contract ω e x)).
 - exact: next step.
 - exact: run.
@@ -429,15 +408,11 @@ Lemma controller_correct `{StrictProvide2 ix DOORS (STORE nat)}
     (fun _ ω => sel left ω = false \/ sel right ω = false).
 Proof.
 move=> ωc ωd safe A eff _.
-(* clear request_ok. *)
-have hpre :
-  pre (to_hoare
-    (im:=freer ix)
-    doors_contract (controller A eff)) ωd.
+have hpre : pre (to_hoare (im:=freer ix) doors_contract (controller A eff)) ωd.
 case: eff => [|d]; rewrite /controller/iget.
 - apply: to_hoare_bind_preI.
   + exact: store_request_preI.
-  + move=> x om /to_hoare_request_postE [_ +].
+  + move=> x om /to_hoare_request_postE [+ _].
     rewrite (gen_witness_update_otherE (ix:=ix) (i:=STORE nat)
       (j:=DOORS))=> ->.
     case: (15 <? x) => //=.
