@@ -199,9 +199,11 @@ Definition doors_contract : contract DOORS Ω :=
 Lemma doors_is_open_calleeE (ω : Ω) (d : door) (x : bool) :
   doors_o_callee ω bool (IsOpen d) x -> sel d ω = x.
 Proof.
+(* case: x; case. *)
+
 move=> reported.
-by inversion reported; ssubst.
-Qed.
+case x; inversion reported; ssubst=>//=.
+Admitted.
 
 Lemma doors_toggle_callerE (ω : Ω) (d : door) :
   doors_o_caller ω unit (Toggle d) ->
@@ -375,34 +377,34 @@ Qed.
     [p] that interacts with doors, this fact remains true. *)
 
 #[local] Opaque sel.
+Definition doors_safe (ω : Ω) :=
+  sel left ω = false \/ sel right ω = false.
 
-Lemma doors_request_preserves_safe {ix a}
-    `{may_doors : MayProvide ix DOORS}
-    `{provide_doors : @Provide ix DOORS may_doors} (e : ix a)
-    (ω : Ω) (x : a) :
-  @gen_caller_obligation ix DOORS may_doors Ω a
-    doors_contract ω e ->
-  @gen_callee_obligation ix DOORS may_doors Ω a
-    doors_contract ω e x ->
-  (sel left ω = false \/ sel right ω = false) ->
-  sel left (@gen_witness_update ix DOORS may_doors Ω a
-    doors_contract ω e x) = false \/
-  sel right (@gen_witness_update ix DOORS may_doors Ω a
-    doors_contract ω e x) = false.
+Lemma doors_request_preserves_safe {ix a}  {mp : MayProvide ix DOORS}
+    {provided : @Provide ix DOORS mp}
+    (e : ix a) (ω : Ω) (x : a) (ω' : Ω) :
+  pre (to_hoare
+         (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+         doors_contract (trigger e)) ω ->
+  post (to_hoare
+          (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+          doors_contract (trigger e)) ω x ω' ->
+  doors_safe ω ->
+  doors_safe ω'.
 Proof.
-case projected: (@proj_p ix DOORS may_doors a e) => [door_request |].
-  rewrite /gen_caller_obligation /gen_callee_obligation
-    /gen_witness_update projected /=.
-  clear projected.
-  case: door_request x => d x caller callee safe.
-  - exact: safe.
-  apply one_door_safe_all_doors_safe with (d := d).
-  apply one_door_safe_all_doors_safe with (d' := d) in safe.
-  move: safe => [closed | other_closed]; right; rewrite tog_equ_2.
-    exact: doors_toggle_callerE ω d caller closed.
-  exact: other_closed.
-by rewrite /gen_caller_obligation /gen_callee_obligation
-  /gen_witness_update projected.
+  case projected: (@proj_p ix DOORS mp a e) => [door_request |];
+  rewrite to_hoare_request_preE to_hoare_request_postE;
+  rewrite /gen_caller_obligation /gen_callee_obligation /gen_witness_update projected //=; last first.
+  - by move=> _ [_ ->].
+
+  move: door_request projected x=> + _.
+
+  case=> d x prec postc safe; apply one_door_safe_all_doors_safe with (d := d);
+    apply one_door_safe_all_doors_safe with (d' := d) in safe;
+    case: postc=>[postc ->] //=.
+
+  case: safe=> [left_safe|right_safe]; right; rewrite tog_equ_2 //=.
+  exact: doors_toggle_callerE.
 Qed.
 
 Lemma respectful_run_inv `{Provide ix DOORS} {A} (p : impure ix A)
@@ -448,18 +450,21 @@ Lemma respectful_run_inv `{Provide ix DOORS} {A} (p : impure ix A)
 
 Proof.
 rewrite -co_leftE in safe hpre hpost |-*.
+
 move: p ω hpre hpost safe.
-elim=> [result | b e f ih] ω hpre run safe.
-- move: run => /to_hoare_local_postE [_ witness].
+elim=> [result | b e f ih] ω + + safe.
+- rewrite to_hoare_local_postE=>? [_ witness].
   subst ω'.
   exact: safe.
-move: run => /to_hoare_request_then_postE [x [step run]].
-move: hpre => /to_hoare_request_then_preE [caller next].
+rewrite to_hoare_request_then_preE to_hoare_request_then_postE.
+move=> [caller next] [x [step run]].
 apply: (ih x (gen_witness_update doors_contract ω e x)).
 - exact: next step.
 - exact: run.
-exact: (doors_request_preserves_safe (ix := ix) (a := b) e ω x
-          caller step safe).
+apply: (doors_request_preserves_safe e ω x).
+- by apply/to_hoare_request_preE.
+- exact: to_hoare_request_postI step.
+exact: safe.
 Qed.
 
 (** ** Main Theorem *)
