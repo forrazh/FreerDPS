@@ -12,7 +12,9 @@ Follow the instructions on https://github.com/coq-community/templates to regener
 
 
 
-TODO
+This work started as a rewrite/extension of [FreeSpec Core](https://github.com/lthms/FreeSpec) using [monae](https://github.com/affeldt-aist/monae) / ssreflect.
+
+This work has been accepted for presentation to [COMPAS26](https://2026.compas-conference.fr/) (no paper available online).
 
 ## Meta
 
