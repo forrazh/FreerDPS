@@ -107,16 +107,16 @@ HB.mixin Record isMonadFreer (i : effect) (M : UU0 -> UU0) of Monad M := {
   request : i ~~> M ;
   denote (N : monad) (l : i ~~> N) : M ~~> N ;
   denote_ret : forall (N : monad) (l : i ~~> N) X (x : X),
-    denote N l X (ret X x) = @ret N X x ;
+    denote N l X (Ret x) = Ret x ;
   denote_bind : forall (N : monad) (l : i ~~> N) X Y m (f : X -> M Y),
-    denote N l Y (m >>= f) = denote N l X m >>= (fun x => denote N l Y (f x)) ;
+    denote N l Y (m >>= f) = denote N l X m >>= (denote N l Y \o f) ;
   denote_request : forall (N : monad) (l : i ~~> N) X (fx : i X),
     denote N l X (request X fx) = l X fx ;
   denote_unique : forall (N : monad) (l : i ~~> N) (denote' : M ~~> N),
-      (forall X (x : X), denote' X (ret X x) = @ret N X x) ->
+      (forall X (x : X), denote' X (ret X x) = Ret x) ->
       (forall X Y (m : M X) (f : X -> M Y), denote' Y (m >>= f) =
-         (denote' X m) >>= (fun x => denote' Y (f x))) ->
-      (forall X (fx : i X), (denote' X (request X fx)) = l X fx) ->
+         denote' X m >>= (denote' Y \o f)) ->
+      (forall X (fx : i X), denote' X (request X fx) = l X fx) ->
     forall X (m : M X), denote' X m = denote N l X m
 }.
 
