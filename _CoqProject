@@ -12,5 +12,6 @@
 ./theories/Instrument.v
 ./theories/Interface.v
 ./theories/Semantics.v
-./theories/Tactics.v
 ./theories/Typeclasses.v
+./examples/airlock.v
+

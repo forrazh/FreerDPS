@@ -173,7 +173,7 @@ Definition interface_to_hoare `{MayProvide ix i} `(c : contract i Ω)
     (fun ω x ω' => gen_callee_obligation c ω e x /\
                    ω' = gen_witness_update c ω e x).
 
-Definition to_hoare `{MayProvide ix i} {im : impureMonad ix} `(c : contract i Ω)
+Definition to_hoare `{MayProvide ix i} {im : freerMonad ix} `(c : contract i Ω)
     : im ~~> hoare Ω :=
-  impure_lift _ (interface_to_hoare c).
+  denote _ (interface_to_hoare c).
 Arguments to_hoare {ix i _ im Ω} c {α} : rename.

@@ -27,7 +27,7 @@ From HB Require Import structures.
     Thus, a component [c : component i j] is a polymorphic function which
     maps primitives of [i] to impure computations using [j]. *)
 
-Definition component (i j : interface) `{im : impureMonad j} : Type :=
+Definition component (i j : interface) `{im : freerMonad j} : Type :=
   forall (α : Type), i α -> im α.
 
 (** The similarity between FreeSpec components and operational semantics may be
@@ -44,7 +44,7 @@ Definition component (i j : interface) `{im : impureMonad j} : Type :=
 (** * Semantics Derivation *)
 
 
-CoFixpoint derive_semantics {i j} {im : impureMonad j} (c : component i j) (sem : semantics j)
+CoFixpoint derive_semantics {i j} {im : freerMonad j} (c : component i j) (sem : semantics j)
   : semantics i :=
   mk_semantics (fun a p =>
                   let (res, next) := (to_state (α:=im) _ $ c a p) sem in
@@ -57,7 +57,7 @@ CoFixpoint derive_semantics {i j} {im : impureMonad j} (c : component i j) (sem 
     independently, then composing them together with [semprod] and
     [derive_semantics]. *)
 
-Definition bootstrap {i} {im : impureMonad iempty} (c : component i iempty) : semantics i :=
+Definition bootstrap {i} {im : freerMonad iempty} (c : component i iempty) : semantics i :=
   derive_semantics (im:=im) c iempty_semantics.
 
 (** * In-place Primitives Handling *)
@@ -68,33 +68,34 @@ Definition bootstrap {i} {im : impureMonad iempty} (c : component i iempty) : se
     of type [c : compoment j ix s]. *)
 Local Open Scope monae_scope.
 
+Section tmp.
+Import Freer.
 
 #[local]
-Fixpoint with_component_aux {ix j α}
- (* {im : impureMonad ix}  *)
- (* {jm : impureMonad (ix + j)} *)
-(c : component (im:=Impure.ImpureModule_acto__canonical__Impure_MonadImpure ix) j ix) (p : impure (ix + j) α)
-  : impure ix α :=
+Fixpoint with_component_aux {ix : effect} {j : effect} {α : Type}
+    (c : component (im:=Monad_acto__canonical__Impure_MonadFreer ix) j ix) (p : freer (ix + j) α) : freer ix α :=
   match p with
-  | local x => local x
-  | request_then T (in_right e) f =>
+  | pure x => pure x
+  | impure T (in_right e) f =>
     c T e >>= fun res => with_component_aux c (f res)
-  | request_then _ (in_left e) f =>
-    request_then e (fun x => with_component_aux c (f x))
+  | impure _ (in_left e) f =>
+    impure e (fun x => with_component_aux c (f x))
   end.
 
-Notation "m >>= f" := (impure_bind m f).
-Notation "m >> f" := (impure_bind m (fun _ =>f)).
+Notation "m >>= f" := (freer_bind m f).
+Notation "m >> f" := (freer_bind m (fun _ =>f)).
 
 Definition with_component {ix j α}
-  (* `{im : impureMonad ix}
-  `{ixjm : impureMonad (ix+j)} *)
-  (initializer : impure ix unit)
-  (c : component (im:=Impure.ImpureModule_acto__canonical__Impure_MonadImpure ix) j ix)
-  (finalizer : impure ix unit)
-  (p : impure (ix+j) α)
-  : impure ix α :=
+  (* `{im : freerMonad ix}
+  `{ixjm : freerMonad (ix+j)} *)
+  (initializer : freer ix unit)
+  (c : component (im:=Monad_acto__canonical__Impure_MonadFreer ix) j ix)
+  (finalizer : freer ix unit)
+  (p : freer (ix+j) α)
+  : freer ix α :=
   initializer >>
   with_component_aux c p >>= fun res =>
   finalizer >>
-  local res.
+  pure res.
+
+End tmp.

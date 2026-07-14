@@ -11,9 +11,8 @@
     semantics (according to a certain definition of “correct”). *)
 
 From Stdlib Require Import Setoid Morphisms.
-(* From ExtLib Require Import StateMonad MonadState MonadTrans. *)
 From FreerDPS Require Import Interface Impure Semantics Component.
-From mathcomp Require Import ssreflect.
+From mathcomp Require Import all_boot.
 From monae Require Import preamble hierarchy.
 #[local]
 Open Scope signature_scope.
@@ -42,10 +41,10 @@ Generalizable All Variables.
     To keep this state up-to-date after each primitive interpretation,
     contracts also define a dedicated function [witness_update]. *)
 
-Record contract (i : interface) (Ω : Type) : Type := make_contract
-  { witness_update (ω : Ω) : forall (α : Type), i α -> α -> Ω
-  ; caller_obligation (ω : Ω) : forall (α : Type),  i α -> Prop
-  ; callee_obligation (ω : Ω) : forall (α : Type), i α -> α -> Prop
+Record contract (i : effect) (Ω : Type) : Type := make_contract
+  { witness_update (*state_upd*)(ω : Ω) : forall (α : Type), i α -> α -> Ω
+  ; caller_obligation(*precond*) (ω : Ω) : forall (α : Type), i α -> Prop
+  ; callee_obligation(*postcond*) (ω : Ω) : forall (α : Type), i α -> α -> Prop
   }.
 
 Declare Scope contract_scope.

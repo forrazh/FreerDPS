@@ -4,7 +4,9 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
+From HB Require Import structures.
 From Stdlib Require Import Arith.
+From mathcomp Require Import all_boot boolp.
 From FreerDPS Require Import Core Impure Hoare HoareFacts.
 From monae Require Import preamble hierarchy.
 
@@ -19,8 +21,7 @@ Create HintDb airlock.
 
 Inductive door : Type := left | right.
 
-Definition door_eq_dec (d d' : door) : { d = d' } + { ~ d = d' } :=
-  ltac:(decide equality).
+HB.instance Definition _ := gen_eqMixin door.
 
 Inductive DOORS : interface :=
 | IsOpen : door -> DOORS bool
@@ -30,22 +31,25 @@ Generalizable All Variables.
 
 Arguments request {_ } _ _ _.
 
+(* TODO: meaningful name section *)
 Section a.
 
-Definition is_open `{Provide ix DOORS} {im : impureMonad ix} (d : door) :
+Import FreerFuns.
+
+Definition is_open `{Provide ix DOORS} {im : freerMonad ix} (d : door) :
     im bool :=
   trigger (inj_p $ IsOpen d).
 
-Definition toggle `{Provide ix DOORS} {im : impureMonad ix} (d : door) :
+Definition toggle `{Provide ix DOORS} {im : freerMonad ix} (d : door) :
     im unit :=
   trigger (inj_p $ Toggle d).
 
-Definition open_door `{Provide ix DOORS} {im : impureMonad ix}
+Definition open_door `{Provide ix DOORS} {im : freerMonad ix}
     (d : door) : im unit :=
   is_open d >>= fun open =>
-  when (negb open) (toggle d).
+  when (~~ open) (toggle d).
 
-Definition close_door `{Provide ix DOORS} {im : impureMonad ix}
+Definition close_door `{Provide ix DOORS} {im : freerMonad ix}
     (d : door) : im unit :=
   is_open d >>= fun open =>
   when open (toggle d).
@@ -56,10 +60,10 @@ Inductive CONTROLLER : interface :=
 | Tick : CONTROLLER unit
 | RequestOpen (d : door) : CONTROLLER unit.
 
-Definition tick `{Provide ix CONTROLLER} {im : impureMonad ix} : im unit :=
+Definition tick `{Provide ix CONTROLLER} {im : freerMonad ix} : im unit :=
   trigger (inj_p Tick).
 
-Definition request_open `{Provide ix CONTROLLER} {im : impureMonad ix}
+Definition request_open `{Provide ix CONTROLLER} {im : freerMonad ix}
     (d : door) : im unit :=
   trigger (inj_p $ RequestOpen d).
 
@@ -73,7 +77,7 @@ Lemma co_leftE : co left = right.
 Proof. by []. Qed.
 
 Definition controller `{Provide ix DOORS, Provide ix (STORE nat)}
-    {im : impureMonad ix} : component (im:=im) CONTROLLER ix
+    {im : freerMonad ix} : component (im:=im) CONTROLLER ix
   (* .
   move=>X; case=>[|d].
   - apply/bind=>[|cpt].
@@ -217,12 +221,12 @@ Qed.
 
 Lemma close_door_respectful `{Provide ix DOORS} (ω : Ω) (d : door) :
   pre (to_hoare
-         (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+         (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
          doors_contract (close_door d)) ω.
 
 Proof.
 rewrite /close_door /is_open.
-apply/to_hoare_request_then_preI.
+apply/to_hoare_impure_preI.
 - rewrite /gen_caller_obligation proj_inj_p_equ /=.
   exact: req_is_open.
 move=> opened.
@@ -232,7 +236,7 @@ have reported_equ := doors_is_open_calleeE ω d opened reported.
 clear reported.
 case: opened reported_equ => reported_equ.
 - rewrite /when /toggle.
-  apply/to_hoare_request_then_preI.
+  apply/to_hoare_impure_preI.
   + rewrite /gen_caller_obligation proj_inj_p_equ /=.
     apply: req_toggle => closed.
     by rewrite reported_equ in closed.
@@ -256,12 +260,12 @@ Qed.
 Lemma open_door_respectful `{Provide ix DOORS} (ω : Ω)
     (d : door) (safe : sel (co d) ω = false) :
   pre (to_hoare
-         (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+         (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
          doors_contract (open_door (ix := ix) d)) ω.
 
 Proof.
 rewrite /open_door /is_open.
-apply/to_hoare_request_then_preI.
+apply/to_hoare_impure_preI.
   - rewrite /gen_caller_obligation proj_inj_p_equ /=.
     exact: req_is_open.
 move=> opened.
@@ -273,7 +277,7 @@ case: opened reported_equ => reported_equ.
   - rewrite /when.
     exact: to_hoare_local_preI.
 rewrite /when /toggle.
-apply/to_hoare_request_then_preI.
+apply/to_hoare_impure_preI.
   - rewrite /gen_caller_obligation proj_inj_p_equ /=.
     by apply: req_toggle.
 move=> toggle_result _.
@@ -285,10 +289,10 @@ Qed.
 Lemma store_request_preI `{StrictProvide2 ix DOORS (STORE nat)}
     `(e : STORE nat a) (ω : Ω) :
   pre (to_hoare
-         (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+         (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
          doors_contract
          (@request ix
-           (ImpureModule_acto__canonical__Impure_MonadImpure ix)
+           (Freer.Monad_acto__canonical__Impure_MonadFreer ix)
            a (inj_p e))) ω.
 Proof.
 by apply/to_hoare_request_preE; rewrite /gen_caller_obligation distinguish.
@@ -297,7 +301,7 @@ Qed.
 Lemma doors_is_open_postE `{Provide ix DOORS} (ω : Ω) (d : door)
     (opened : bool) (ω' : Ω) :
   post (to_hoare
-          (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+          (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
           doors_contract (is_open d)) ω opened ω' ->
   sel d ω = opened /\ ω' = ω.
 Proof.
@@ -313,7 +317,7 @@ Qed.
 Lemma doors_toggle_postE `{Provide ix DOORS} (ω : Ω) (d : door)
     (result : unit) (ω' : Ω) :
   post (to_hoare
-          (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+          (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
           doors_contract (toggle d)) ω result ω' ->
   ω' = tog d ω.
 Proof.
@@ -325,27 +329,25 @@ Qed.
 Lemma close_door_run `{Provide ix DOORS} (ω : Ω) (d : door)
     (ω' : Ω) (x : unit)
     (run : post (to_hoare
-      (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+      (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
       doors_contract (close_door d)) ω x ω') :
   sel d ω' = false.
 Proof.
-  rewrite /close_door in run.
-  move: run => /to_hoare_bind_postE [open [ω1 [opened tail]]].
-  move: opened => /doors_is_open_postE [reported witness].
-  subst ω1.
-  case is_open_equ: (sel d ω) reported tail => reported tail.
-  - cbn in tail.
-    have open_true : open = true := eq_sym reported.
-    rewrite open_true in tail.
-    cbn in tail.
-    move: tail => /to_hoare_bind_postE
-      [toggle_result [ω2 [toggle_run done]]].
-    move: toggle_run => /doors_toggle_postE toggle_witness.
-    move: done => /to_hoare_local_postE [_ local_witness].
-    subst ω2; subst ω'.
-    by rewrite tog_equ_1 is_open_equ.
-  have open_false : open = false := eq_sym reported.
-  rewrite open_false in tail.
+rewrite /close_door in run.
+move: run => /to_hoare_bind_postE [open [ω1 [opened tail]]].
+move: opened => /doors_is_open_postE [reported witness].
+subst ω1.
+case is_open_equ: (sel d ω) reported tail => reported tail.
+- cbn in tail.
+  rewrite -reported in tail.
+  cbn in tail.
+  move: tail => /to_hoare_bind_postE
+    [toggle_result [ω2 [toggle_run done]]].
+  move: toggle_run => /doors_toggle_postE toggle_witness.
+  move: done => /to_hoare_local_postE [_ local_witness].
+  subst ω2; subst ω'.
+  by rewrite tog_equ_1 is_open_equ.
+- rewrite -reported in tail.
   cbn in tail.
   move: tail => /to_hoare_local_postE [_ witness].
   subst ω'.
@@ -384,10 +386,10 @@ Lemma doors_request_preserves_safe {ix a}  {mp : MayProvide ix DOORS}
     {provided : @Provide ix DOORS mp}
     (e : ix a) (ω : Ω) (x : a) (ω' : Ω) :
   pre (to_hoare
-         (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+         (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
          doors_contract (trigger e)) ω ->
   post (to_hoare
-          (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+          (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
           doors_contract (trigger e)) ω x ω' ->
   doors_safe ω ->
   doors_safe ω'.
@@ -407,14 +409,14 @@ Proof.
   exact: doors_toggle_callerE.
 Qed.
 
-Lemma respectful_run_inv `{Provide ix DOORS} {A} (p : impure ix A)
+Lemma respectful_run_inv `{Provide ix DOORS} {A} (p : freer ix A)
     (ω : Ω) (safe : sel left ω = false \/ sel right ω = false)
     (a : A) (ω' : Ω)
     (hpre : pre (to_hoare
-      (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+      (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
       doors_contract p) ω)
     (hpost : post (to_hoare
-      (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+      (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
       doors_contract p) ω a ω') :
   sel left ω' = false \/ sel right ω' = false.
 
@@ -450,21 +452,20 @@ Lemma respectful_run_inv `{Provide ix DOORS} {A} (p : impure ix A)
 
 Proof.
 rewrite -co_leftE in safe hpre hpost |-*.
-
 move: p ω hpre hpost safe.
 elim=> [result | b e f ih] ω + + safe.
-- rewrite to_hoare_local_postE=>? [_ witness].
+  rewrite to_hoare_local_postE=>? [_ witness].
   subst ω'.
   exact: safe.
-rewrite to_hoare_request_then_preE to_hoare_request_then_postE.
+rewrite to_hoare_impure_preE to_hoare_impure_postE.
 move=> [caller next] [x [step run]].
 apply: (ih x (gen_witness_update doors_contract ω e x)).
 - exact: next step.
 - exact: run.
-apply: (doors_request_preserves_safe e ω x).
-- by apply/to_hoare_request_preE.
-- exact: to_hoare_request_postI step.
-exact: safe.
+- apply: (doors_request_preserves_safe e ω x).
+  + exact/to_hoare_request_preE.
+  + exact: to_hoare_request_postI step.
+  + exact: safe.
 Qed.
 
 (** ** Main Theorem *)
@@ -477,7 +478,7 @@ Definition correct_component `{MayProvide jx j}
     pre (to_hoare cj $ c α e) ωj /\
     forall (x : α) (ωj' : Ωj),
       post (to_hoare
-        (im:=ImpureModule_acto__canonical__Impure_MonadImpure jx)
+        (im:=Freer.Monad_acto__canonical__Impure_MonadFreer jx)
         cj (c α e)) ωj x ωj' ->
       callee_obligation ci ωi e x /\
       pred (witness_update ci ωi e x) ωj'.
@@ -500,7 +501,7 @@ move=> ωc ωd safe A eff _.
 (* clear request_ok. *)
 have hpre :
     pre (to_hoare
-           (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix)
+           (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
            doors_contract (controller A eff)) ωd.
 case: eff => [|d]; rewrite /controller/iget.
 - apply: to_hoare_bind_preI.
