@@ -384,8 +384,8 @@ Proof.
   + by subst a; subst ω1'; split.
   + move: witness=> [ω1'' [[ocallee owitness] +]] /= => /IH post1.
     exists b, (f ω1''); split; [split|exact: post1].
-    ++ exact/(callee_equ ω1 B e).
-    ++ by rewrite owitness witness_equ.
+    * exact/(callee_equ ω1 B e).
+    * by rewrite owitness witness_equ.
 Qed.
 
 #[global] Hint Resolve contract_equ_post : freespec.
