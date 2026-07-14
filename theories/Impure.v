@@ -61,13 +61,11 @@ Delimit Scope freer_scope with freer.
 (** We then provide the necessary instances of the <<coq-prelude>> Monad
     typeclasses hierarchy. *)
 (* mode of the freer monad *)
-Module Monad.
 Section freer.
-Context (i : UU0 -> UU0).
-Definition acto := @freer i.
-Notation FM := acto.
+Context (i : effect).
+Notation acto := (@freer i).
 
-Let ret : idfun ~~> FM := fun x => @pure i x.
+Let ret : idfun ~~> acto := fun x => @pure i x.
 
 Let bind := fun A B m f => @freer_bind i A B m f.
 
@@ -80,6 +78,7 @@ Proof. by move=> T; elim => //b e f ih/=; congr impure; exact/funext. Qed.
 Let assoc : BindLaws.associative bind.
 Proof. by move=> A B C + f g; elim=>//= *; congr impure; exact/funext. Qed.
 
+#[export]
 HB.instance Definition _ := @isMonad_ret_bind.Build acto ret bind
   left_neutral right_neutral assoc.
 
@@ -99,9 +98,6 @@ HB.instance Definition _ := @isMonad_ret_bind.Build acto ret bind
     that it has to provide at least [i]'s primitives.  *)
 
 End freer.
-End Monad.
-
-(*HB.export FreerModule.*)
 
 HB.mixin Record isMonadFreer (i : effect) (M : UU0 -> UU0) of Monad M := {
   request : i ~~> M ;
@@ -131,32 +127,28 @@ Variable i : interface.
 
 Import Monad.
 
-Local Notation M := (acto i).
+Notation acto := (@freer i).
 
-Definition requesti : i ~~> acto i := fun α e => 
+Definition requesti : i ~~> acto := fun α e =>
   impure (inj_p e) (@pure _ _).
 
-Definition lifter (M : monad) `(l : i ~~> M) : acto i ~~> M :=
-  fix aux a (p : acto i a) :=
+Definition lifter (M : monad) `(l : i ~~> M) : acto ~~> M :=
+  fix aux a (p : acto a) :=
     match p with
     | pure x => Ret x
     | impure Y e f => l _ e >>= fun x => aux a (f x)
     end.
 
-Let lifter_ret : forall (cm : monad) (lifter_effect : i ~~> cm) X (x : X),
-        lifter lifter_effect (ret X x) = @hierarchy.ret cm X x.
-Proof.
-  rewrite/=/lifter.
-    by [].
-Qed.
+Let lifter_ret (cm : monad) (lifter_effect : i ~~> cm) X (x : X) :
+  lifter lifter_effect (ret X x) = @hierarchy.ret cm X x.
+Proof. by []. Qed.
 
-
-Let lifter_bind : forall (cm : monad) (lifter_effect : i ~~> cm) X Y m (f : X -> M Y), 
-        lifter lifter_effect (m >>= f) = ( lifter lifter_effect m) >>= (fun x => lifter lifter_effect (f x)) .
+Let lifter_bind : forall (cm : monad) (lifter_effect : i ~~> cm) X Y m (f : X -> acto Y),
+  lifter lifter_effect (m >>= f) = (lifter lifter_effect m) >>= (fun x => lifter lifter_effect (f x)) .
 Proof.
     move=>cm lifter_effect X Y m f.
     elim:m=>[x | Z fz k]/=.
-    - by rewrite !bindretf. 
+    - by rewrite !bindretf.
     rewrite bindA=>H.
     congr bind.
     exact/boolp.funext/H.
@@ -166,11 +158,11 @@ Let lifter_trigger (cm : monad) (lifter_effect : i ~~> cm) X (fx : i X) :
   lifter lifter_effect (requesti fx) = lifter_effect X fx.
 Proof. by rewrite /lifter /requesti/= bindmret. Qed.
 
-Let lifter_unique : forall (cm : monad) (lifter_effect : i ~~> cm) (lifter' : M ~~> cm),
+Let lifter_unique : forall (cm : monad) (lifter_effect : i ~~> cm) (lifter' : acto ~~> cm),
             (forall X (x : X), lifter' X (ret X x) = @hierarchy.ret cm X x) ->
-            (forall X Y (m : M X) (f : X -> M Y), lifter' Y (m >>= f) = (lifter' X m) >>= (fun x => lifter' Y (f x))) ->
+            (forall X Y (m : acto X) (f : X -> acto Y), lifter' Y (m >>= f) = (lifter' X m) >>= (fun x => lifter' Y (f x))) ->
             (forall X (fx : i X), (lifter' X (requesti fx)) = lifter_effect X fx) ->
-        forall X (m : M X), lifter' X m = lifter lifter_effect m.
+        forall X (m : acto X), lifter' X m = lifter lifter_effect m.
 Proof.
     move=>cm lifter_effect lifter' dret' dbind' dtrigger' X m.
     rewrite/lifter.
@@ -180,11 +172,13 @@ Proof.
     by rewrite -dtrigger'-dbind'/requesti.
 Qed.
 
-HB.instance Definition _ := isMonadFreer.Build i M
+#[export]
+HB.instance Definition _ := isMonadFreer.Build i acto
   lifter_ret lifter_bind lifter_trigger lifter_unique.
 
 End freer.
 End Freer.
+HB.export Freer.
 
 Lemma denote_if : forall (i : effect) (M : freerMonad i) (cm : monad)
    (lifter_effect : i ~~> cm) X (m m' : M X) b,
@@ -199,11 +193,11 @@ Context (i : effect) (S : UU0).
 
 Import Monad.
 
-Definition requestis `{Provide ix i} {A} (e : i A): acto ix A :=
+Definition requestis `{Provide ix i} {A} (e : i A) : freer ix A :=
   impure (inj_p e) (@pure _ _).
 
-  Let iget `{Provide i (STORE S)} : acto i S:=requestis (inj_p Get).
-  Let iput `{Provide i (STORE S)} (s : S) : acto i ():=requestis (inj_p (Put s)).
+Let iget `{Provide i (STORE S)} : freer i S:=requestis (inj_p Get).
+Let iput `{Provide i (STORE S)} (s : S) : freer i ():=requestis (inj_p (Put s)).
 
 (** Note: there have been attempts to turn [request] into a typeclass
     function (to seamlessly use [request] with a [MonadTrans] instance such as
@@ -219,15 +213,18 @@ Definition requestis `{Provide ix i} {A} (e : i A): acto ix A :=
 
 (** * Lift *)
 
-  End impstate.
+End impstate.
 End ImpSt.
 
 (* HB.export ImpSt. *)
 
 Module FreerFuns.
-Definition trigger  `{Provide ix i} {im : freerMonad ix} : ix ~~> im := fun a e => request a (inj_p e). 
-Definition iget {S} `{Provide i (STORE S)} {im : freerMonad i} : im S:= trigger (inj_p Get).
-Definition iput {S} `{Provide i (STORE S)} {im : freerMonad i} (s : S) : im unit:= trigger (inj_p (Put s)).
+Definition trigger  `{Provide ix i} {im : freerMonad ix} : ix ~~> im :=
+  fun a e => request a (inj_p e).
+Definition iget {S} `{Provide i (STORE S)} {im : freerMonad i} : im S :=
+  trigger (inj_p Get).
+Definition iput {S} `{Provide i (STORE S)} {im : freerMonad i} (s : S) : im unit :=
+  trigger (inj_p (Put s)).
 End FreerFuns.
 
 (*HB.export FreerFuns.*)
