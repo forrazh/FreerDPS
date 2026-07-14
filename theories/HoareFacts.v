@@ -31,51 +31,30 @@ Lemma interface_to_hoare_postI `(e : ix a) (ω : Ω) (x : a) :
   post (interface_to_hoare c e) ω x (gen_witness_update c ω e x).
 Proof. by move=> step; split. Qed.
 
-Lemma to_hoare_localE `(x : a) :
-  to_hoare (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix) c (pure x : freer ix a) =
-  Ret x.
+Lemma to_hoare_localE `(x : a) : to_hoare c (pure x) = Ret x.
 Proof. exact: denote_ret. Qed.
 
-Lemma to_hoare_local_preE `(x : a) (ω : Ω) :
-  pre (to_hoare (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
-                c (pure x : freer ix a)) ω.
+Lemma to_hoare_local_preE `(x : a) (ω : Ω) : pre (to_hoare c (pure x)) ω.
 Proof. by rewrite to_hoare_localE hoare_pure_preE. Qed.
 
 Lemma to_hoare_bindE `(p : freer ix a) `(f : a -> freer ix b) :
-  to_hoare (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
-           c (freer_bind p f) =
-  to_hoare (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix) c p
-    >>= fun x =>
-      to_hoare (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
-               c (f x).
+  to_hoare c (freer_bind p f) =
+  to_hoare c p >>= fun x => to_hoare c (f x).
 Proof. exact: denote_bind. Qed.
 
 Lemma to_hoare_bind_preE `(p : freer ix a) `(f : a -> freer ix b) (ω : Ω) :
-  pre (to_hoare (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
-                c (freer_bind p f)) ω <->
-  pre (to_hoare (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
-                c p) ω /\
+  pre (to_hoare c (freer_bind p f)) ω <->
+  pre (to_hoare c p) ω /\
   forall x ω',
-    post (to_hoare
-            (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
-            c p) ω x ω' ->
-    pre (to_hoare
-           (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
-           c (f x)) ω'.
+    post (to_hoare c p) ω x ω' -> pre (to_hoare c (f x)) ω'.
 Proof. by rewrite to_hoare_bindE hoare_bind_preE. Qed.
 
 Lemma to_hoare_bind_preI `(p : freer ix a) `(f : a -> freer ix b) (ω : Ω) :
-  pre (to_hoare (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
-                c p) ω ->
+  pre (to_hoare c p) ω ->
   (forall x ω',
-    post (to_hoare
-            (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
-            c p) ω x ω' ->
-    pre (to_hoare
-           (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
-           c (f x)) ω') ->
-  pre (to_hoare (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
-                c (freer_bind p f)) ω.
+    post (to_hoare c p) ω x ω' ->
+    pre (to_hoare c (f x)) ω') ->
+  pre (to_hoare c (freer_bind p f)) ω.
 Proof. by move=> prefix suffix; apply/to_hoare_bind_preE; split. Qed.
 
 End tmp.
@@ -104,14 +83,11 @@ Lemma to_hoare_request_postI `(e : ix a) (ω : Ω) (x : a) :
        (gen_witness_update c ω e x).
 Proof. by rewrite to_hoare_requestE; exact: interface_to_hoare_postI. Qed.
 
-Lemma to_hoare_local_preI `(x : a) (ω : Ω) :
-  pre (to_hoare (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
-                c (pure x : freer ix a)) ω.
+Lemma to_hoare_local_preI `(x : a) (ω : Ω) : pre (to_hoare c (pure x)) ω.
 Proof. by apply/to_hoare_local_preE. Qed.
 
 Lemma to_hoare_local_postE `(x : a) (y : a) (ω ω' : Ω) :
-  post (to_hoare (im:=Freer.Monad_acto__canonical__Impure_MonadFreer ix)
-                 c (pure x : freer ix a)) ω y ω' <->
+  post (to_hoare c (pure x : freer ix a)) ω y ω' <->
   x = y /\ ω = ω'.
 Proof. by rewrite to_hoare_localE hoare_pure_postE. Qed.
 

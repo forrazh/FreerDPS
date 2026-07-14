@@ -72,8 +72,8 @@ Section tmp.
 Import Freer.
 
 #[local]
-Fixpoint with_component_aux {ix : effect} {j : effect} {α : Type}
-    (c : component (im:=Monad_acto__canonical__Impure_MonadFreer ix) j ix) (p : freer (ix + j) α) : freer ix α :=
+Fixpoint with_component_aux {ix j : effect} {α : Type}
+    (c : component j ix) (p : freer (ix + j) α) : freer ix α :=
   match p with
   | pure x => pure x
   | impure T (in_right e) f =>
@@ -82,17 +82,10 @@ Fixpoint with_component_aux {ix : effect} {j : effect} {α : Type}
     impure e (fun x => with_component_aux c (f x))
   end.
 
-Notation "m >>= f" := (freer_bind m f).
-Notation "m >> f" := (freer_bind m (fun _ =>f)).
-
-Definition with_component {ix j α}
-  (* `{im : freerMonad ix}
-  `{ixjm : freerMonad (ix+j)} *)
-  (initializer : freer ix unit)
-  (c : component (im:=Monad_acto__canonical__Impure_MonadFreer ix) j ix)
-  (finalizer : freer ix unit)
-  (p : freer (ix+j) α)
-  : freer ix α :=
+Definition with_component {ix j α} (initializer : freer ix unit)
+    (c : component j ix)
+    (finalizer : freer ix unit)
+    (p : freer (ix+j) α) : freer ix α :=
   initializer >>
   with_component_aux c p >>= fun res =>
   finalizer >>
