@@ -117,38 +117,38 @@ Definition interface_to_state {i:interface} : i ~~> interp i :=
   fun a e => (fun sem => run_effect sem e).
 
 
-Definition to_state {i} {im : impureMonad i}: im ~~> interp i := impure_lift _ interface_to_state.
+Definition to_state {i} {im : freerMonad i}: im ~~> interp i := denote _ interface_to_state.
 
 Arguments to_state {i α} _ : rename.
 
-Definition run_impure {i a} {im : impureMonad i} (sem : semantics i) (p : im a) : a * semantics i :=
+Definition run_impure {i a} {im : freerMonad i} (sem : semantics i) (p : im a) : a * semantics i :=
    (to_state _ p) sem.
 
-Definition eval_impure {i a} {im : impureMonad i} (sem : semantics i) (p : im a) : a :=
+Definition eval_impure {i a} {im : freerMonad i} (sem : semantics i) (p : im a) : a :=
   fst (run_impure sem p).
 
-Definition exec_impure {i a} {im : impureMonad i} (sem : semantics i) (p : im a) : semantics i :=
+Definition exec_impure {i a} {im : freerMonad i} (sem : semantics i) (p : im a) : semantics i :=
   snd (run_impure sem p).
 
 (** * In-place Primitives Handling *)
 
 
-Fixpoint with_semantics {ix j α} (sem : semantics j) (p : impure (ix + j) α)
-  : impure ix α :=
+Fixpoint with_semantics {ix j α} (sem : semantics j) (p : freer (ix + j) α)
+  : freer ix α :=
   match p with
-  | Impure.local x => Impure.local x
-  | request_then _ (in_right e) f =>
+  | pure x => Impure.pure x
+  | impure _ (in_right e) f =>
     let (res, next) := run_effect sem e in
     with_semantics next (f res)
-  | request_then _ (in_left e) f =>
-    request_then e (fun x => with_semantics sem (f x))
+  | impure _ (in_left e) f =>
+    impure e (fun x => with_semantics sem (f x))
   end.
 
 (** We provide [with_store], a helper function to locally provide a mutable
     variable. *)
 
-Definition with_store {ix s a} (x : s) (p : impure (ix + STORE s) a)
-  : impure ix a :=
+Definition with_store {ix s a} (x : s) (p : freer (ix + STORE s) a)
+  : freer ix a :=
   with_semantics (store x) p.
 
 (** Nesting [with_semantics] calls works to some extends. If each

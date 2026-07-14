@@ -13,7 +13,6 @@ Generalizable All Variables.
 
 Notation instrument Ω i := (stateT Ω (StateMonad.acto (semantics i))).
 
-
 Definition modify {S} {M : stateMonad S} (f : S -> S) : M S := get >>= 
   fun s => put (f s) >>=
   fun _ => Ret s.
@@ -29,9 +28,8 @@ Program Definition interface_to_instrument `{MayProvide ix i} `(c : contract i �
     >>= fun x => modify (fun ω => gen_witness_update c ω e x)
     >>= fun _ => Ret x.
 
-Definition to_instrument `{MayProvide ix i} `(c : contract i Ω) {im : impureMonad ix}
+Definition to_instrument `{MayProvide ix i} `(c : contract i Ω) {im : freerMonad ix}
   : im ~~> instrument Ω ix :=
-  impure_lift _ $ interface_to_instrument c.
+  denote _ $ interface_to_instrument c.
 
 Arguments to_instrument {ix i _ Ω} (c) {α} : rename.
-
