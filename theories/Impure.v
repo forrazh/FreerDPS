@@ -206,25 +206,20 @@ Let iput `{Provide i (STORE S)} (s : S) : freer i ():=requestis (inj_p (Put s)).
     verification process. It is simpler to reason about “pure” freer
     computations (that is, not within a monad stack), then wrapping these
     computations thanks to [lift].
-
-    The <<coq-prelude>> provides notations (inspired by the do notation of
-    Haskell) to write monadic functions more easily.  These notations live
-    inside the [monad_scope]. *)
-
-(** * Lift *)
+  *)
 
 End impstate.
 End ImpSt.
 
-(* HB.export ImpSt. *)
-
 Module FreerFuns.
-Definition trigger  `{Provide ix i} {im : freerMonad ix} : ix ~~> im :=
+Definition triggerx  `{Provide ix i} {im : freerMonad ix} : ix ~~> im :=
   fun a e => request a (inj_p e).
-Definition iget {S} `{Provide i (STORE S)} {im : freerMonad i} : im S :=
-  trigger (inj_p Get).
-Definition iput {S} `{Provide i (STORE S)} {im : freerMonad i} (s : S) : im unit :=
-  trigger (inj_p (Put s)).
-End FreerFuns.
+Definition trigger  `{Provide ix i} {im : freerMonad ix} : i ~~> im :=
+  fun a e => request a (inj_p e).
 
-(*HB.export FreerFuns.*)
+Arguments trigger {_ _ _ _ _ _}.
+Definition iget {S} `{Provide i (STORE S)} {im : freerMonad i} : im S :=
+  trigger (Get).
+Definition iput {S} `{Provide i (STORE S)} {im : freerMonad i} (s : S) : im unit :=
+  trigger $ Put s.
+End FreerFuns.

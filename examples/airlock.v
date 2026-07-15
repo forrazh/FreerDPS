@@ -37,11 +37,11 @@ Import FreerFuns.
 
 Definition is_open `{Provide ix DOORS} {im : freerMonad ix} (d : door) :
     im bool :=
-  trigger (inj_p $ IsOpen d).
+  trigger $ IsOpen d.
 
 Definition toggle `{Provide ix DOORS} {im : freerMonad ix} (d : door) :
     im unit :=
-  trigger (inj_p $ Toggle d).
+  trigger $ Toggle d.
 
 Definition open_door `{Provide ix DOORS} {im : freerMonad ix}
     (d : door) : im unit :=
@@ -60,11 +60,11 @@ Inductive CONTROLLER : effect :=
 | RequestOpen (d : door) : CONTROLLER unit.
 
 Definition tick `{Provide ix CONTROLLER} {im : freerMonad ix} : im unit :=
-  trigger (inj_p Tick).
+  trigger Tick.
 
 Definition request_open `{Provide ix CONTROLLER} {im : freerMonad ix}
     (d : door) : im unit :=
-  trigger (inj_p $ RequestOpen d).
+  trigger $ RequestOpen d.
 
 Definition co (d : door) : door :=
   match d with
@@ -240,7 +240,7 @@ Qed.
 
 Lemma store_request_preI `{StrictProvide2 ix DOORS (STORE nat)}
     `(e : STORE nat a) (ω : Ω) :
-  pre (to_hoare (im:=freer ix) doors_contract (trigger (inj_p e))) ω.
+  pre (to_hoare (im:=freer ix) doors_contract (trigger e)) ω.
 Proof.
 by apply/to_hoare_request_preE; rewrite /gen_caller_obligation /= distinguish.
 Qed.
