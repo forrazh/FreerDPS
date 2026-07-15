@@ -15,4 +15,5 @@
 ./theories/Typeclasses.v
 ./examples/airlock.v
 ./examples/ping/interfaces.v
+./examples/equational_reasoning/freer_choice.v
 
