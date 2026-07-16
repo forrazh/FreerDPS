@@ -12,5 +12,4 @@ From FreerDPS Require Export
      Component
      Contract
      Hoare
-     Tactics
      .

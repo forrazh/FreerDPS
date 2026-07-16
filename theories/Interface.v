@@ -13,7 +13,9 @@ From Stdlib Require Import Program.
     FreeSpec are parameterized inductive types whose terms purposely describe
     the primitives the interface provides. *)
 
-Definition interface := Type -> Type.
+Definition effect := Type -> Type.
+#[deprecated(note="effect")]
+Notation interface := effect (only parsing).
 
 Declare Scope interface_scope.
 Bind Scope interface_scope with interface.
@@ -112,10 +114,6 @@ Inductive iplus (i j : interface) (α : Type) :=
 
 Arguments in_left [i j α] (e).
 Arguments in_right [i j α] (e).
-
-Register iplus as freespec.core.iplus.type.
-Register in_left as freespec.core.iplus.in_left.
-Register in_right as freespec.core.iplus.in_right.
 
 Infix "+" := iplus : interface_scope.
 
