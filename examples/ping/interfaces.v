@@ -176,8 +176,6 @@ move: run; rewrite to_hoare_bind_postE.
 by move=> -[? [? [_ +]]]=> /wait_postE.
 Qed.
 
-(* TODO: Don't forget you need to look at an example for
-  equational reasoning from monae's 2025 paper. *)
 End ccs.
 End ccm.
 
