@@ -10,6 +10,8 @@ From mathcomp Require Import all_boot boolp.
 From FreerDPS Require Import Core Impure Hoare HoareFacts.
 From monae Require Import preamble hierarchy.
 
+Import SpecializedHoareModule.
+
 #[local] Open Scope nat_scope.
 #[local] Open Scope monae_scope.
 

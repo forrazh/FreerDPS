@@ -11,10 +11,10 @@ Generalizable All Variables.
 
 Local Open Scope monae_scope.
 
-(** * Primitive Request Views *)
+(** * Hoare Interpretation Views *)
 
-Section tmp.
-Context `{MayProvide ix i} `(c : contract i Ω).
+Section GenericHoareSection.
+Context `{MayProvide ix i} {im : freerMonad ix} `(c : contract i Ω).
 
 Lemma interface_to_hoare_preE `(e : ix a) (ω : Ω) :
   pre (interface_to_hoare c e) ω <-> gen_caller_obligation c ω e.
@@ -30,37 +30,6 @@ Lemma interface_to_hoare_postI `(e : ix a) (ω : Ω) (x : a) :
   gen_callee_obligation c ω e x ->
   post (interface_to_hoare c e) ω x (gen_witness_update c ω e x).
 Proof. by move=> step; split. Qed.
-
-Lemma to_hoare_localE `(x : a) : to_hoare c (pure x) = Ret x.
-Proof. exact: denote_ret. Qed.
-
-Lemma to_hoare_local_preE `(x : a) (ω : Ω) : pre (to_hoare c (pure x)) ω.
-Proof. by rewrite to_hoare_localE hoare_pure_preE. Qed.
-
-Lemma to_hoare_bindE `(p : freer ix a) `(f : a -> freer ix b) :
-  to_hoare c (p >>= f) =
-  to_hoare c p >>= fun x => to_hoare c (f x).
-Proof. exact: denote_bind. Qed.
-
-Lemma to_hoare_bind_preE `(p : freer ix a) `(f : a -> freer ix b) (ω : Ω) :
-  pre (to_hoare c (p >>= f)) ω <->
-  pre (to_hoare c p) ω /\
-  forall x ω',
-    post (to_hoare c p) ω x ω' -> pre (to_hoare c (f x)) ω'.
-Proof. by rewrite to_hoare_bindE hoare_bind_preE. Qed.
-
-Lemma to_hoare_bind_preI `(p : freer ix a) `(f : a -> freer ix b) (ω : Ω) :
-  pre (to_hoare c p) ω ->
-  (forall x ω',
-    post (to_hoare c p) ω x ω' ->
-    pre (to_hoare c (f x)) ω') ->
-  pre (to_hoare c (p >>= f)) ω.
-Proof. by move=> prefix suffix; apply/to_hoare_bind_preE; split. Qed.
-
-End tmp.
-
-Section tmp.
-Context `{MayProvide ix i} {im : freerMonad ix} `(c : contract i Ω).
 
 Lemma to_hoare_requestE `(e : ix a) :
   to_hoare (im:=im) c (request a e) = interface_to_hoare c e.
@@ -82,28 +51,28 @@ Lemma to_hoare_request_postI `(e : ix a) (ω : Ω) (x : a) :
        (gen_witness_update c ω e x).
 Proof. by rewrite to_hoare_requestE; exact: interface_to_hoare_postI. Qed.
 
-Lemma to_hoare_local_preI `(x : a) (ω : Ω) : pre (to_hoare c (pure x)) ω.
-Proof. by apply/to_hoare_local_preE. Qed.
+(* ============ *)
+Context `(p : im a) `(f : a -> im b).
 
-Lemma to_hoare_skip_preI (ω : Ω) :
-  pre (to_hoare c (skip : freer ix unit)) ω.
-Proof. exact: to_hoare_local_preI. Qed.
+Lemma to_hoare_bindE :
+  to_hoare c (p >>= f) =
+  to_hoare c p >>= fun x => to_hoare c (f x).
+Proof. exact: denote_bind. Qed.
 
-Lemma to_hoare_local_postE `(x : a) (y : a) (ω ω' : Ω) :
-  post (to_hoare c (pure x)) ω y ω' <-> x = y /\ ω = ω'.
-Proof. by rewrite to_hoare_localE hoare_pure_postE. Qed.
+Lemma to_hoare_bind_preE (ω : Ω) :
+  pre (to_hoare c (p >>= f)) ω <->
+  pre (to_hoare c p) ω /\
+  forall x ω',
+    post (to_hoare c p) ω x ω' -> pre (to_hoare c (f x)) ω'.
+Proof. by rewrite to_hoare_bindE hoare_bind_preE. Qed.
 
-Lemma to_hoare_local_postI `(x : a) (ω : Ω) :
-  post (to_hoare c (pure x)) ω x ω.
-Proof. by apply/to_hoare_local_postE; split. Qed.
-
-End tmp.
-
-(** * Canonical Impure Views *)
-
-Section tmp.
-Context `{MayProvide ix i} `(c : contract i Ω)
-    `(p : freer ix a) `(f : a -> freer ix b).
+Lemma to_hoare_bind_preI (ω : Ω) :
+  pre (to_hoare c p) ω ->
+  (forall x ω',
+    post (to_hoare c p) ω x ω' ->
+    pre (to_hoare c (f x)) ω') ->
+  pre (to_hoare c (p >>= f)) ω.
+Proof. by move=> prefix suffix; apply/to_hoare_bind_preE; split. Qed.
 
 Lemma to_hoare_bind_postE (ω : Ω) (y : b) (ω' : Ω) :
   post (to_hoare c (p >>= f)) ω y ω' <->
@@ -120,10 +89,52 @@ Proof.
 by move=> prefix suffix; apply/to_hoare_bind_postE; exists x, ω''.
 Qed.
 
-End tmp.
+Lemma to_hoare_pre_bind_assoc
+    `(Hp : pre (to_hoare c p) ω)
+    (run : forall (x : a) (ω' : Ω),
+      post (to_hoare c p) ω x ω' ->
+      pre (to_hoare c (f x)) ω') :
+  pre (to_hoare c (p >>= f)) ω.
+Proof. exact/to_hoare_bind_preI. Qed.
 
-Lemma to_hoare_impure_preE `{MayProvide ix i} `(c : contract i Ω)
-    `(e : ix a) `(f : a -> freer ix b) (ω : Ω) :
+Lemma to_hoare_post_bind_assoc
+    `(Hp : post (to_hoare c (p >>= f)) ω x ω') :
+  exists y ω'',
+    post (to_hoare c p) ω y ω'' /\
+    post (to_hoare c (f y)) ω'' x ω'.
+Proof. exact/to_hoare_bind_postE. Qed.
+
+End GenericHoareSection.
+
+Module SpecializedHoareModule.
+Section SpecializedHoareSection.
+Context `{MayProvide ix i} `(c : contract i Ω).
+
+Lemma to_hoare_localE `(x : a) : to_hoare c (pure x) = Ret x.
+Proof. exact: denote_ret. Qed.
+
+Lemma to_hoare_local_preE `(x : a) (ω : Ω) : pre (to_hoare c (pure x)) ω.
+Proof. by rewrite to_hoare_localE hoare_pure_preE. Qed.
+
+Lemma to_hoare_local_preI `(x : a) (ω : Ω) : pre (to_hoare c (pure x)) ω.
+Proof. by apply/to_hoare_local_preE. Qed.
+
+Lemma to_hoare_skip_preI (ω : Ω) :
+  pre (to_hoare c (skip : freer ix unit)) ω.
+Proof. exact: to_hoare_local_preI. Qed.
+
+Lemma to_hoare_local_postE `(x : a) (y : a) (ω ω' : Ω) :
+  post (to_hoare c (pure x)) ω y ω' <-> x = y /\ ω = ω'.
+Proof. by rewrite to_hoare_localE hoare_pure_postE. Qed.
+
+Lemma to_hoare_local_postI `(x : a) (ω : Ω) :
+  post (to_hoare c (pure x)) ω x ω.
+Proof. by apply/to_hoare_local_postE; split. Qed.
+
+(* ========================================================================= *)
+Context `(e : ix a) `(f : a -> freer ix b).
+
+Lemma to_hoare_impure_preE (ω : Ω) :
   pre (to_hoare c (impure e f)) ω <->
   gen_caller_obligation c ω e /\ forall x, gen_callee_obligation c ω e x ->
     pre (to_hoare c (f x)) (gen_witness_update c ω e x).
@@ -137,16 +148,14 @@ split.
   + by move=> x ω' /interface_to_hoare_postE [-> callee]; exact: next.
 Qed.
 
-Lemma to_hoare_impure_preI `{MayProvide ix i} `(c : contract i Ω)
-    `(e : ix a) `(f : a -> freer ix b) (ω : Ω) :
+Lemma to_hoare_impure_preI (ω : Ω) :
   gen_caller_obligation c ω e ->
   (forall x, gen_callee_obligation c ω e x ->
     pre (to_hoare c (f x)) (gen_witness_update c ω e x)) ->
   pre (to_hoare c (impure e f)) ω.
 Proof. by move=> caller next; apply/to_hoare_impure_preE; split. Qed.
 
-Lemma to_hoare_impure_postE `{MayProvide ix i} `(c : contract i Ω)
-    `(e : ix a) `(f : a -> freer ix b) (ω : Ω) (y : b) (ω' : Ω) :
+Lemma to_hoare_impure_postE (ω : Ω) (y : b) (ω' : Ω) :
   post (to_hoare c (impure e f)) ω y ω' <->
   exists x,
     post (to_hoare c (f x)) (gen_witness_update c ω e x) y ω' /\ gen_callee_obligation c ω e x.
@@ -159,34 +168,16 @@ split.
   by exists x, (gen_witness_update c ω e x); split.
 Qed.
 
-(** * General Lemmas *)
-
-Lemma to_hoare_step `{MayProvide ix i} `(c : contract i Ω)
-    `(e : ix a) `(f : a -> freer ix a)
-    `(hpre : pre (to_hoare c (impure e f)) ω)
+Lemma to_hoare_step `(hpre : pre (to_hoare c (impure e f)) ω)
     (x : a) (step : gen_callee_obligation c ω e x) :
   pre (to_hoare c (f x)) (gen_witness_update c ω e x).
 Proof. by move: hpre => /to_hoare_impure_preE [_ +]; exact. Qed.
 
-#[global] Hint Resolve to_hoare_step : freespec.
+End SpecializedHoareSection.
+End SpecializedHoareModule.
 
-Lemma to_hoare_pre_bind_assoc `{MayProvide ix i} `(c : contract i Ω)
-    `(p : freer ix a)
-    `(Hp : pre (to_hoare c p) ω)
-    `(f : a -> freer ix b)
-    (run : forall (x : a) (ω' : Ω),
-      post (to_hoare c p) ω x ω' ->
-      pre (to_hoare c (f x)) ω') :
-  pre (to_hoare c (p >>= f)) ω.
-Proof. exact/to_hoare_bind_preI. Qed.
+Import SpecializedHoareModule.
 
-Lemma to_hoare_post_bind_assoc `{MayProvide ix i} `(c : contract i Ω)
-    `(p : freer ix a) `(f : a -> freer ix b)
-    `(Hp : post (to_hoare c (p >>= f)) ω x ω') :
-  exists y ω'',
-    post (to_hoare c p) ω y ω'' /\
-    post (to_hoare c (f y)) ω'' x ω'.
-Proof. exact/to_hoare_bind_postE. Qed.
 
 (** * Contract Product Views *)
 
