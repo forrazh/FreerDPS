@@ -1,4 +1,5 @@
 -Q theories FreerDPS
+-Q examples FreerExamples
 -arg -w -arg -projection-no-head-constant
 
 ./theories/Component.v
@@ -15,4 +16,5 @@
 ./theories/Typeclasses.v
 ./examples/airlock.v
 ./examples/equational_reasoning/freer_choice.v
+./examples/equational_reasoning/freer_lossy_round_trip.v
 
