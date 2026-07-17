@@ -15,7 +15,10 @@
 ./theories/Semantics.v
 ./theories/Typeclasses.v
 ./examples/airlock.v
+./examples/ping/lossy_round_trip.v
 ./examples/ping/interfaces.v
 ./examples/equational_reasoning/freer_choice.v
 ./examples/equational_reasoning/freer_lossy_round_trip.v
+./examples/2pc/interfaces.v
+
 

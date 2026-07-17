@@ -102,7 +102,7 @@ Proof. exact: equiv_refl. Qed.
 
 Lemma f_transmit1 m
   : transmit 1%:i01 m === Ret (Some m).
-Proof. exact: rchoice1. Qed.
+Proof.  rewrite/transmit. Check rchoice1. exact: rchoice1. Qed.
 
 Lemma f_ping_pong_once1 : ping_pong_once 1%:i01 === Ret GotPong.
 Proof.

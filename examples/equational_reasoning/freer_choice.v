@@ -122,6 +122,7 @@ Proof.
 Qed.
 
 
+
 (* 5th step : Choice equiv laws *)
 Inductive choice_rel :forall `[X : UU0] (m1 m2 : M X), Prop :=
 | rchoice1 : forall (A : UU0) (a b : M A),
@@ -206,6 +207,19 @@ Proof.
   - exact: choiceC.
   - exact: choice1.
 Qed.
+
+Lemma equiv_complete : forall (X : UU0) (m1 m2 : freer FlipEff X),
+    denote fl denote_flip_effect X m1 = denote fl denote_flip_effect X m2
+    -> m1 = m2 .
+Proof.
+  move=> X m1.
+  elim: m1=>/=[x|B ef y ih];
+  elim=>/=[x'|C eg z].
+  - rewrite/denote_flip_effect !denote_ret. admit.
+  - move=>ih. rewrite denote_ret. admit.
+  - admit.
+  - move=> ih' Hden.
+Admitted.
 
 End freer_flip.
 End FreerFlipModel.
