@@ -4,6 +4,9 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
+Attributes deprecated(
+  note="This file is unused and will probably be removed in later versions.").
+
 (** In FreeSpec, there is no particular semantics attach to interface's
     primitives. Once an interface has been defined, we can provide one (or
     more) operational semantics to interpret its primitives. *)
@@ -16,6 +19,7 @@
 
 From mathcomp Require Import ssreflect.
 
+(* WARNING: Move this import to its MathComp counterpart. *)
 From Stdlib Require Import Program Setoid Morphisms.
 (* From ExtLib Require Import Monad StateMonad. *)
 From FreerDPS Require Export Interface Impure.

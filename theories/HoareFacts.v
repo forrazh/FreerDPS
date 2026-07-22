@@ -4,6 +4,9 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
+Attributes deprecated(
+  note="The contents of this file will be moved to `Hoare.v`.").
+
 From mathcomp Require Import ssreflect.
 From FreerDPS Require Import Interface Impure Contract Hoare.
 From monae Require Import preamble hierarchy.

@@ -4,6 +4,8 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
+Attributes deprecated(note="This file will be renamed to `Freer.v`.").
+
 (** In [FreeSpec.Core.Interface], we have introduced the [interface] type, to
     model the set of primitives an impure computation can use. We also introduce
     [MayProvide], [Provide] and [Distinguish]. They are three type classes which
@@ -15,6 +17,7 @@
     <<https://github.com/whitequark/unfork#introduction>>). *)
 
 From mathcomp Require Import ssreflect ssrfun.
+(* WARNING: Move this import to its MathComp counterpart. *)
 From Stdlib Require Import Program Setoid Morphisms.
 From HB Require Import structures.
 From monae Require Import preamble hierarchy.
@@ -40,19 +43,22 @@ Generalizable All Variables.
     to interpret impure computations within Coq, providing an operational
     semantics for [i]. *)
 
-Inductive impure (i : interface) (α : Type) : Type :=
-| local (x : α) : impure i α
-| request_then {β} (e : i β) (f : β -> impure i α) : impure i α.
+Inductive freer (i : interface) (α : Type) : Type :=
+| local (x : α) : freer i α
+| request_then {β} (e : i β) (f : β -> freer i α) : freer i α.
+
+#[deprecated(note="Name will change to `freer`.")]
+Notation impure := freer (only parsing).
 
 Arguments local [i α] (x).
 Arguments request_then [i α β] (e f).
 
-Register impure as freespec.core.impure.type.
+Register freer as freespec.core.impure.type.
 Register local as freespec.core.impure.local.
 Register request_then as freespec.core.impure.request_then.
 
 Declare Scope impure_scope.
-Bind Scope impure_scope with impure.
+Bind Scope impure_scope with freer.
 Delimit Scope impure_scope with impure.
 
 HB.mixin Record isMonadImpure (i : interface) (M : UU0 -> UU0) of Monad M := {

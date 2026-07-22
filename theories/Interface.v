@@ -5,6 +5,7 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 From FreerDPS Require Export Init.
+(* WARNING: Move this import to its MathComp counterpart. *)
 From Stdlib Require Import Program.
 
 (** * Definition  *)
@@ -13,7 +14,9 @@ From Stdlib Require Import Program.
     FreeSpec are parameterized inductive types whose terms purposely describe
     the primitives the interface provides. *)
 
-Definition interface := Type -> Type.
+Definition effect := Type -> Type.
+#[deprecated(note="Name will change to `effect`.")]
+Notation interface := effect (only parsing).
 
 Declare Scope interface_scope.
 Bind Scope interface_scope with interface.

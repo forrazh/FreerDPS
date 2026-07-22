@@ -4,6 +4,9 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
+Attributes deprecated(
+  note="This file is unused and will probably be removed in later versions.").
+
 From FreerDPS Require Import Interface Semantics Contract.
 From monae Require Import preamble hierarchy monad_transformer monad_model.
 From HB Require Import structures.

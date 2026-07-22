@@ -4,6 +4,9 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
+Attributes deprecated(
+  note="This file is unused and will probably be removed in later versions.").
+
 (* From ExtLib Require Import StateMonad. *)
 From mathcomp Require Import ssreflect.
 From FreerDPS Require Export Interface Semantics Impure.
