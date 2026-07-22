@@ -1,0 +1,32 @@
+# This file was generated from `meta.yml`, please do not edit manually.
+# Follow the instructions on https://github.com/coq-community/templates to regenerate.
+
+opam-version: "2.0"
+maintainer: "Hugo Forraz"
+version: "dev"
+
+homepage: "https://github.com/FreerDPS/FreerDPS"
+dev-repo: "git+https://github.com/FreerDPS/FreerDPS.git"
+bug-reports: "https://github.com/FreerDPS/FreerDPS/issues"
+license: "MIT"
+
+synopsis: "TODO"
+description: """
+TODO"""
+
+build: [make "-j%{jobs}%"]
+install: [make "install"]
+depends: [
+  "coq"
+  "rocq-mathcomp-ssreflect" {>= "2.5.0"}
+  "rocq-mathcomp-analysis" {>= "1.16.0"}
+  "coq-mathcomp-algebra-tactics" {>= "1.2.7"}
+  "rocq-monae" {= "0.9.2"}
+]
+
+tags: [
+  "logpath:"
+]
+authors: [
+  "Hugo Forraz"
+]
