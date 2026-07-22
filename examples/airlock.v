@@ -15,10 +15,10 @@ Create HintDb airlock.
 
 (** * Specifying *)
 
-(** ** Doors *) 
+(** ** Doors *)
 
 Inductive door : Type := left | right.
- 
+
 Definition door_eq_dec (d d' : door) : { d = d' } + { ~ d = d' } :=
   ltac:(decide equality).
 
@@ -83,7 +83,7 @@ Definition controller `{Provide ix DOORS, Provide ix (STORE nat)} {im : impureMo
       * apply/open_door/d.
       * apply/iput/0.
   Show Proof. *)
-   := 
+   :=
   fun _ op =>
     match op with
     | Tick =>
@@ -269,7 +269,7 @@ Qed.
 
 Lemma respectful_run_inv `{Provide ix DOORS} {A} (p : impure ix A)
     (ω : Ω) (safe : sel left ω = false \/ sel right ω = false)
-    (a : A) (ω' : Ω) 
+    (a : A) (ω' : Ω)
     (hpre : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) doors_contract p) ω)
     (hpost: post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) doors_contract p) ω a ω')
   : sel left ω' = false \/ sel right ω' = false.
@@ -310,15 +310,15 @@ Proof.
   (* elim p=>[a'|B e f IH] ω pre run safe. *)
   induction p; intros ω hpre run safe.
   + by unroll_post run.
-  + run_simpl run. 
-    have hpost : post (interface_to_hoare doors_contract (A:=β) e) ω x ω0 
+  + run_simpl run.
+    have hpost : post (interface_to_hoare doors_contract (A:=β) e) ω x ω0
       by split; [apply H2| by rewrite H3].
     (* move: H1 => /(_ x ω0) => H1. *)
      apply/(H1 x ω0) => //; [by apply hpre|].
     cbn in *.
     inversion hpre; rewrite /=/gen_caller_obligation in H4.
     (* simplify_gens *)
-    unfold gen_caller_obligation, gen_callee_obligation, gen_witness_update in *. 
+    unfold gen_caller_obligation, gen_callee_obligation, gen_witness_update in *.
     cbn in *.
     destruct (proj_p e) as [e'|].
     ++ destruct hpost as [o_callee equω].
@@ -331,7 +331,7 @@ Proof.
              inversion H4.
            cbn.
            by destruct safe as [safe|safe];
-            right; rewrite tog_equ_2//. 
+            right; rewrite tog_equ_2//.
     ++ rewrite H3;
        exact: safe.
 Qed.
@@ -348,16 +348,16 @@ Definition correct_component `{MayProvide jx j}
       callee_obligation ci ωi e x /\ pred (witness_update ci ωi e x) ωj'.
 
 
-      
+
 Lemma controller_correct `{StrictProvide2 ix DOORS (STORE nat)}
   : correct_component controller
                       (no_contract CONTROLLER)
                       doors_contract
                       (fun _ ω => sel left ω = false \/ sel right ω = false).
 Proof.
-  move=>ωc ωd pred A eff req. 
+  move=>ωc ωd pred A eff req.
   have hpre : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) doors_contract (controller A eff)) ωd.
-    { 
+    {
       case eff; do ! [prove impure with airlock; ssubst; constructor => //].
 
 
@@ -370,8 +370,10 @@ Proof.
       - by inversion o_caller1; ssubst;inversion o_caller; ssubst; rewrite H6 tog_equ_1/=H7.
       - by inversion o_caller; ssubst.
     }
-  
+
   split=>[|a ωj' run]//=;
   split=>//=.
-  by apply/(respectful_run_inv _ _ _ _ _ _ run). 
+  by apply/(respectful_run_inv _ _ _ _ _ _ run).
 Qed.
+
+End a.

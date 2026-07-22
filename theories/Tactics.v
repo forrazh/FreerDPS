@@ -4,6 +4,8 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
+Attributes deprecated(note="This file will be deleted.").
+
 (* From ExtLib Require Import Monad. *)
 From monae Require Import preamble hierarchy.
 From FreerDPS Require Import Init Interface Contract Impure Hoare HoareFacts.

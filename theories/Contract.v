@@ -10,6 +10,7 @@
     be used, and what to expect the result computed by “correct” operational
     semantics (according to a certain definition of “correct”). *)
 
+(* WARNING: Move this import to its MathComp counterpart. *)
 From Stdlib Require Import Setoid Morphisms.
 (* From ExtLib Require Import StateMonad MonadState MonadTrans. *)
 From FreerDPS Require Import Interface Impure Semantics Component.

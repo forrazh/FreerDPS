@@ -15,13 +15,15 @@ Ltac done :=
    | match goal with H : ~ _ |- _ => solve [case H; trivial] end 
    | auto with freespec
    ].
-Local Open Scope monae_scope.
+Global Close Scope nat_scope.
+Global Open Scope monae_scope.
 
 Definition when {X} {M : monad}  (b : bool) (m : M X) : M unit := if b then m >> skip else skip. 
 Notation "f $ x" := (f x) (at level 60, right associativity, only parsing).
 
 (** * Tactics *)
 
+(* WARNING: Move this import to its MathComp counterpart. *)
 From Stdlib Require Export Eqdep.
 
 Ltac ssubst :=
