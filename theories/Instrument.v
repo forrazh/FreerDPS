@@ -22,10 +22,10 @@ Arguments liftS {_ _ _}.
 Arguments effect_to_state {_ _}.
 
 
-Program Definition interface_to_instrument `{MayProvide ix i} `(c : contract i Ω)
+Program Definition effect_to_instrument `{MayProvide ix i} `(c : contract i Ω)
   : ix ~~> instrument Ω ix :=
   fun a e =>
-    (liftS (A:=a) $ interface_to_state e)
+    (liftS (A:=a) $ effect_to_state e)
     >>= fun x => modify (fun ω => gen_witness_update c ω e x)
     >>= fun _ => Ret x.
 
