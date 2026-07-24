@@ -7,8 +7,7 @@
 Attributes deprecated(note="This file will be deleted.").
 
 (* From ExtLib Require Import Monad. *)
-From monae Require Import preamble hierarchy.
-From FreerDPS Require Import Init Interface Contract Impure Hoare HoareFacts.
+From FreerDPS Require Import Init Effect Contract Impure Hoare HoareFacts.
 
 Ltac destruct_if_when :=
   let equ_cond := fresh "equ_cond" in
@@ -46,13 +45,13 @@ Ltac simplify_gens :=
          | H: _ /\ _ |- _ =>
            destruct H
 
-         | |- context[@proj_p ?ix ?ix (refl_MayProvide ?ix) _ ?e] =>
-           change (@proj_p ix ix (refl_MayProvide ix) _ e) with (Some e);
+         | |- context[@proj_p ?Fx ?Fx (refl_MayProvide ?Fx) _ ?e] =>
+           change (@proj_p Fx Fx (refl_MayProvide Fx) _ e) with (Some e);
            cbn match;
            cbn beta
 
-         | H: context[@proj_p ?ix ?ix (refl_MayProvide ?ix) _ ?e] |- _ =>
-           change (@proj_p ix ix (refl_MayProvide ix) _ e) with (Some e) in H;
+         | H: context[@proj_p ?Fx ?Fx (refl_MayProvide ?Fx) _ ?e] |- _ =>
+           change (@proj_p Fx Fx (refl_MayProvide Fx) _ e) with (Some e) in H;
            cbn match in H;
            cbn beta in H
 
@@ -110,7 +109,7 @@ Ltac prove_impure :=
     | |- pre ?pcond ?ω =>
 
     lazymatch pcond with 
-      | lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) ?p => let p := (eval hnf in p) in
+      | lifter (F:=?ifce) (M:=?m) (hoare_of_contract ?c) (A:=_) ?p => let p := (eval hnf in p) in
         lazymatch p with
         | request_then ?e ?f =>
           let o_caller := fresh "o_caller" in
@@ -179,7 +178,7 @@ Ltac unroll_post run :=
       inversion run; ssubst;
       clear run;
       lazymatch goal with
-      | next : exists _, post (interface_to_hoare c _ e) _ _ _ /\ _ |- _ =>
+      | next : exists _, post (hoare_of_contract c _ e) _ _ _ /\ _ |- _ =>
         let ω'' := fresh "ω" in
         let o_callee := fresh "o_callee" in
         let run := fresh "run" in
@@ -230,7 +229,7 @@ Ltac run_simpl run :=
     cleanvert run;
     idtac "=> => inverted";
     match goal with
-    | next : exists _, post (interface_to_hoare c (A:=_) e) _ _ _ /\ _ |- _ => 
+    | next : exists _, post (hoare_of_contract c (A:=_) e) _ _ _ /\ _ |- _ =>
         idtac "=> => => found next: " next;
         let ω'' := fresh "ω" in 
         let o_callee := fresh "o_callee" in 
@@ -244,7 +243,8 @@ Ltac run_simpl run :=
   | local ?x => idtac "=> => PURE!"; cleanvert run
   | _ => idtac "<== freer out" 
   end
-| post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (bind ?f ?g)) _ _ _  =>  
+| post (lifter (F:=?ifce) (M:=?m) (hoare_of_contract ?c)
+    (A:=_) (bind ?f ?g)) _ _ _ =>
       idtac "=> lifter bind";
       let run1 := fresh "lrun" in
       let run2 := fresh "rrun" in

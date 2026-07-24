@@ -4,8 +4,9 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
+From FreerDPS Require Import Init.
 From FreerDPS Require Export
-     Interface
+     Effect
      Typeclasses
      Impure
      Semantics

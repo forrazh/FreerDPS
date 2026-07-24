@@ -7,47 +7,42 @@
 Attributes deprecated(
   note="This file is unused and will probably be removed in later versions.").
 
-(** In FreeSpec, there is no particular semantics attach to interface's
-    primitives. Once an interface has been defined, we can provide one (or
+(** In FreeSpec, there is no particular semantics attach to effect's
+    primitives. Once an effect has been defined, we can provide one (or
     more) operational semantics to interpret its primitives. *)
 
 (** * Definition *)
 
-(** An operational [semantics] for the interface [i] is coinductively defined as
-    a function which can be used to interpret any primitive of [i]; it produces
+(** An operational [semantics] for the effect [F] is coinductively defined as
+    a function which can be used to interpret any primitive of [F]; it produces
     an [interp_out] term. *)
 
-From mathcomp Require Import ssreflect.
-
-(* WARNING: Move this import to its MathComp counterpart. *)
-From Stdlib Require Import Program Setoid Morphisms.
+From FreerDPS Require Import Init.
 (* From ExtLib Require Import Monad StateMonad. *)
-From FreerDPS Require Export Interface Impure.
-From monae Require Import preamble hierarchy monad_model.
-
-From HB Require Import structures.
+From FreerDPS Require Export Effect Impure.
+From monae Require Import monad_model.
 
 #[local] Open Scope signature_scope.
 #[local] Open Scope monae_scope.
 
 
-CoInductive semantics (i : interface) : Type :=
-| mk_semantics (f : forall (α : Type), i α -> α * semantics i) : semantics i.
+CoInductive semantics (F : effect) : Type :=
+| mk_semantics (f : forall (α : Type), F α -> α * semantics F) : semantics F.
 
-Arguments mk_semantics [i] (f).
+Arguments mk_semantics [F] (f).
 
 (** Thus, a [semantics] does not only compute a result for a primitive, but also
     provides a new semantics.  This is necessary to model impurity: the same
     primitive may or may not return the same result when called several
     times.
 
-    As for interfaces, the simpler [semantics] is the operational semantics for
-    [iempty], the empty interface. *)
+    As for effects, the simpler [semantics] is the operational semantics for
+    [eempty], the empty effect. *)
 
-Definition iempty_semantics : semantics iempty :=
-  mk_semantics (fun α (e : iempty α) => match e with end).
+Definition eempty_semantics : semantics eempty :=
+  mk_semantics (fun α (e : eempty α) => match e with end).
 
-(** We also provide a semantics for the [STORE s] interface: *)
+(** We also provide a semantics for the [STORE s] effect: *)
 
 CoFixpoint store {s} (init : s) : semantics (STORE s) :=
   mk_semantics (fun α (e : STORE s α) =>
@@ -59,16 +54,16 @@ CoFixpoint store {s} (init : s) : semantics (STORE s) :=
 (** We provide several helper functions to interpret primitives with
     semantics. *)
 
-Definition run_effect {i α} (sem : semantics i) (e : i α) : α * semantics i :=
+Definition run_effect {F α} (sem : semantics F) (e : F α) : α * semantics F :=
   match sem with mk_semantics f => f α e end.
 
-Definition eval_effect {i α} (sem : semantics i) (e : i α) : α :=
+Definition eval_effect {F α} (sem : semantics F) (e : F α) : α :=
   fst (run_effect sem e).
 
-Definition exec_effect {i α} (sem : semantics i) (e : i α) : semantics i :=
+Definition exec_effect {F α} (sem : semantics F) (e : F α) : semantics F :=
   snd (run_effect sem e).
 
-Lemma run_effect_equation {i α} (sem : semantics i) (e : i α)
+Lemma run_effect_equation {F α} (sem : semantics F) (e : F α)
   : run_effect sem e = (eval_effect sem e, exec_effect sem e).
 
 Proof.
@@ -76,11 +71,11 @@ Proof.
   destruct run_effect; reflexivity.
 Qed.
 
-(** Besides, and similarly to interfaces, operational semantics can and should
+(** Besides, and similarly to effects, operational semantics can and should
     be composed together.  To that end, we provide the [semprod] operator. *)
 
-CoFixpoint semprod {i j} (sem_i : semantics i) (sem_j : semantics j)
-  : semantics (i + j) :=
+CoFixpoint semprod {F E} (sem_i : semantics F) (sem_j : semantics E)
+  : semantics (F + E) :=
   mk_semantics (fun _ e =>
                   match e with
                   | in_left e =>
@@ -102,7 +97,7 @@ Infix "*" := semprod : semantics_scope.
 (** A term of type [impure a] describes an impure computation expected to return
     a term of type [a].  Interpreting this term means actually realizing the
     computation and producing the result.  This requires to provide an
-    operational semantics for the interfaces used by the computation.
+    operational semantics for the effects used by the computation.
 
     Some operational semantics may be defined in Gallina by means of the
     [semantics] type. In such a case, we provide helper functions to use them in
@@ -115,30 +110,31 @@ Infix "*" := semprod : semantics_scope.
     - [eval_impure] only returns the result of [p].
     - [exec_impure] only returns the new operational semantics. *)
 
-Notation interp i := (StateMonad.acto (semantics i)).
+Notation interp F := (StateMonad.acto (semantics F)).
 
-Definition interface_to_state {i:interface} : i ~~> interp i :=
+Definition effect_to_state {F : effect} : F ~~> interp F :=
   fun a e => (fun sem => run_effect sem e).
 
 
-Definition to_state {i} {im : impureMonad i}: im ~~> interp i := impure_lift _ interface_to_state.
+Definition to_state {F} {im : impureMonad F} : im ~~> interp F :=
+  impure_lift _ effect_to_state.
 
-Arguments to_state {i α} _ : rename.
+Arguments to_state {F α} _ : rename.
 
-Definition run_impure {i a} {im : impureMonad i} (sem : semantics i) (p : im a) : a * semantics i :=
+Definition run_impure {F a} {im : impureMonad F} (sem : semantics F) (p : im a) : a * semantics F :=
    (to_state _ p) sem.
 
-Definition eval_impure {i a} {im : impureMonad i} (sem : semantics i) (p : im a) : a :=
+Definition eval_impure {F a} {im : impureMonad F} (sem : semantics F) (p : im a) : a :=
   fst (run_impure sem p).
 
-Definition exec_impure {i a} {im : impureMonad i} (sem : semantics i) (p : im a) : semantics i :=
+Definition exec_impure {F a} {im : impureMonad F} (sem : semantics F) (p : im a) : semantics F :=
   snd (run_impure sem p).
 
 (** * In-place Primitives Handling *)
 
 
-Fixpoint with_semantics {ix j α} (sem : semantics j) (p : impure (ix + j) α)
-  : impure ix α :=
+Fixpoint with_semantics {Fx E α} (sem : semantics E) (p : impure (Fx + E) α)
+  : impure Fx α :=
   match p with
   | Impure.local x => Impure.local x
   | request_then _ (in_right e) f =>
@@ -151,14 +147,14 @@ Fixpoint with_semantics {ix j α} (sem : semantics j) (p : impure (ix + j) α)
 (** We provide [with_store], a helper function to locally provide a mutable
     variable. *)
 
-Definition with_store {ix s a} (x : s) (p : impure (ix + STORE s) a)
-  : impure ix a :=
+Definition with_store {Fx s a} (x : s) (p : impure (Fx + STORE s) a)
+  : impure Fx a :=
   with_semantics (store x) p.
 
 (** Nesting [with_semantics] calls works to some extends. If each
-    [with_semantics] provides a different interface from the rest of the stack,
+    [with_semantics] provides a different effect from the rest of the stack,
     then everything behaves as expected. If, for some reason, you end up in a
-    situation where you provide the exact same interface twice (typically if you
+    situation where you provide the exact same effect twice (typically if you
     use [with_store]), then the typeclass inferences will favor the deepest one
     in the stack. For instance,
 
@@ -170,5 +166,5 @@ Compute (with_store 0 (with_store 1 get)).
 
 <<
      = local 1
-     : impure ?ix nat
+     : impure ?Fx nat
 >> *)
