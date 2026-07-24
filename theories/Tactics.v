@@ -46,12 +46,10 @@ Ltac simplify_gens :=
            destruct H
 
          | |- context[@proj_p ?Fx ?Fx (refl_MayProvide ?Fx) _ ?e] =>
-           change (@proj_p Fx Fx (refl_MayProvide Fx) _ e) with (Some e);
            cbn match;
            cbn beta
 
          | H: context[@proj_p ?Fx ?Fx (refl_MayProvide ?Fx) _ ?e] |- _ =>
-           change (@proj_p Fx Fx (refl_MayProvide Fx) _ e) with (Some e) in H;
            cbn match in H;
            cbn beta in H
 

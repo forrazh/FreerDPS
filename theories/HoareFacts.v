@@ -51,8 +51,6 @@ Proof.
   + now apply run.
   + cbn in Hp.
     destruct Hp as [He Hn].
-    change (freer_bind (impure op f0) f)
-      with (freer_bind (impure op (fun x => f0 x)) f).
     split.
     ++ exact He.
     ++ intros x ω' Hpost.
