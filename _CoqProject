@@ -16,3 +16,4 @@
 ./theories/Typeclasses.v
 
 ./examples/airlock.v
+./examples/ping/interfaces.v
