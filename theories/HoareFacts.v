@@ -7,9 +7,7 @@
 Attributes deprecated(
   note="The contents of this file will be moved to `Hoare.v`.").
 
-From mathcomp Require Import ssreflect.
-From FreerDPS Require Import Interface Impure Contract Hoare.
-From monae Require Import preamble hierarchy.
+From FreerDPS Require Import Init Effect Impure Contract Hoare.
 Generalizable All Variables.
 
 (** * General Lemmas *)

@@ -7,15 +7,14 @@
 Attributes deprecated(
   note="This file is unused and will probably be removed in later versions.").
 
+From FreerDPS Require Import Init.
 (* From ExtLib Require Import StateMonad. *)
-From mathcomp Require Import ssreflect.
-From FreerDPS Require Export Interface Semantics Impure.
-From monae Require Import preamble hierarchy monad_lib.
-From HB Require Import structures.
+From FreerDPS Require Export Effect Semantics Impure.
+From monae Require Import monad_lib.
 (** * Definition *)
 
-(** In FreeSpec, a _component_ is an entity which exposes an interface [i],
-    and uses primitives of an interface [j] to compute the results of primitives
+(** In FreeSpec, a _component_ is an entity which exposes an effect [i],
+    and uses primitives of an effect [j] to compute the results of primitives
     of [i].  Besides, a component is likely to carry its own internal state (of
     type [s]).
 
@@ -30,13 +29,13 @@ From HB Require Import structures.
     Thus, a component [c : component i j] is a polymorphic function which
     maps primitives of [i] to impure computations using [j]. *)
 
-Definition component (i j : interface) `{im : impureMonad j} : Type :=
+Definition component (i j : effect) `{im : impureMonad j} : Type :=
   forall (α : Type), i α -> im α.
 
 (** The similarity between FreeSpec components and operational semantics may be
     confusing at first. The main difference between the two concepts is simple:
     operational semantics are self-contained terms which can, alone, be used to
-    interpret impure computations of a given interface.  Components, on the
+    interpret impure computations of a given effect.  Components, on the
     other hand, are not self-contained.  Without an operational semantics for
     [j], we cannot use a component [c : component i j] to interpret an impure
     computation using [i].
@@ -60,13 +59,14 @@ CoFixpoint derive_semantics {i j} {im : impureMonad j} (c : component i j) (sem 
     independently, then composing them together with [semprod] and
     [derive_semantics]. *)
 
-Definition bootstrap {i} {im : impureMonad iempty} (c : component i iempty) : semantics i :=
-  derive_semantics (im:=im) c iempty_semantics.
+Definition bootstrap {i} {im : impureMonad eempty}
+    (c : component i eempty) : semantics i :=
+  derive_semantics (im:=im) c eempty_semantics.
 
 (** * In-place Primitives Handling *)
 
 (** The function [with_component] allows for locally providing an additional
-    interface [j] within an impure computation of type [impure ix a]. The
+    effect [j] within an impure computation of type [impure ix a]. The
     primitives of [j] will be handled by impure computations, i.e., a component.
     of type [c : compoment j ix s]. *)
 Local Open Scope monae_scope.

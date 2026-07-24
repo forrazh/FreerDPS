@@ -7,34 +7,33 @@
 Attributes deprecated(
   note="This file is unused and will probably be removed in later versions.").
 
-From FreerDPS Require Import Interface Semantics Contract.
-From monae Require Import preamble hierarchy monad_transformer monad_model.
-From HB Require Import structures.
-
-From mathcomp Require Import ssreflect.
+From FreerDPS Require Import Init.
+From FreerDPS Require Import Effect Semantics Contract.
+From monae Require Import monad_transformer monad_model.
 Generalizable All Variables.
 
 Notation instrument Ω i := (stateT Ω (StateMonad.acto (semantics i))).
 
 
-Definition modify {S} {M : stateMonad S} (f : S -> S) : M S := get >>= 
+Definition modify {S} {M : stateMonad S} (f : S -> S) : M S := get >>=
   fun s => put (f s) >>=
   fun _ => Ret s.
 
 Arguments liftS {_ _ _}.
-Arguments interface_to_state {_ _}.
+Arguments effect_to_state {_ _}.
 
 
-Program Definition interface_to_instrument `{MayProvide ix i} `(c : contract i Ω)
-  : ix ~~> instrument Ω ix := 
-  fun a e => 
-    (liftS (A:=a) $ interface_to_state e) 
+Program Definition effect_to_instrument
+    `{MayProvide ix i} `(c : contract i Ω)
+  : ix ~~> instrument Ω ix :=
+  fun a e =>
+    (liftS (A:=a) $ effect_to_state e)
     >>= fun x => modify (fun ω => gen_witness_update c ω e x)
     >>= fun _ => Ret x.
 
-Definition to_instrument `{MayProvide ix i} `(c : contract i Ω) {im : impureMonad ix}
+Definition to_instrument `{MayProvide ix i} `(c : contract i Ω)
+    {im : impureMonad ix}
   : im ~~> instrument Ω ix :=
-  impure_lift _ $ interface_to_instrument c.
+  impure_lift _ $ effect_to_instrument c.
 
 Arguments to_instrument {ix i _ Ω} (c) {α} : rename.
-

@@ -5,9 +5,9 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 (** * Utils Functions *)
-(* From HB Require Export structures. *)
 From monae Require Export preamble hierarchy.
-From mathcomp Require Export ssreflect. 
+From HB Require Export structures.
+From mathcomp Require Export ssreflect boolp.
 Ltac done :=
   trivial; hnf; intros; solve
    [ do ![solve [trivial | simple refine (@sym_equal _ _ _ _); trivial]
@@ -24,7 +24,7 @@ Notation "f $ x" := (f x) (at level 60, right associativity, only parsing).
 (** * Tactics *)
 
 (* WARNING: Move this import to its MathComp counterpart. *)
-From Stdlib Require Export Eqdep.
+From Stdlib Require Export Eqdep Program Setoid Morphisms.
 
 Ltac ssubst :=
   lazymatch goal with

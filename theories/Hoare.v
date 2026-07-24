@@ -4,11 +4,10 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
+From FreerDPS Require Import Init.
 (* From ExtLib Require Import Functor Applicative Monad. *)
-From HB Require Import structures.
-From FreerDPS Require Import Interface Impure Contract mathcomp_extra.
-From mathcomp Require Import all_boot boolp classical_sets.
-From monae Require Import preamble hierarchy.
+From FreerDPS Require Import Effect Impure Contract mathcomp_extra.
+From mathcomp Require Import all_boot classical_sets.
 
 Generalizable All Variables.
 
@@ -129,9 +128,6 @@ Definition contract_of_hoare `{MayProvide ix i} `(c : contract i Ω)
     (fun ω => gen_caller_obligation c ω e)
     (fun ω x ω' => gen_callee_obligation c ω e x /\
                    ω' = gen_witness_update c ω e x).
-
-#[deprecated(note="Name will change to `contract_of_hoare`.")]
-Notation interface_to_hoare := contract_of_hoare (only parsing).
 
 Definition to_hoare `{MayProvide ix i} {im : impureMonad ix} `(c : contract i Ω)
     : im ~~> hoare Ω :=

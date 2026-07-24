@@ -7,8 +7,7 @@
 Attributes deprecated(note="This file will be deleted.").
 
 (* From ExtLib Require Import Monad. *)
-From monae Require Import preamble hierarchy.
-From FreerDPS Require Import Init Interface Contract Impure Hoare HoareFacts.
+From FreerDPS Require Import Init Effect Contract Impure Hoare HoareFacts.
 
 Ltac destruct_if_when :=
   let equ_cond := fresh "equ_cond" in
@@ -110,7 +109,7 @@ Ltac prove_impure :=
     | |- pre ?pcond ?ω =>
 
     lazymatch pcond with 
-      | lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) ?p => let p := (eval hnf in p) in
+      | lifter (i:=?ifce) (M:=?m) (contract_of_hoare ?c) (A:=_) ?p => let p := (eval hnf in p) in
         lazymatch p with
         | request_then ?e ?f =>
           let o_caller := fresh "o_caller" in
@@ -179,7 +178,7 @@ Ltac unroll_post run :=
       inversion run; ssubst;
       clear run;
       lazymatch goal with
-      | next : exists _, post (interface_to_hoare c _ e) _ _ _ /\ _ |- _ =>
+      | next : exists _, post (contract_of_hoare c _ e) _ _ _ /\ _ |- _ =>
         let ω'' := fresh "ω" in
         let o_callee := fresh "o_callee" in
         let run := fresh "run" in
@@ -230,7 +229,7 @@ Ltac run_simpl run :=
     cleanvert run;
     idtac "=> => inverted";
     match goal with
-    | next : exists _, post (interface_to_hoare c (A:=_) e) _ _ _ /\ _ |- _ => 
+    | next : exists _, post (contract_of_hoare c (A:=_) e) _ _ _ /\ _ |- _ =>
         idtac "=> => => found next: " next;
         let ω'' := fresh "ω" in 
         let o_callee := fresh "o_callee" in 
@@ -244,7 +243,8 @@ Ltac run_simpl run :=
   | local ?x => idtac "=> => PURE!"; cleanvert run
   | _ => idtac "<== freer out" 
   end
-| post (lifter (i:=?ifce) (M:=?m) (interface_to_hoare ?c) (A:=_) (bind ?f ?g)) _ _ _  =>  
+| post (lifter (i:=?ifce) (M:=?m) (contract_of_hoare ?c)
+    (A:=_) (bind ?f ?g)) _ _ _ =>
       idtac "=> lifter bind";
       let run1 := fresh "lrun" in
       let run2 := fresh "rrun" in

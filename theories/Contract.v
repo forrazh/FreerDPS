@@ -6,16 +6,13 @@
 
 (** In this library, we provide the necessary material to reason about FreeSpec
     components both in isolation, and in composition.  To do that, we focus our
-    reasoning principles on interfaces, by defining how their primitives shall
+    reasoning principles on effects, by defining how their primitives shall
     be used, and what to expect the result computed by “correct” operational
     semantics (according to a certain definition of “correct”). *)
 
-(* WARNING: Move this import to its MathComp counterpart. *)
-From Stdlib Require Import Setoid Morphisms.
+From FreerDPS Require Import Init.
 (* From ExtLib Require Import StateMonad MonadState MonadTrans. *)
-From FreerDPS Require Import Interface Impure Semantics Component.
-From mathcomp Require Import ssreflect.
-From monae Require Import preamble hierarchy.
+From FreerDPS Require Import Effect Impure.
 #[local]
 Open Scope signature_scope.
 Open Scope monae_scope.
@@ -24,7 +21,7 @@ Generalizable All Variables.
 
 (** * Definition *)
 
-(** A contract dedicated to [i : interface] primarily provides two
+(** A contract dedicated to [i : effect] primarily provides two
     predicates.
 
     - [caller_obligation] distinguishes between primitives that can be used (by
@@ -38,12 +35,12 @@ Generalizable All Variables.
     parameterized by what we have called a “witness.”  A witness is a term which
     describes the necessary information of the past, and allows for taking
     decision for the present.  It can be seen as an abstraction of the concrete
-    state of the interface implementor.
+    state of the effect implementor.
 
     To keep this state up-to-date after each primitive interpretation,
     contracts also define a dedicated function [witness_update]. *)
 
-Record contract (i : interface) (Ω : Type) : Type := make_contract
+Record contract (i : effect) (Ω : Type) : Type := make_contract
   { witness_update (ω : Ω) : forall (α : Type), i α -> α -> Ω
   ; caller_obligation (ω : Ω) : forall (α : Type),  i α -> Prop
   ; callee_obligation (ω : Ω) : forall (α : Type), i α -> α -> Prop
@@ -59,7 +56,7 @@ Arguments callee_obligation [i Ω] (c ω) [α] (_ _).
 
 (** The most simple contract we can define is the one that requires
     anything both for the impure computations which uses the primitives of a
-    given interface, and for the operational semantics which compute results for
+    given effect, and for the operational semantics which compute results for
     these primitives. *)
 
 Definition const_witness {i} :=
@@ -75,18 +72,18 @@ Inductive no_callee_obligation {i Ω} (ω : Ω) (α : Type) (e : i α) (x : α) 
 
 #[global] Hint Constructors no_callee_obligation : freespec.
 
-Definition no_contract (i : interface) : contract i unit :=
+Definition no_contract (i : effect) : contract i unit :=
   {| witness_update := const_witness
    ; caller_obligation := no_caller_obligation
    ; callee_obligation := no_callee_obligation
    |}.
 
 (** A similar —and as simple— contract is the one that forbids the use of a
-    given interface. *)
+    given effect. *)
 
 Definition do_no_use {i Ω} (ω : Ω) (α : Type) (e : i α) : Prop := False.
 
-Definition forbid_specs (i : interface) : contract i unit :=
+Definition forbid_specs (i : effect) : contract i unit :=
   {| witness_update := const_witness
    ; caller_obligation := do_no_use
    ; callee_obligation := no_callee_obligation
@@ -206,9 +203,9 @@ Defined.
 
 (** * Composing Contracts *)
 
-(** As we compose interfaces and operational semantics, we can easily compose
+(** As we compose effects and operational semantics, we can easily compose
     contracts together, by means of the [contractprod] operator. Given [i] and [j]
-    two interfaces, if we can reason about [i] and [j] independently (e.g., the
+    two effects, if we can reason about [i] and [j] independently (e.g., the
     caller obligations of [j] do not vary when we use [i]), then we can compose
     [ci : contract i Ωi] and [cj : contract j Ωj], such that [contractprod ci cj] in a
     contract for [i + j]. *)
@@ -282,12 +279,12 @@ Infix "^" := sharedcontractprod  : contract_scope.
 
 (** * Contract By Example *)
 
-(** Finally, and as an example, we define a contract for the interface
+(** Finally, and as an example, we define a contract for the effect
     [STORE s] we discuss in [FreeSpec.Core.Impure].  As a reminder, the
-    interface is defined as follows:
+    effect is defined as follows:
 
 <<
-Inductive STORE (s : Type) : interface :=
+Inductive STORE (s : Type) : effect :=
 | Get : STORE s s
 | Put (x : s) : STORE s unit.
 >>
@@ -326,7 +323,7 @@ Definition store_specs (s : Type) : contract (STORE s) s :=
   |}.
 
 (** Now, as we briefly mentionned, this contract allows for reasoning about an
-    impure computation which uses the [STORE s] interface, assuming the mutable,
+    impure computation which uses the [STORE s] effect, assuming the mutable,
     global variable has been initialized.  We can define another contract that
     does not rely on such assumption, and on the contrary, requires an impure
     computation to initialize the variable prior to using it.
@@ -337,5 +334,5 @@ Definition store_specs (s : Type) : contract (STORE s) s :=
 
     This is one of the key benefits of the FreeSpec approach: because the
     contracts are defined independently from impure computations and
-    interfaces, we can actually define several contracts to consider
+    effects, we can actually define several contracts to consider
     different set of hypotheses. *)

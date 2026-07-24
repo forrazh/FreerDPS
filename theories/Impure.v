@@ -6,22 +6,19 @@
 
 Attributes deprecated(note="This file will be renamed to `Freer.v`.").
 
-(** In [FreeSpec.Core.Interface], we have introduced the [interface] type, to
+(** In [FreeSpec.Core.Effect], we have introduced the [effect] type, to
     model the set of primitives an impure computation can use. We also introduce
     [MayProvide], [Provide] and [Distinguish]. They are three type classes which
-    allow for manipulating _polymorphic interface composite_.
+    allow for manipulating _polymorphic effect composite_.
 
 
     In this library, we provide the [impure] monad, defined after the
     <<Program>> monad introduced by the <<operational>> package (see
     <<https://github.com/whitequark/unfork#introduction>>). *)
 
-From mathcomp Require Import ssreflect ssrfun.
-(* WARNING: Move this import to its MathComp counterpart. *)
-From Stdlib Require Import Program Setoid Morphisms.
-From HB Require Import structures.
-From monae Require Import preamble hierarchy.
-From FreerDPS Require Export Interface.
+From FreerDPS Require Import Init.
+From mathcomp Require Import ssrfun.
+From FreerDPS Require Export Effect.
 
 Local Open Scope monae_scope.
 
@@ -32,18 +29,18 @@ Unset Printing Implicit Defensive.
 Generalizable All Variables.
 
 (** We introduce the [impure] monad to describe impure computations, that is
-    computations which uses primitives from certain interfaces. *)
+    computations which uses primitives from certain effects. *)
 
 (** * Definition *)
 
 (** The [impure] monad is an inductive datatype with two parameters: the
-    interface [i] to be used, and the type [α] of the result of the computation.
+    effect [i] to be used, and the type [α] of the result of the computation.
     The fact that [impure] is inductive rather than co-inductive means it is not
     possible to describe infinite computations.  This also means it is possible
     to interpret impure computations within Coq, providing an operational
     semantics for [i]. *)
 
-Inductive freer (i : interface) (α : Type) : Type :=
+Inductive freer (i : effect) (α : Type) : Type :=
 | local (x : α) : freer i α
 | request_then {β} (e : i β) (f : β -> freer i α) : freer i α.
 
@@ -61,7 +58,7 @@ Declare Scope impure_scope.
 Bind Scope impure_scope with freer.
 Delimit Scope impure_scope with impure.
 
-HB.mixin Record isMonadImpure (i : interface) (M : UU0 -> UU0) of Monad M := {
+HB.mixin Record isMonadImpure (i : effect) (M : UU0 -> UU0) of Monad M := {
     request : i ~~> M ; 
     impure_lift (N : monad) (l : i ~~> N) : M ~~> N ;
     impure_lift_ret : forall (N : monad) (l : i ~~> N) X (x : X),
@@ -79,7 +76,8 @@ HB.mixin Record isMonadImpure (i : interface) (M : UU0 -> UU0) of Monad M := {
 
 
 #[short(type=impureMonad)]
-HB.structure Definition MonadImpure (i : interface) := {M of isMonadImpure i M & isMonad M & isFunctor M}.
+HB.structure Definition MonadImpure (i : effect) :=
+  {M of isMonadImpure i M & isMonad M & isFunctor M}.
 
 (** * Monad Instances *)
 
@@ -137,9 +135,9 @@ HB.instance Definition _ := @isMonad_ret_bind.Build acto ret bind left_neutral r
 
     To complete these two monadic operations, we introduce the [request]
     function, whose purpose is to define an impure computation that uses a given
-    primitive [e] from an interface [i], and returns its result.  [request] does
+    primitive [e] from an effect [i], and returns its result.  [request] does
     not parameterize the [impure] monad with [i] directly, but rather with a
-    generic interface [ix].  [ix] is constrained with the [Provide] notation, so
+    generic effect [ix].  [ix] is constrained with the [Provide] notation, so
     that it has to provide at least [i]'s primitives.  *)
 
 End freer.
@@ -150,11 +148,11 @@ HB.export ImpureModule.
 Module Impure.
 Section freer.
 
-Variable i : interface.
+Variable i : effect.
 
 Local Notation M := (acto i).
 
-Definition requesti : i ~~> acto i := fun α e => 
+Definition request_effect : i ~~> acto i := fun α e =>
   request_then (inj_p e) (fun x => local x).
 
 Definition lifter (M : monad) `(l : i ~~> M) : acto i ~~> M :=
@@ -184,16 +182,17 @@ Proof.
 Qed.
 
 Let lifter_trigger : forall (cm : monad) (lifter_effect : i ~~> cm) X (fx : i X), 
-        lifter lifter_effect (requesti fx) = lifter_effect X fx.
+        lifter lifter_effect (request_effect fx) = lifter_effect X fx.
 Proof.
     move=>cm lifter_effect X fx.
-    by rewrite/lifter/requesti/=bindmret. 
+    by rewrite /lifter /request_effect /= bindmret.
 Qed.
 
 Let lifter_unique : forall (cm : monad) (lifter_effect : i ~~> cm) (lifter' : M ~~> cm),
             (forall X (x : X), lifter' X (ret X x) = @hierarchy.ret cm X x) ->
             (forall X Y (m : M X) (f : X -> M Y), lifter' Y (m >>= f) = (lifter' X m) >>= (fun x => lifter' Y (f x))) ->
-            (forall X (fx : i X), (lifter' X (requesti fx)) = lifter_effect X fx) ->
+            (forall X (fx : i X),
+              lifter' X (request_effect fx) = lifter_effect X fx) ->
         forall X (m : M X), lifter' X m = lifter lifter_effect m.
 Proof.
     move=>cm lifter_effect lifter' dret' dbind' dtrigger' X m.
@@ -201,7 +200,7 @@ Proof.
     elim:m=>[x| Y fy k Hy]/=.
     - exact/dret'.
     under [in RHS]eq_bind do rewrite -Hy.
-    by rewrite -dtrigger'-dbind'/requesti.
+    by rewrite -dtrigger' -dbind' /request_effect.
 Qed.
 
 HB.instance Definition _ := isMonadImpure.Build i M 
@@ -214,7 +213,8 @@ End freer.
 End Impure.
 HB.export Impure.
 
-Lemma impure_lift_if : forall (i : interface) (M : impureMonad i) (cm : monad) (lifter_effect : i ~~> cm) X (m m' : M X) b, 
+Lemma impure_lift_if : forall (i : effect) (M : impureMonad i) (cm : monad)
+    (lifter_effect : i ~~> cm) X (m m' : M X) b,
         impure_lift cm lifter_effect X (if b then m else m') = if b then ( impure_lift cm lifter_effect X m) else ( impure_lift cm lifter_effect X m').
 Proof.
     by move=>? ? ? ? ? ? ?; case.
@@ -223,13 +223,15 @@ HB.export impure_lift_if.
 
 Module ImpSt.
   Section impstate.
-        Variable i : interface.
+        Variable i : effect.
         Variable S : UU0.
-Definition requestis `{Provide ix i} {A} (e : i A): acto ix A :=
+Definition request_effect `{Provide ix i} {A} (e : i A) : acto ix A :=
   request_then (inj_p e) (fun x => local x).
 
-  Let iget `{Provide i (STORE S)} : acto i S:=requestis (inj_p Get).
-  Let iput `{Provide i (STORE S)} (s : S) : acto i ():=requestis (inj_p (Put s)).
+  Let iget `{Provide i (STORE S)} : acto i S :=
+    request_effect (inj_p Get).
+  Let iput `{Provide i (STORE S)} (s : S) : acto i () :=
+    request_effect (inj_p (Put s)).
 
 (** Note: there have been attempts to turn [request] into a typeclass
     function (to seamlessly use [request] with a [MonadTrans] instance such as

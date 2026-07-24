@@ -7,31 +7,26 @@
 Attributes deprecated(
   note="This file is unused and will probably be removed in later versions.").
 
-(** In FreeSpec, there is no particular semantics attach to interface's
-    primitives. Once an interface has been defined, we can provide one (or
+(** In FreeSpec, there is no particular semantics attach to effect's
+    primitives. Once an effect has been defined, we can provide one (or
     more) operational semantics to interpret its primitives. *)
 
 (** * Definition *)
 
-(** An operational [semantics] for the interface [i] is coinductively defined as
+(** An operational [semantics] for the effect [i] is coinductively defined as
     a function which can be used to interpret any primitive of [i]; it produces
     an [interp_out] term. *)
 
-From mathcomp Require Import ssreflect.
-
-(* WARNING: Move this import to its MathComp counterpart. *)
-From Stdlib Require Import Program Setoid Morphisms.
+From FreerDPS Require Import Init.
 (* From ExtLib Require Import Monad StateMonad. *)
-From FreerDPS Require Export Interface Impure.
-From monae Require Import preamble hierarchy monad_model.
-
-From HB Require Import structures.
+From FreerDPS Require Export Effect Impure.
+From monae Require Import monad_model.
 
 #[local] Open Scope signature_scope.
 #[local] Open Scope monae_scope.
 
 
-CoInductive semantics (i : interface) : Type :=
+CoInductive semantics (i : effect) : Type :=
 | mk_semantics (f : forall (α : Type), i α -> α * semantics i) : semantics i.
 
 Arguments mk_semantics [i] (f).
@@ -41,13 +36,13 @@ Arguments mk_semantics [i] (f).
     primitive may or may not return the same result when called several
     times.
 
-    As for interfaces, the simpler [semantics] is the operational semantics for
-    [iempty], the empty interface. *)
+    As for effects, the simpler [semantics] is the operational semantics for
+    [eempty], the empty effect. *)
 
-Definition iempty_semantics : semantics iempty :=
-  mk_semantics (fun α (e : iempty α) => match e with end).
+Definition eempty_semantics : semantics eempty :=
+  mk_semantics (fun α (e : eempty α) => match e with end).
 
-(** We also provide a semantics for the [STORE s] interface: *)
+(** We also provide a semantics for the [STORE s] effect: *)
 
 CoFixpoint store {s} (init : s) : semantics (STORE s) :=
   mk_semantics (fun α (e : STORE s α) =>
@@ -76,7 +71,7 @@ Proof.
   destruct run_effect; reflexivity.
 Qed.
 
-(** Besides, and similarly to interfaces, operational semantics can and should
+(** Besides, and similarly to effects, operational semantics can and should
     be composed together.  To that end, we provide the [semprod] operator. *)
 
 CoFixpoint semprod {i j} (sem_i : semantics i) (sem_j : semantics j)
@@ -102,7 +97,7 @@ Infix "*" := semprod : semantics_scope.
 (** A term of type [impure a] describes an impure computation expected to return
     a term of type [a].  Interpreting this term means actually realizing the
     computation and producing the result.  This requires to provide an
-    operational semantics for the interfaces used by the computation.
+    operational semantics for the effects used by the computation.
 
     Some operational semantics may be defined in Gallina by means of the
     [semantics] type. In such a case, we provide helper functions to use them in
@@ -117,11 +112,12 @@ Infix "*" := semprod : semantics_scope.
 
 Notation interp i := (StateMonad.acto (semantics i)).
 
-Definition interface_to_state {i:interface} : i ~~> interp i :=
+Definition effect_to_state {i : effect} : i ~~> interp i :=
   fun a e => (fun sem => run_effect sem e).
 
 
-Definition to_state {i} {im : impureMonad i}: im ~~> interp i := impure_lift _ interface_to_state.
+Definition to_state {i} {im : impureMonad i} : im ~~> interp i :=
+  impure_lift _ effect_to_state.
 
 Arguments to_state {i α} _ : rename.
 
@@ -156,9 +152,9 @@ Definition with_store {ix s a} (x : s) (p : impure (ix + STORE s) a)
   with_semantics (store x) p.
 
 (** Nesting [with_semantics] calls works to some extends. If each
-    [with_semantics] provides a different interface from the rest of the stack,
+    [with_semantics] provides a different effect from the rest of the stack,
     then everything behaves as expected. If, for some reason, you end up in a
-    situation where you provide the exact same interface twice (typically if you
+    situation where you provide the exact same effect twice (typically if you
     use [with_store]), then the typeclass inferences will favor the deepest one
     in the stack. For instance,
 

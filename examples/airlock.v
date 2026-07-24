@@ -5,8 +5,8 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 From Coq Require Import Arith.
+From FreerDPS Require Import Init.
 From FreerDPS Require Import Core Impure Hoare.
-From monae Require Import preamble hierarchy.
 
 #[local] Open Scope nat_scope.
 #[local] Open Scope monae_scope.
@@ -22,7 +22,7 @@ Inductive door : Type := left | right.
 Definition door_eq_dec (d d' : door) : { d = d' } + { ~ d = d' } :=
   ltac:(decide equality).
 
-Inductive DOORS : interface :=
+Inductive DOORS : effect :=
 | IsOpen : door -> DOORS bool
 | Toggle : door -> DOORS unit.
 
@@ -48,7 +48,7 @@ Definition close_door `{Provide ix DOORS} {im : impureMonad ix} (d : door) : im 
 
 (** ** Controller *)
 
-Inductive CONTROLLER : interface :=
+Inductive CONTROLLER : effect :=
 | Tick : CONTROLLER unit
 | RequestOpen (d : door) : CONTROLLER unit.
 
@@ -279,7 +279,7 @@ Lemma respectful_run_inv `{Provide ix DOORS} {A} (p : impure ix A)
     - Either [p] is a local, pure computation; in such a case, the doors state
       does not change, hence the proof is trivial.
 
-    - Or [p] consists in a request to the doors interface, and a continuation
+    - Or [p] consists in a request to the doors effect, and a continuation
       whose domain satisfies the theorem, i.e. it preserves the invariant that
       either the left or the right door is closed.  Due to this hypothesis, we
       only have to prove that the first request made by [p] does not break the
@@ -311,7 +311,7 @@ Proof.
   induction p; intros ω hpre run safe.
   + by unroll_post run.
   + run_simpl run.
-    have hpost : post (interface_to_hoare doors_contract (A:=β) e) ω x ω0
+    have hpost : post (contract_of_hoare doors_contract (A:=β) e) ω x ω0
       by split; [apply H2| by rewrite H3].
     (* move: H1 => /(_ x ω0) => H1. *)
      apply/(H1 x ω0) => //; [by apply hpre|].

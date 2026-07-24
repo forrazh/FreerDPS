@@ -10,7 +10,7 @@
 ./theories/Impure.v
 ./theories/Init.v
 ./theories/Instrument.v
-./theories/Interface.v
+./theories/Effect.v
 ./theories/Semantics.v
 ./theories/Tactics.v
 ./theories/Typeclasses.v

@@ -1,4 +1,4 @@
-From FreerDPS Require Import Interface.
+From FreerDPS Require Import Init Effect.
 
 Class Provide1 ix i1 `{Provide ix i1}.
 
