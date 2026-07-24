@@ -225,13 +225,20 @@ End ImpSt.
 
 Module FreerFuns.
 Definition trigger {Fx : effect} `{Provide Fx F}
-    {im : freerMonad Fx} : Fx ~~> im :=
+    {im : freerMonad Fx} : F ~~> im :=
   fun a op => request a (inj_p op).
+
+Check @trigger.
+Arguments trigger {_ _ _ _ _ _} _.
+
+Check (trigger Get).
+
 Definition iget {S} `{Provide F (STORE S)} {im : freerMonad F} : im S :=
-  trigger (inj_p Get).
+  trigger Get.
+
 Definition iput {S} `{Provide F (STORE S)} {im : freerMonad F}
     (s : S) : im unit :=
-  trigger (inj_p (Put s)).
+  trigger (Put s).
 End FreerFuns.
 
 HB.export FreerFuns.

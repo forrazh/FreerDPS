@@ -18,7 +18,7 @@ Lemma to_hoare_distinguished_request_preI
     {A} (op : G A) (ω : Ω) :
   pre (to_hoare (im:=im) c
     (trigger (Fx:=Fx) (F:=G) (im:=im)
-      (inj_p (Fx:=Fx) op))) ω.
+      op)) ω.
 Proof.
 by rewrite to_hoare_requestE /hoare_of_contract
   /gen_caller_obligation (@distinguish Fx G F).
@@ -31,7 +31,7 @@ Lemma to_hoare_distinguished_request_postE
     {A} (op : G A) (ω : Ω) (x : A) (ω' : Ω) :
   post (to_hoare (im:=im) c
     (trigger (Fx:=Fx) (F:=G) (im:=im)
-      (inj_p (Fx:=Fx) op))) ω x ω' <->
+      op)) ω x ω' <->
   ω' = ω.
 Proof.
 by rewrite to_hoare_requestE /=
@@ -80,6 +80,18 @@ case: x; case: guard=> /=;
 by split=> [[y [? [? [_ <-]]]] | [y ?]];
   exists y=>//;
   exists ω'; split.
+Qed.
+
+Lemma to_hoare_reifyE `{MayProvide Fx F} {im : freerMonad Fx}
+    `(c : contract F Ω) {A} (p : im A) :
+  to_hoare (im:=freer Fx) c
+    (denote (freer Fx) (@request Fx (freer Fx)) A p)
+  = to_hoare (im:=im) c p.
+Proof.
+by rewrite /to_hoare;
+  apply: (denote_unique (hoare Ω) (hoare_of_contract c)
+    (fun X => denote _ _ X \o denote _ _ X))=> *;
+  rewrite compE ?denote_ret ?denote_bind ?denote_request.
 Qed.
 
 End for_hoare_m.
