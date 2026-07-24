@@ -10,7 +10,11 @@ Attributes deprecated(
 From FreerDPS Require Import Init.
 (* From ExtLib Require Import StateMonad. *)
 From FreerDPS Require Export Effect Semantics Freer.
+From FreerDPS Require Import Contract Hoare.
 From monae Require Import monad_lib.
+
+Generalizable All Variables.
+
 (** * Definition *)
 
 (** In FreeSpec, a _component_ is an entity which exposes an effect [F],
@@ -31,6 +35,18 @@ From monae Require Import monad_lib.
 
 Definition component (F E : effect) `{im : impureMonad E} : Type :=
   forall (α : Type), F α -> im α.
+
+Definition correct_component `{MayProvide Ex E} {im : impureMonad Ex}
+    `(c : component F Ex) `(cF : contract F ΩF)
+    `(cE : contract E ΩE) (pred : ΩF -> ΩE -> Prop) :
+  Prop :=
+  forall (ωF : ΩF) (ωE : ΩE) (init : pred ωF ωE)
+      `(op : F α) (o_caller : caller_obligation cF ωF op),
+    pre (to_hoare cE $ c α op) ωE /\
+    forall (x : α) (ωE' : ΩE),
+      post (to_hoare (im:=im) cE (c α op)) ωE x ωE' ->
+      callee_obligation cF ωF op x /\
+      pred (witness_update cF ωF op x) ωE'.
 
 (** The similarity between FreeSpec components and operational semantics may be
     confusing at first. The main difference between the two concepts is simple:

@@ -346,25 +346,9 @@ Proof.
        exact: safe.
 Qed.
 
-(** ** Main Theorem *)
-Definition correct_component `{MayProvide Ex E}
-   `(c : component F Ex) `(ci : contract F ΩF) `(cj : contract E ΩE)
-    (pred : ΩF -> ΩE -> Prop)
-  : Prop :=
-   forall (ωF : ΩF) (ωE : ΩE) (init : pred ωF ωE)
-         `(e : F α) (o_caller : caller_obligation ci ωF e),
-    pre (to_hoare cj $ c α e) ωE /\
-    forall (x : α) (ωE' : ΩE)
-        (run : post
-          (to_hoare
-            (im:=ImpureModule_acto__canonical__Freer_MonadImpure Ex)
-            cj $ c α e) ωE x ωE'),
-      callee_obligation ci ωF e x /\ pred (witness_update ci ωF e x) ωE'.
-
-
-
 Lemma controller_correct `{StrictProvide2 Fx DOORS (STORE nat)}
-  : correct_component controller
+  : correct_component
+      (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx) controller
                       (no_contract CONTROLLER)
                       doors_contract
                       (fun _ ω => sel left ω = false \/ sel right ω = false).
