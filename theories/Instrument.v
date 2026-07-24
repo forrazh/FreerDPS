@@ -12,7 +12,7 @@ From FreerDPS Require Import Effect Semantics Contract.
 From monae Require Import monad_transformer monad_model.
 Generalizable All Variables.
 
-Notation instrument Ω i := (stateT Ω (StateMonad.acto (semantics i))).
+Notation instrument Ω F := (stateT Ω (StateMonad.acto (semantics F))).
 
 
 Definition modify {S} {M : stateMonad S} (f : S -> S) : M S := get >>=
@@ -24,16 +24,16 @@ Arguments effect_to_state {_ _}.
 
 
 Program Definition effect_to_instrument
-    `{MayProvide ix i} `(c : contract i Ω)
-  : ix ~~> instrument Ω ix :=
+    `{MayProvide Fx F} `(c : contract F Ω)
+  : Fx ~~> instrument Ω Fx :=
   fun a e =>
     (liftS (A:=a) $ effect_to_state e)
     >>= fun x => modify (fun ω => gen_witness_update c ω e x)
     >>= fun _ => Ret x.
 
-Definition to_instrument `{MayProvide ix i} `(c : contract i Ω)
-    {im : impureMonad ix}
-  : im ~~> instrument Ω ix :=
+Definition to_instrument `{MayProvide Fx F} `(c : contract F Ω)
+    {im : impureMonad Fx}
+  : im ~~> instrument Ω Fx :=
   impure_lift _ $ effect_to_instrument c.
 
-Arguments to_instrument {ix i _ Ω} (c) {α} : rename.
+Arguments to_instrument {Fx F _ Ω} (c) {α} : rename.

@@ -13,41 +13,41 @@ From FreerDPS Require Export Effect Semantics Impure.
 From monae Require Import monad_lib.
 (** * Definition *)
 
-(** In FreeSpec, a _component_ is an entity which exposes an effect [i],
-    and uses primitives of an effect [j] to compute the results of primitives
-    of [i].  Besides, a component is likely to carry its own internal state (of
+(** In FreeSpec, a _component_ is an entity which exposes an effect [F],
+    and uses primitives of an effect [E] to compute the results of primitives
+    of [F].  Besides, a component is likely to carry its own internal state (of
     type [s]).
 
 <<
-                           i +-------------------+      j
+                           F +-------------------+      E
                            | |                   |      |
-                   +------>| | c : component i j |----->|
+                   +------>| | c : component F E |----->|
                            | |                   |      |
                              +-------------------+
 >>
 
-    Thus, a component [c : component i j] is a polymorphic function which
-    maps primitives of [i] to impure computations using [j]. *)
+    Thus, a component [c : component F E] is a polymorphic function which
+    maps primitives of [F] to impure computations using [E]. *)
 
-Definition component (i j : effect) `{im : impureMonad j} : Type :=
-  forall (α : Type), i α -> im α.
+Definition component (F E : effect) `{im : impureMonad E} : Type :=
+  forall (α : Type), F α -> im α.
 
 (** The similarity between FreeSpec components and operational semantics may be
     confusing at first. The main difference between the two concepts is simple:
     operational semantics are self-contained terms which can, alone, be used to
     interpret impure computations of a given effect.  Components, on the
     other hand, are not self-contained.  Without an operational semantics for
-    [j], we cannot use a component [c : component i j] to interpret an impure
-    computation using [i].
+    [E], we cannot use a component [c : component F E] to interpret an impure
+    computation using [F].
 
-    Given an initial semantics for [j], we can however derive an operational
-    semantics for [i] from a component [c]. *)
+    Given an initial semantics for [E], we can however derive an operational
+    semantics for [F] from a component [c]. *)
 
 (** * Semantics Derivation *)
 
 
-CoFixpoint derive_semantics {i j} {im : impureMonad j} (c : component i j) (sem : semantics j)
-  : semantics i :=
+CoFixpoint derive_semantics {F E} {im : impureMonad E} (c : component F E) (sem : semantics E)
+  : semantics F :=
   mk_semantics (fun a p =>
                   let (res, next) := (to_state (α:=im) _ $ c a p) sem in
                   (res, derive_semantics c next)).
@@ -59,25 +59,25 @@ CoFixpoint derive_semantics {i j} {im : impureMonad j} (c : component i j) (sem 
     independently, then composing them together with [semprod] and
     [derive_semantics]. *)
 
-Definition bootstrap {i} {im : impureMonad eempty}
-    (c : component i eempty) : semantics i :=
+Definition bootstrap {F} {im : impureMonad eempty}
+    (c : component F eempty) : semantics F :=
   derive_semantics (im:=im) c eempty_semantics.
 
 (** * In-place Primitives Handling *)
 
 (** The function [with_component] allows for locally providing an additional
-    effect [j] within an impure computation of type [impure ix a]. The
-    primitives of [j] will be handled by impure computations, i.e., a component.
-    of type [c : compoment j ix s]. *)
+    effect [E] within an impure computation of type [impure Fx a]. The
+    primitives of [E] will be handled by impure computations, i.e., a component.
+    of type [c : compoment E Fx s]. *)
 Local Open Scope monae_scope.
 
 
 #[local]
-Fixpoint with_component_aux {ix j α}
- (* {im : impureMonad ix}  *)
- (* {jm : impureMonad (ix + j)} *)
-(c : component (im:=Impure.ImpureModule_acto__canonical__Impure_MonadImpure ix) j ix) (p : impure (ix + j) α)
-  : impure ix α :=
+Fixpoint with_component_aux {Fx E α}
+ (* {im : impureMonad Fx}  *)
+ (* {jm : impureMonad (Fx + E)} *)
+(c : component (im:=Impure.ImpureModule_acto__canonical__Impure_MonadImpure Fx) E Fx) (p : impure (Fx + E) α)
+  : impure Fx α :=
   match p with
   | local x => local x
   | request_then T (in_right e) f =>
@@ -89,14 +89,14 @@ Fixpoint with_component_aux {ix j α}
 Notation "m >>= f" := (impure_bind m f).
 Notation "m >> f" := (impure_bind m (fun _ =>f)).
 
-Definition with_component {ix j α}
-  (* `{im : impureMonad ix}
-  `{ixjm : impureMonad (ix+j)} *)
-  (initializer : impure ix unit)
-  (c : component (im:=Impure.ImpureModule_acto__canonical__Impure_MonadImpure ix) j ix)
-  (finalizer : impure ix unit)
-  (p : impure (ix+j) α)
-  : impure ix α :=
+Definition with_component {Fx E α}
+  (* `{im : impureMonad Fx}
+  `{ixjm : impureMonad (Fx+E)} *)
+  (initializer : impure Fx unit)
+  (c : component (im:=Impure.ImpureModule_acto__canonical__Impure_MonadImpure Fx) E Fx)
+  (finalizer : impure Fx unit)
+  (p : impure (Fx+E) α)
+  : impure Fx α :=
   initializer >>
   with_component_aux c p >>= fun res =>
   finalizer >>

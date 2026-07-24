@@ -45,13 +45,13 @@ Ltac simplify_gens :=
          | H: _ /\ _ |- _ =>
            destruct H
 
-         | |- context[@proj_p ?ix ?ix (refl_MayProvide ?ix) _ ?e] =>
-           change (@proj_p ix ix (refl_MayProvide ix) _ e) with (Some e);
+         | |- context[@proj_p ?Fx ?Fx (refl_MayProvide ?Fx) _ ?e] =>
+           change (@proj_p Fx Fx (refl_MayProvide Fx) _ e) with (Some e);
            cbn match;
            cbn beta
 
-         | H: context[@proj_p ?ix ?ix (refl_MayProvide ?ix) _ ?e] |- _ =>
-           change (@proj_p ix ix (refl_MayProvide ix) _ e) with (Some e) in H;
+         | H: context[@proj_p ?Fx ?Fx (refl_MayProvide ?Fx) _ ?e] |- _ =>
+           change (@proj_p Fx Fx (refl_MayProvide Fx) _ e) with (Some e) in H;
            cbn match in H;
            cbn beta in H
 
@@ -109,7 +109,7 @@ Ltac prove_impure :=
     | |- pre ?pcond ?ω =>
 
     lazymatch pcond with 
-      | lifter (i:=?ifce) (M:=?m) (contract_of_hoare ?c) (A:=_) ?p => let p := (eval hnf in p) in
+      | lifter (F:=?ifce) (M:=?m) (contract_of_hoare ?c) (A:=_) ?p => let p := (eval hnf in p) in
         lazymatch p with
         | request_then ?e ?f =>
           let o_caller := fresh "o_caller" in
@@ -243,7 +243,7 @@ Ltac run_simpl run :=
   | local ?x => idtac "=> => PURE!"; cleanvert run
   | _ => idtac "<== freer out" 
   end
-| post (lifter (i:=?ifce) (M:=?m) (contract_of_hoare ?c)
+| post (lifter (F:=?ifce) (M:=?m) (contract_of_hoare ?c)
     (A:=_) (bind ?f ?g)) _ _ _ =>
       idtac "=> lifter bind";
       let run1 := fresh "lrun" in

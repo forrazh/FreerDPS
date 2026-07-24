@@ -62,22 +62,22 @@ Arguments Put [s] (x).
     express the constraints in terms of effect availability.  We tackle this
     challenge by means of _effect composites_.
 
-    - We say an effect composite [ix] _provides_ a concrete effect [i]
-      when there exists a function [inj_p : forall α, i α -> ix α].
-    - Conversely, we can determine if a primitive of an effect composite [ix]
-      is forwarded to a concrete effect [i] when there exists a function
-      [proj_p : forall α, ix α -> option (i a)].
+    - We say an effect composite [Fx] _provides_ a concrete effect [F]
+      when there exists a function [inj_p : forall α, F α -> Fx α].
+    - Conversely, we can determine if a primitive of an effect composite [Fx]
+      is forwarded to a concrete effect [F] when there exists a function
+      [proj_p : forall α, Fx α -> option (F a)].
 
     We encode this mechanics using two type classes: [MayProvide], and
     [Provide]. *)
 
-Class MayProvide (ix i : effect) : Type :=
-  { proj_p {α} (e : ix α) : option (i α)
+Class MayProvide (Fx F : effect) : Type :=
+  { proj_p {α} (e : Fx α) : option (F α)
   }.
 
-Class Provide (ix i : effect) `{MayProvide ix i} : Type :=
-  { inj_p {α} (e : i α) : ix α
-  ; proj_inj_p_equ {α} (e : i α) : proj_p (inj_p e) = Some e
+Class Provide (Fx F : effect) `{MayProvide Fx F} : Type :=
+  { inj_p {α} (e : F α) : Fx α
+  ; proj_inj_p_equ {α} (e : F α) : proj_p (inj_p e) = Some e
   }.
 
 (** We provide a default instance for [MayProvide] in the form of a function
@@ -85,18 +85,18 @@ Class Provide (ix i : effect) `{MayProvide ix i} : Type :=
     ridiculously high priority number to ensure it is selected only if no other
     instances are found. *)
 
-Instance default_MayProvide (i j : effect) : MayProvide i j|1000 :=
+Instance default_MayProvide (F E : effect) : MayProvide F E|1000 :=
   { proj_p := fun _ _ => None
   }.
 
-(** It is expected that, for an effect composite [ix] which provides [i] and
-    may provide [j], [inj_p] and [proj_p] do not mix up [i] and [j]
-    primitives. That is, injecting a primitive [e] of [i] inside [ix], then
-    projecting the resulting primitive into [j] returns [None] as long as [i]
-    and [j] are two different effects. *)
+(** It is expected that, for an effect composite [Fx] which provides [F] and
+    may provide [E], [inj_p] and [proj_p] do not mix up [F] and [E]
+    primitives. That is, injecting a primitive [e] of [F] inside [Fx], then
+    projecting the resulting primitive into [E] returns [None] as long as [F]
+    and [E] are two different effects. *)
 
-Class Distinguish (ix i j : effect) `{Provide ix i, MayProvide ix j} : Prop :=
-  { distinguish : forall {α} (e : i α), proj_p (i := j) (inj_p (ix := ix) e) = None
+Class Distinguish (Fx F E : effect) `{Provide Fx F, MayProvide Fx E} : Prop :=
+  { distinguish : forall {α} (e : F α), proj_p (F := E) (inj_p (Fx := Fx) e) = None
   }.
 
 (** * Composing Effects *)
@@ -105,12 +105,12 @@ Class Distinguish (ix i j : effect) `{Provide ix i, MayProvide ix j} : Prop :=
     [eplus] can be used to build _concrete_ (as opposed to polymorphic)
     effect composite. *)
 
-Inductive eplus (i j : effect) (α : Type) :=
-| in_left (e : i α) : eplus i j α
-| in_right (e : j α) : eplus i j α.
+Inductive eplus (F E : effect) (α : Type) :=
+| in_left (e : F α) : eplus F E α
+| in_right (e : E α) : eplus F E α.
 
-Arguments in_left [i j α] (e).
-Arguments in_right [i j α] (e).
+Arguments in_left [F E α] (e).
+Arguments in_right [F E α] (e).
 
 Register eplus as freespec.core.eplus.type.
 Register in_left as freespec.core.eplus.in_left.
@@ -122,13 +122,13 @@ Infix "+" := eplus : effect_scope.
     provide the necessary instances for the [MayProvide], [Provide] and
     [Distinguish] type classes. Note that these instances always prefer the
     left operand of [eplus]. For instance, considering a situation where
-    there is an instance for [Provide ix i] and an instance for [Provide jx i],
-    the instance of [Provide (ix + jx) i] will rely on [ix].
+    there is an instance for [Provide Fx F] and an instance for [Provide Ex F],
+    the instance of [Provide (Fx + Ex) F] will rely on [Fx].
 
     The main use case for [eplus] is to locally provide an additional
     effect. For instance, we can consider a [with_state] function which would
     locally give access to the [STORE] effect, that is [with_state : forall
-    ix s α, s -> impure (ix + STORE s) α -> impure ix α]. In such a case, the
+    Fx s α, s -> impure (Fx + STORE s) α -> impure Fx α]. In such a case, the
     effect made locally available shall be the right operand of [eplus]. This
     way, functions such as [with_state] are reentrant. If we take an example,
     the following impure computation:
@@ -139,17 +139,17 @@ with_state true (with_state false get)
 
     will return false (that is, the variable in the inner store). *)
 
-Instance refl_MayProvide (i : effect) : MayProvide i i :=
+Instance refl_MayProvide (F : effect) : MayProvide F F :=
   { proj_p := fun _ e => Some e
   }.
 
 #[program]
-Instance refl_Provide (i : effect) : @Provide i i (refl_MayProvide i) :=
-  { inj_p := fun (a : Type) (e : i a) => e
+Instance refl_Provide (F : effect) : @Provide F F (refl_MayProvide F) :=
+  { inj_p := fun (a : Type) (e : F a) => e
   }.
 
-Instance eplus_left_MayProvide (ix i j : effect) `{MayProvide ix i}
-  : MayProvide (ix + j) i :=
+Instance eplus_left_MayProvide (Fx F E : effect) `{MayProvide Fx F}
+  : MayProvide (Fx + E) F :=
   { proj_p := fun _ e =>
                 match e with
                 | in_left e => proj_p e
@@ -158,17 +158,17 @@ Instance eplus_left_MayProvide (ix i j : effect) `{MayProvide ix i}
   }.
 
 #[program]
-Instance eplus_left_Provide (ix i j : effect) `{Provide ix i}
-  : @Provide (ix + j) i (eplus_left_MayProvide ix i j) :=
-  { inj_p := fun (a : Type) (e : i a) => in_left (inj_p e)
+Instance eplus_left_Provide (Fx F E : effect) `{Provide Fx F}
+  : @Provide (Fx + E) F (eplus_left_MayProvide Fx F E) :=
+  { inj_p := fun (a : Type) (e : F a) => in_left (inj_p e)
   }.
 
 Next Obligation.
   now rewrite proj_inj_p_equ.
 Qed.
 
-Instance eplus_right_MayProvide (i jx j : effect) `{MayProvide jx j}
-  : MayProvide (i + jx) j :=
+Instance eplus_right_MayProvide (F Ex E : effect) `{MayProvide Ex E}
+  : MayProvide (F + Ex) E :=
   { proj_p := fun _ e =>
                 match e with
                 | in_right e => proj_p e
@@ -177,8 +177,8 @@ Instance eplus_right_MayProvide (i jx j : effect) `{MayProvide jx j}
   }.
 
 #[program]
-Instance eplus_right_Provide (i jx j : effect) `{Provide jx j}
-  : @Provide (i + jx) j (eplus_right_MayProvide i jx j) :=
+Instance eplus_right_Provide (F Ex E : effect) `{Provide Ex E}
+  : @Provide (F + Ex) E (eplus_right_MayProvide F Ex E) :=
   { inj_p := fun _ e => in_right (inj_p e)
   }.
 
@@ -188,13 +188,13 @@ Qed.
 
 (** By default, Coq's inference algorithm for type classe instances inference is
     a depth-first search. This is not without consequence in our case. For
-    instance, if we consider the search of an instance for [MayProvide (i + j)
-    j], Coq will first try [eplus_right_MayProvide] (as explained previously),
-    meaning he now search for [MayProvide i j]. It turns out such an instance
+    instance, if we consider the search of an instance for [MayProvide (F + E)
+    E], Coq will first try [eplus_right_MayProvide] (as explained previously),
+    meaning he now search for [MayProvide F E]. It turns out such an instance
     exists: [default_MayProvide].
 
     To circumvent this issue, we write a dedicated tactic [find_may_provide]
-    which attempts to find an instance for [MayProvide (?ix + ?jx) ?i] with
+    which attempts to find an instance for [MayProvide (?Fx + ?Ex) ?F] with
     [refl_MayProvide], [eplus_left_MayProvide] and [eplus_right_MayProvide]. *)
 
 Ltac find_may_provide :=
@@ -206,62 +206,62 @@ Ltac find_may_provide :=
   find_may_provide : typeclass_instances.
 
 #[program]
-Instance refl_Distinguish (i j : effect)
-  : @Distinguish i i j  ( @refl_MayProvide i) ( @refl_Provide i) ( @default_MayProvide i j).
+Instance refl_Distinguish (F E : effect)
+  : @Distinguish F F E  ( @refl_MayProvide F) ( @refl_Provide F) ( @default_MayProvide F E).
 
 #[program]
-Instance eplus_left_default_Distinguish (ix jx i j : effect)
-   `{M1 : MayProvide ix i} `{P1 : @Provide ix i M1}
-  : @Distinguish (ix + jx) i j
-                 ( @eplus_left_MayProvide ix i jx M1)
-                 ( @eplus_left_Provide ix i jx M1 P1)
-                 ( @default_MayProvide _ j).
+Instance eplus_left_default_Distinguish (Fx Ex F E : effect)
+   `{M1 : MayProvide Fx F} `{P1 : @Provide Fx F M1}
+  : @Distinguish (Fx + Ex) F E
+                 ( @eplus_left_MayProvide Fx F Ex M1)
+                 ( @eplus_left_Provide Fx F Ex M1 P1)
+                 ( @default_MayProvide _ E).
 
 #[program]
-Instance eplus_right_default_Distinguish (ix jx i j : effect)
-   `{M1 : MayProvide jx i} `{P1 : @Provide jx i M1}
-  : @Distinguish (ix + jx) i j
-                 ( @eplus_right_MayProvide ix jx i M1)
-                 ( @eplus_right_Provide ix jx i M1 P1)
-                 ( @default_MayProvide _ j).
+Instance eplus_right_default_Distinguish (Fx Ex F E : effect)
+   `{M1 : MayProvide Ex F} `{P1 : @Provide Ex F M1}
+  : @Distinguish (Fx + Ex) F E
+                 ( @eplus_right_MayProvide Fx Ex F M1)
+                 ( @eplus_right_Provide Fx Ex F M1 P1)
+                 ( @default_MayProvide _ E).
 
 #[program]
-Instance eplus_left_may_right_Distinguish (ix jx i j : effect)
-   `{M1 : MayProvide ix i} `{P1 : @Provide ix i M1} `{M2 : MayProvide jx j}
-  : @Distinguish (ix + jx) i j
-                 ( @eplus_left_MayProvide ix i jx M1)
-                 ( @eplus_left_Provide ix i jx M1 P1)
-                 ( @eplus_right_MayProvide ix jx j M2).
+Instance eplus_left_may_right_Distinguish (Fx Ex F E : effect)
+   `{M1 : MayProvide Fx F} `{P1 : @Provide Fx F M1} `{M2 : MayProvide Ex E}
+  : @Distinguish (Fx + Ex) F E
+                 ( @eplus_left_MayProvide Fx F Ex M1)
+                 ( @eplus_left_Provide Fx F Ex M1 P1)
+                 ( @eplus_right_MayProvide Fx Ex E M2).
 
 #[program]
-Instance eplus_right_may_left_Distinguish (ix jx i j : effect)
-   `{M1 : MayProvide jx i} `{P1 : @Provide jx i M1} `{M2 : MayProvide ix j}
-  : @Distinguish (ix + jx) i j
-                 ( @eplus_right_MayProvide ix jx i M1)
-                 ( @eplus_right_Provide ix jx i M1 P1)
-                 ( @eplus_left_MayProvide ix j jx M2).
+Instance eplus_right_may_left_Distinguish (Fx Ex F E : effect)
+   `{M1 : MayProvide Ex F} `{P1 : @Provide Ex F M1} `{M2 : MayProvide Fx E}
+  : @Distinguish (Fx + Ex) F E
+                 ( @eplus_right_MayProvide Fx Ex F M1)
+                 ( @eplus_right_Provide Fx Ex F M1 P1)
+                 ( @eplus_left_MayProvide Fx E Ex M2).
 
 #[program]
-Instance eplus_left_distinguish_left_Distinguish (ix jx i j : effect)
-   `{M1 : MayProvide ix i} `{P1 : @Provide ix i M1} `{M2 : MayProvide ix j}
-   `{@Distinguish ix i j M1 P1 M2}
-  : @Distinguish (ix + jx) i j
-                 ( @eplus_left_MayProvide ix i jx M1)
-                 ( @eplus_left_Provide ix i jx M1 P1)
-                 ( @eplus_left_MayProvide ix j jx M2).
+Instance eplus_left_distinguish_left_Distinguish (Fx Ex F E : effect)
+   `{M1 : MayProvide Fx F} `{P1 : @Provide Fx F M1} `{M2 : MayProvide Fx E}
+   `{@Distinguish Fx F E M1 P1 M2}
+  : @Distinguish (Fx + Ex) F E
+                 ( @eplus_left_MayProvide Fx F Ex M1)
+                 ( @eplus_left_Provide Fx F Ex M1 P1)
+                 ( @eplus_left_MayProvide Fx E Ex M2).
 
 Next Obligation.
   apply distinguish.
 Defined.
 
 #[program]
-Instance eplus_right_distinguish_right_Distinguish (ix jx i j : effect)
-   `{M1 : MayProvide jx i} `{P1 : @Provide jx i M1} `{M2 : MayProvide jx j}
-   `{@Distinguish jx i j M1 P1 M2}
-  : @Distinguish (ix + jx) i j
-                 ( @eplus_right_MayProvide ix jx i M1)
-                 ( @eplus_right_Provide ix jx i M1 P1)
-                 ( @eplus_right_MayProvide ix jx j M2).
+Instance eplus_right_distinguish_right_Distinguish (Fx Ex F E : effect)
+   `{M1 : MayProvide Ex F} `{P1 : @Provide Ex F M1} `{M2 : MayProvide Ex E}
+   `{@Distinguish Ex F E M1 P1 M2}
+  : @Distinguish (Fx + Ex) F E
+                 ( @eplus_right_MayProvide Fx Ex F M1)
+                 ( @eplus_right_Provide Fx Ex F M1 P1)
+                 ( @eplus_right_MayProvide Fx Ex E M2).
 
 Next Obligation.
   apply distinguish.

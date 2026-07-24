@@ -21,7 +21,7 @@ Generalizable All Variables.
 
 (** * Definition *)
 
-(** A contract dedicated to [i : effect] primarily provides two
+(** A contract dedicated to [F : effect] primarily provides two
     predicates.
 
     - [caller_obligation] distinguishes between primitives that can be used (by
@@ -40,39 +40,39 @@ Generalizable All Variables.
     To keep this state up-to-date after each primitive interpretation,
     contracts also define a dedicated function [witness_update]. *)
 
-Record contract (i : effect) (Ω : Type) : Type := make_contract
-  { witness_update (ω : Ω) : forall (α : Type), i α -> α -> Ω
-  ; caller_obligation (ω : Ω) : forall (α : Type),  i α -> Prop
-  ; callee_obligation (ω : Ω) : forall (α : Type), i α -> α -> Prop
+Record contract (F : effect) (Ω : Type) : Type := make_contract
+  { witness_update (ω : Ω) : forall (α : Type), F α -> α -> Ω
+  ; caller_obligation (ω : Ω) : forall (α : Type),  F α -> Prop
+  ; callee_obligation (ω : Ω) : forall (α : Type), F α -> α -> Prop
   }.
 
 Declare Scope contract_scope.
 Bind Scope contract_scope with contract.
 
-Arguments make_contract [i Ω] (_ _ _).
-Arguments witness_update [i Ω] (c ω) [α] (_ _).
-Arguments caller_obligation [i Ω] (c ω) [α] (_).
-Arguments callee_obligation [i Ω] (c ω) [α] (_ _).
+Arguments make_contract [F Ω] (_ _ _).
+Arguments witness_update [F Ω] (c ω) [α] (_ _).
+Arguments caller_obligation [F Ω] (c ω) [α] (_).
+Arguments callee_obligation [F Ω] (c ω) [α] (_ _).
 
 (** The most simple contract we can define is the one that requires
     anything both for the impure computations which uses the primitives of a
     given effect, and for the operational semantics which compute results for
     these primitives. *)
 
-Definition const_witness {i} :=
-  fun (u : unit) (α : Type) (e : i α) (x : α) => u.
+Definition const_witness {F} :=
+  fun (u : unit) (α : Type) (e : F α) (x : α) => u.
 
-Inductive no_caller_obligation {i Ω} (ω : Ω) (α : Type) (e : i α) : Prop :=
+Inductive no_caller_obligation {F Ω} (ω : Ω) (α : Type) (e : F α) : Prop :=
 | mk_no_caller_obligation : no_caller_obligation ω α e.
 
 #[global] Hint Constructors no_caller_obligation : freespec.
 
-Inductive no_callee_obligation {i Ω} (ω : Ω) (α : Type) (e : i α) (x : α) : Prop :=
+Inductive no_callee_obligation {F Ω} (ω : Ω) (α : Type) (e : F α) (x : α) : Prop :=
 | mk_no_callee_obligation : no_callee_obligation ω α e x.
 
 #[global] Hint Constructors no_callee_obligation : freespec.
 
-Definition no_contract (i : effect) : contract i unit :=
+Definition no_contract (F : effect) : contract F unit :=
   {| witness_update := const_witness
    ; caller_obligation := no_caller_obligation
    ; callee_obligation := no_callee_obligation
@@ -81,9 +81,9 @@ Definition no_contract (i : effect) : contract i unit :=
 (** A similar —and as simple— contract is the one that forbids the use of a
     given effect. *)
 
-Definition do_no_use {i Ω} (ω : Ω) (α : Type) (e : i α) : Prop := False.
+Definition do_no_use {F Ω} (ω : Ω) (α : Type) (e : F α) : Prop := False.
 
-Definition forbid_specs (i : effect) : contract i unit :=
+Definition forbid_specs (F : effect) : contract F unit :=
   {| witness_update := const_witness
    ; caller_obligation := do_no_use
    ; callee_obligation := no_callee_obligation
@@ -91,25 +91,25 @@ Definition forbid_specs (i : effect) : contract i unit :=
 
 (** * Contract Equivalence *)
 
-Definition contract_caller_equ `(c1 : contract i Ω1) `(c2 : contract i Ω2)
+Definition contract_caller_equ `(c1 : contract F Ω1) `(c2 : contract F Ω2)
     (f : Ω1 -> Ω2)
   : Prop :=
-  forall ω1 a (p : i a),
+  forall ω1 a (p : F a),
     caller_obligation c1 ω1 p <-> caller_obligation c2 (f ω1) p.
 
-Definition contract_callee_equ `(c1 : contract i Ω1) `(c2 : contract i Ω2)
+Definition contract_callee_equ `(c1 : contract F Ω1) `(c2 : contract F Ω2)
     (f : Ω1 -> Ω2)
   : Prop :=
-  forall ω1 a (p : i a) x,
+  forall ω1 a (p : F a) x,
     callee_obligation c1 ω1 p x <-> callee_obligation c2 (f ω1) p x.
 
-Definition contract_witness_equ `(c1 : contract i Ω1) `(c2 : contract i Ω2)
+Definition contract_witness_equ `(c1 : contract F Ω1) `(c2 : contract F Ω2)
     (f : Ω1 -> Ω2)
   : Prop :=
-  forall ω1 a (p : i a) x,
+  forall ω1 a (p : F a) x,
     f (witness_update c1 ω1 p x) = witness_update c2 (f ω1) p x.
 
-Inductive contract_equ `(c1 : contract i Ω1) `(c2 : contract i Ω2)
+Inductive contract_equ `(c1 : contract F Ω1) `(c2 : contract F Ω2)
   : Type :=
 | mk_contract_equ (f : Ω1 -> Ω2) (g : Ω2 -> Ω1)
     (iso1 : forall x, f (g x) = x) (iso2 : forall x, g (f x) = x)
@@ -118,24 +118,24 @@ Inductive contract_equ `(c1 : contract i Ω1) `(c2 : contract i Ω2)
     (witness_equ : contract_witness_equ c1 c2 f)
   : contract_equ c1 c2.
 
-Definition contract_iso_lr `(c1 : contract i Ω1) `(c2 : contract i Ω2)
+Definition contract_iso_lr `(c1 : contract F Ω1) `(c2 : contract F Ω2)
     (equ : contract_equ c1 c2) (ω1 : Ω1)
   : Ω2 :=
   match equ with
   | @mk_contract_equ _ _ _ _ _ f _ _ _ _ _ _ => f ω1
   end.
 
-Definition contract_iso_rl `(c1 : contract i Ω1) `(c2 : contract i Ω2)
+Definition contract_iso_rl `(c1 : contract F Ω1) `(c2 : contract F Ω2)
     (equ : contract_equ c1 c2) (ω2 : Ω2)
   : Ω1 :=
   match equ with
   | @mk_contract_equ _ _ _ _ _ _ g _ _ _ _ _ => g ω2
   end.
 
-Arguments contract_iso_lr {i Ω1 c1 Ω2 c2} (equ ω1).
-Arguments contract_iso_rl {i Ω1 c1 Ω2 c2} (equ ω2).
+Arguments contract_iso_lr {F Ω1 c1 Ω2 c2} (equ ω1).
+Arguments contract_iso_rl {F Ω1 c1 Ω2 c2} (equ ω2).
 
-Lemma contract_equ_refl `(c : contract i Ω)
+Lemma contract_equ_refl `(c : contract F Ω)
   : contract_equ c c.
 
 Proof.
@@ -145,7 +145,7 @@ Proof.
   + now intros ω α p x.
 Defined.
 
-Lemma contract_equ_sym `(c1 : contract i Ω1) `(c2 : contract i Ω2)
+Lemma contract_equ_sym `(c1 : contract F Ω1) `(c2 : contract F Ω2)
    (equ : contract_equ c1 c2)
   : contract_equ c2 c1.
 
@@ -172,8 +172,8 @@ Proof.
     now rewrite equ.
 Defined.
 
-Lemma contract_equ_trans `(c1 : contract i Ω1) `(c2 : contract i Ω2)
-   `(c3 : contract i Ω3)
+Lemma contract_equ_trans `(c1 : contract F Ω1) `(c2 : contract F Ω2)
+   `(c3 : contract F Ω3)
    `(is_equ12 : contract_equ c1 c2)
    `(is_equ23 : contract_equ c2 c3)
   : contract_equ c1 c3.
@@ -204,44 +204,44 @@ Defined.
 (** * Composing Contracts *)
 
 (** As we compose effects and operational semantics, we can easily compose
-    contracts together, by means of the [contractprod] operator. Given [i] and [j]
-    two effects, if we can reason about [i] and [j] independently (e.g., the
-    caller obligations of [j] do not vary when we use [i]), then we can compose
-    [ci : contract i Ωi] and [cj : contract j Ωj], such that [contractprod ci cj] in a
-    contract for [i + j]. *)
+    contracts together, by means of the [contractprod] operator. Given [F] and [E]
+    two effects, if we can reason about [F] and [E] independently (e.g., the
+    caller obligations of [E] do not vary when we use [F]), then we can compose
+    [ci : contract F ΩF] and [cj : contract E ΩE], such that [contractprod ci cj] in a
+    contract for [F + E]. *)
 
-Definition gen_witness_update `{MayProvide ix i} {Ω α} (c : contract i Ω)
-    (ω :  Ω) (e : ix α) (x : α)
+Definition gen_witness_update `{MayProvide Fx F} {Ω α} (c : contract F Ω)
+    (ω :  Ω) (e : Fx α) (x : α)
   : Ω :=
   match proj_p e with
   | Some e => witness_update c ω e x
   | None => ω
   end.
 
-Definition gen_caller_obligation `{MayProvide ix i} {Ω α} (c : contract i Ω)
-    (ω :  Ω) (e : ix α)
+Definition gen_caller_obligation `{MayProvide Fx F} {Ω α} (c : contract F Ω)
+    (ω :  Ω) (e : Fx α)
   : Prop :=
   match proj_p e with
   | Some e => caller_obligation c ω e
   | None => True
   end.
 
-Definition gen_callee_obligation `{MayProvide ix i} {Ω α} (c : contract i Ω)
-    (ω :  Ω) (e : ix α) (x : α)
+Definition gen_callee_obligation `{MayProvide Fx F} {Ω α} (c : contract F Ω)
+    (ω :  Ω) (e : Fx α) (x : α)
   : Prop :=
   match proj_p e with
   | Some e => callee_obligation c ω e x
   | None => True
   end.
 
-Definition contractprod `{Provide ix i, Provide ix j} {Ωi Ωj}
-    (ci : contract i Ωi) (cj : contract j Ωj)
-  : contract ix (Ωi * Ωj) :=
-  {| witness_update := fun (ω : Ωi * Ωj) (α : Type) (e : ix α) (x : α) =>
+Definition contractprod `{Provide Fx F, Provide Fx E} {ΩF ΩE}
+    (ci : contract F ΩF) (cj : contract E ΩE)
+  : contract Fx (ΩF * ΩE) :=
+  {| witness_update := fun (ω : ΩF * ΩE) (α : Type) (e : Fx α) (x : α) =>
                          (gen_witness_update ci (fst ω) e x, gen_witness_update cj (snd ω) e x)
-  ;  caller_obligation := fun (ω : Ωi * Ωj) (α : Type) (e : ix α) =>
+  ;  caller_obligation := fun (ω : ΩF * ΩE) (α : Type) (e : Fx α) =>
                        gen_caller_obligation ci (fst ω) e /\ gen_caller_obligation cj (snd ω) e
-  ;  callee_obligation := fun (ω : Ωi * Ωj) (α : Type) (e : ix α) (x : α) =>
+  ;  callee_obligation := fun (ω : ΩF * ΩE) (α : Type) (e : Fx α) (x : α) =>
                    gen_callee_obligation ci (fst ω) e x /\ gen_callee_obligation cj (snd ω) e x
   |}.
 
@@ -250,28 +250,28 @@ Infix "*" := contractprod : contract_scope.
 (** We also introduce a second composition operator which shares the
     witness state among its two operands. *)
 
-(* FIXME: Should be [StrictProvide2 ix i j] *)
+(* FIXME: Should be [StrictProvide2 Fx F E] *)
 
-Definition sharedcontractprod `{Provide ix i, Provide ix j}
-   `(ci : contract i Ω) (cj : contract j Ω)
-  : contract ix Ω :=
+Definition sharedcontractprod `{Provide Fx F, Provide Fx E}
+   `(ci : contract F Ω) (cj : contract E Ω)
+  : contract Fx Ω :=
   {|
   witness_update :=
-    fun (ω : Ω) (α : Type) (e : ix α) (x : α) =>
-      (* we need to check [i] before [j] because [sharedcontractprod]
+    fun (ω : Ω) (α : Type) (e : Fx α) (x : α) =>
+      (* we need to check [F] before [E] because [sharedcontractprod]
          will be right associative *)
-      match proj_p (i:=i) e with
+      match proj_p (F:=F) e with
       | Some e => witness_update ci ω e x
-      | _ => match proj_p (i:=j) e with
+      | _ => match proj_p (F:=E) e with
              | Some e => witness_update cj ω e x
              | _ => ω
              end
       end;
   caller_obligation :=
-    fun (ω : Ω) (α : Type) (e : ix α) =>
+    fun (ω : Ω) (α : Type) (e : Fx α) =>
       gen_caller_obligation ci ω e /\ gen_caller_obligation cj ω e;
   callee_obligation :=
-    fun (ω : Ω) (α : Type) (e : ix α) (x : α) =>
+    fun (ω : Ω) (α : Type) (e : Fx α) (x : α) =>
       gen_callee_obligation ci ω e x /\ gen_callee_obligation cj ω e x
   |}.
 

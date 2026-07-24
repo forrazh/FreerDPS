@@ -122,14 +122,14 @@ HB.export hoare_mon.
 
 (** * Reasoning about Programs *)
 
-Definition contract_of_hoare `{MayProvide ix i} `(c : contract i Ω)
-    : ix ~~> hoare Ω :=
+Definition contract_of_hoare `{MayProvide Fx F} `(c : contract F Ω)
+    : Fx ~~> hoare Ω :=
   fun a e => mk_hoare
     (fun ω => gen_caller_obligation c ω e)
     (fun ω x ω' => gen_callee_obligation c ω e x /\
                    ω' = gen_witness_update c ω e x).
 
-Definition to_hoare `{MayProvide ix i} {im : impureMonad ix} `(c : contract i Ω)
+Definition to_hoare `{MayProvide Fx F} {im : impureMonad Fx} `(c : contract F Ω)
     : im ~~> hoare Ω :=
   impure_lift _ (contract_of_hoare c).
-Arguments to_hoare {ix i _ im Ω} c {α} : rename.
+Arguments to_hoare {Fx F _ im Ω} c {α} : rename.

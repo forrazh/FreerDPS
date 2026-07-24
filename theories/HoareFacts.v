@@ -12,11 +12,11 @@ Generalizable All Variables.
 
 (** * General Lemmas *)
 
-Lemma to_hoare_step `{MayProvide ix i} `(c : contract i Ω)
-   `(e : ix a) `(f : a -> impure ix a)
-   `(hpre : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) c (request_then e f)) ω)
+Lemma to_hoare_step `{MayProvide Fx F} `(c : contract F Ω)
+   `(e : Fx a) `(f : a -> impure Fx a)
+   `(hpre : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) c (request_then e f)) ω)
     (x : a) (step : gen_callee_obligation c ω e x)
-  : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) c (f x)) (gen_witness_update c ω e x).
+  : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) c (f x)) (gen_witness_update c ω e x).
 
 Proof.
   destruct hpre as [hbefore hafter].
@@ -28,12 +28,12 @@ Qed.
 
 #[global] Hint Resolve to_hoare_step : freespec.
 
-Lemma to_hoare_pre_bind_assoc `{MayProvide ix i} `(c : contract i Ω)
-   `(p : impure ix a) `(Hp : pre (to_hoare  (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) c p) ω)
-   `(f : a -> impure ix b)
+Lemma to_hoare_pre_bind_assoc `{MayProvide Fx F} `(c : contract F Ω)
+   `(p : impure Fx a) `(Hp : pre (to_hoare  (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) c p) ω)
+   `(f : a -> impure Fx b)
     (run : forall (x : a) (ω' : Ω),
-        post (to_hoare  (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) c p) ω x ω' -> pre (to_hoare  (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) c (f x)) ω')
-  : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) c (impure_bind p f)) ω.
+        post (to_hoare  (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) c p) ω x ω' -> pre (to_hoare  (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) c (f x)) ω')
+  : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) c (impure_bind p f)) ω.
 
 Proof.
   revert ω Hp run.
@@ -49,7 +49,7 @@ Proof.
        specialize Hn with x ω'.
        destruct Hpost.
        rewrite -> H2 in *.
-       assert (Hpre : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) c (f0 x)) (gen_witness_update c ω e x))
+       assert (Hpre : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) c (f0 x)) (gen_witness_update c ω e x))
          by now apply Hn.
        apply H0; [ apply Hpre |].
        intros y ω'' Hpost.
@@ -64,14 +64,14 @@ Proof.
            exact Hpost.
 Qed.
 
-Lemma to_hoare_post_bind_assoc `{MayProvide ix i} `(c : contract i Ω)
-   `(p : impure ix a) `(f : a -> impure ix b)
-   `(Hp : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) c (impure_bind p f)) ω x ω')
+Lemma to_hoare_post_bind_assoc `{MayProvide Fx F} `(c : contract F Ω)
+   `(p : impure Fx a) `(f : a -> impure Fx b)
+   `(Hp : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) c (impure_bind p f)) ω x ω')
   : exists y ω'',
-    post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) c p) ω y ω'' /\ post (to_hoare c (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) $ f y) ω'' x ω'.
+    post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) c p) ω y ω'' /\ post (to_hoare c (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) $ f y) ω'' x ω'.
 
 Proof.
-move: ω Hp; elim p=>[in_a|Y j k IH] ω.
+move: ω Hp; elim p=>[in_a|Y op k IH] ω.
 - by exists in_a, ω.
 case=>y [ω'' [Hp1 ]].
 move:IH=>/[apply].
@@ -82,21 +82,21 @@ exists y, ω''.
 by split.
 Qed.
 
-Lemma to_hoare_contractprod `{Provide ix i, Provide ix j}
-   `(ci : contract i Ωi) `(cj : contract j Ωj)
-   `(p : impure ix a)
-   `(prei : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) ci p) ωi) `(prej : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) cj p) ωj)
-  : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure ix) (ci * cj) p) (ωi, ωj).
+Lemma to_hoare_contractprod `{Provide Fx F, Provide Fx E}
+   `(ci : contract F ΩF) `(cj : contract E ΩE)
+   `(p : impure Fx a)
+   `(prei : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) ci p) ωF) `(prej : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) cj p) ωE)
+  : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) (ci * cj) p) (ωF, ωE).
 
 Proof.
-  revert ωi prei ωj prej.
-  induction p; intros ωi prei ωj prej.
+  revert ωF prei ωE prej.
+  induction p; intros ωF prei ωE prej.
   + auto.
   + destruct prei as [calleri Hcalleei].
     destruct prej as [callerj Hcalleej].
     split.
     ++ now split.
-    ++ intros x [ωi' ωj'] [[calleei calleej] equωs].
+    ++ intros x [ωF' ωE'] [[calleei calleej] equωs].
        cbn in equωs.
        inversion equωs; subst.
        apply H3.
@@ -108,10 +108,10 @@ Qed.
 
 #[global] Hint Resolve to_hoare_contractprod : freespec.
 
-Lemma contract_equ_pre `(c1 : contract i Ω1) `(c2 : contract i Ω2)
+Lemma contract_equ_pre `(c1 : contract F Ω1) `(c2 : contract F Ω2)
    `(equ : contract_equ c1 c2) (ω1 : Ω1)
-   `(p : impure i A)
-  : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure i) c1 p) ω1 <-> pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure i) c2 p) (contract_iso_lr equ ω1).
+   `(p : impure F A)
+  : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure F) c1 p) ω1 <-> pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure F) c2 p) (contract_iso_lr equ ω1).
 
 Proof.
   elim: equ => f g iso1 iso2 caller_equ callee_equ witness_equ.
@@ -130,11 +130,11 @@ Qed.
 
 #[global] Hint Resolve contract_equ_pre : freespec.
 
-Lemma contract_equ_post `(c1 : contract i Ω1) `(c2 : contract i Ω2)
+Lemma contract_equ_post `(c1 : contract F Ω1) `(c2 : contract F Ω2)
    `(equ : contract_equ c1 c2) (ω1 ω1' : Ω1)
-   `(p : impure i a) (x : a)
-    (post1 : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure i) c1 p) ω1 x ω1')
-  : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure i) c2 p) (contract_iso_lr equ ω1) x (contract_iso_lr equ  ω1').
+   `(p : impure F a) (x : a)
+    (post1 : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure F) c1 p) ω1 x ω1')
+  : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure F) c2 p) (contract_iso_lr equ ω1) x (contract_iso_lr equ  ω1').
 
 Proof.
   induction equ.
