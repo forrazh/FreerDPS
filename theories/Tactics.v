@@ -46,12 +46,10 @@ Ltac simplify_gens :=
            destruct H
 
          | |- context[@proj_p ?Fx ?Fx (refl_MayProvide ?Fx) _ ?e] =>
-           change (@proj_p Fx Fx (refl_MayProvide Fx) _ e) with (Some e);
            cbn match;
            cbn beta
 
          | H: context[@proj_p ?Fx ?Fx (refl_MayProvide ?Fx) _ ?e] |- _ =>
-           change (@proj_p Fx Fx (refl_MayProvide Fx) _ e) with (Some e) in H;
            cbn match in H;
            cbn beta in H
 
@@ -111,12 +109,12 @@ Ltac prove_impure :=
     lazymatch pcond with 
       | lifter (F:=?ifce) (M:=?m) (hoare_of_contract ?c) (A:=_) ?p => let p := (eval hnf in p) in
         lazymatch p with
-        | request_then ?e ?f =>
+        | impure ?e ?f =>
           let o_caller := fresh "o_caller" in
           assert (o_caller : gen_caller_obligation c ω e) ; 
           [ prove_impure | constructor; prove_impure]
-        | local _ => constructor
-        | impure_bind (impure_bind ?p ?f) ?g =>
+        | pure _ => constructor
+        | freer_bind (freer_bind ?p ?f) ?g =>
           rewrite (bindA p f g);
           prove_impure
         | bind ?p ?f =>
@@ -132,12 +130,12 @@ Ltac prove_impure :=
 
     | to_hoare ?c ?p => let p := (eval hnf in p) in
       lazymatch p with
-      | request_then ?e ?f =>
+      | impure ?e ?f =>
         let o_caller := fresh "o_caller" in
         assert (o_caller : gen_caller_obligation c ω e) ; 
         [ prove_impure | constructor; prove_impure]
-      | local _ => constructor
-      | impure_bind (impure_bind ?p ?f) ?g =>
+      | pure _ => constructor
+      | freer_bind (freer_bind ?p ?f) ?g =>
         rewrite (bindA p f g);
         prove_impure
       | bind ?p ?f =>
@@ -174,7 +172,7 @@ Ltac unroll_post run :=
   | post (to_hoare ?c ?p) ?ω ?x ?ω' =>
     let p := (eval hnf in p) in
     lazymatch p with
-    | request_then ?e ?f =>
+    | impure ?e ?f =>
       inversion run; ssubst;
       clear run;
       lazymatch goal with
@@ -187,7 +185,7 @@ Ltac unroll_post run :=
       | _ => idtac
       end
 
-    | local ?x =>
+    | pure ?x =>
       inversion run; ssubst;
       clear run
 
@@ -224,7 +222,7 @@ Ltac run_simpl run :=
   let p := (eval hnf in p) in
   idtac "=> hnf of p: " p;
   match p with
-  | request_then ?e ?f =>
+  | impure ?e ?f =>
     idtac "=> => impure!";
     cleanvert run;
     idtac "=> => inverted";
@@ -240,7 +238,7 @@ Ltac run_simpl run :=
         idtac "<== <== after run"
     | _ => idtac "<== branched out exists match"
     end
-  | local ?x => idtac "=> => PURE!"; cleanvert run
+  | pure ?x => idtac "=> => PURE!"; cleanvert run
   | _ => idtac "<== freer out" 
   end
 | post (lifter (F:=?ifce) (M:=?m) (hoare_of_contract ?c)

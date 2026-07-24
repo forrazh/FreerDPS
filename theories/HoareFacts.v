@@ -13,14 +13,13 @@ Generalizable All Variables.
 (** * General Lemmas *)
 
 Lemma to_hoare_step `{MayProvide Fx F} `(c : contract F Ω)
-   `(e : Fx a) `(f : a -> impure Fx a)
+   `(e : Fx a) `(f : a -> freer Fx a)
    `(hpre : pre
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
-        c (request_then e f)) ω)
+      (to_hoare (im:=freer Fx) c (impure e f)) ω)
     (x : a) (step : gen_callee_obligation c ω e x)
   : pre
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
-        c (f x)) (gen_witness_update c ω e x).
+      (to_hoare (im:=freer Fx) c (f x))
+      (gen_witness_update c ω e x).
 
 Proof.
   destruct hpre as [hbefore hafter].
@@ -33,23 +32,18 @@ Qed.
 #[global] Hint Resolve to_hoare_step : freespec.
 
 Lemma to_hoare_pre_bind_assoc `{MayProvide Fx F} `(c : contract F Ω)
-   `(p : impure Fx a)
+   `(p : freer Fx a)
    `(Hp : pre
-      (to_hoare
-        (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx) c p) ω)
-   `(f : a -> impure Fx b)
+      (to_hoare (im:=freer Fx) c p) ω)
+   `(f : a -> freer Fx b)
     (run : forall (x : a) (ω' : Ω),
       post
-        (to_hoare
-          (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx) c p)
+        (to_hoare (im:=freer Fx) c p)
         ω x ω' ->
       pre
-        (to_hoare
-          (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
-          c (f x)) ω')
+        (to_hoare (im:=freer Fx) c (f x)) ω')
   : pre
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
-        c (impure_bind p f)) ω.
+      (to_hoare (im:=freer Fx) c (freer_bind p f)) ω.
 
 Proof.
   revert ω Hp run.
@@ -57,8 +51,6 @@ Proof.
   + now apply run.
   + cbn in Hp.
     destruct Hp as [He Hn].
-    change (impure_bind (request_then e f0) f)
-      with (impure_bind (request_then e (fun x => f0 x)) f).
     split.
     ++ exact He.
     ++ intros x ω' Hpost.
@@ -66,9 +58,8 @@ Proof.
        destruct Hpost.
        rewrite -> H2 in *.
        assert (Hpre : pre
-          (to_hoare
-            (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
-            c (f0 x)) (gen_witness_update c ω e x))
+          (to_hoare (im:=freer Fx) c (f0 x))
+          (gen_witness_update c ω op x))
          by now apply Hn.
        apply H0; [ apply Hpre |].
        intros y ω'' Hpost.
@@ -84,17 +75,14 @@ Proof.
 Qed.
 
 Lemma to_hoare_post_bind_assoc `{MayProvide Fx F} `(c : contract F Ω)
-   `(p : impure Fx a) `(f : a -> impure Fx b)
+   `(p : freer Fx a) `(f : a -> freer Fx b)
    `(Hp : post
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
-        c (impure_bind p f)) ω x ω')
+      (to_hoare (im:=freer Fx) c (freer_bind p f)) ω x ω')
   : exists y ω'',
     post
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
-        c p) ω y ω'' /\
+      (to_hoare (im:=freer Fx) c p) ω y ω'' /\
     post
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
-        c $ f y) ω'' x ω'.
+      (to_hoare (im:=freer Fx) c $ f y) ω'' x ω'.
 
 Proof.
 move: ω Hp; elim p=>[in_a|Y op k IH] ω.
@@ -110,16 +98,13 @@ Qed.
 
 Lemma to_hoare_contractprod `{Provide Fx F, Provide Fx E}
    `(ci : contract F ΩF) `(cj : contract E ΩE)
-   `(p : impure Fx a)
+   `(p : freer Fx a)
    `(prei : pre
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
-        ci p) ωF)
+      (to_hoare (im:=freer Fx) ci p) ωF)
    `(prej : pre
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
-        cj p) ωE)
+      (to_hoare (im:=freer Fx) cj p) ωE)
   : pre
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
-        (ci * cj) p) (ωF, ωE).
+      (to_hoare (im:=freer Fx) (ci * cj) p) (ωF, ωE).
 
 Proof.
   revert ωF prei ωE prej.
@@ -143,13 +128,11 @@ Qed.
 
 Lemma contract_equ_pre `(c1 : contract F Ω1) `(c2 : contract F Ω2)
    `(equ : contract_equ c1 c2) (ω1 : Ω1)
-   `(p : impure F A)
+   `(p : freer F A)
   : pre
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure F)
-        c1 p) ω1 <->
+      (to_hoare (im:=freer F) c1 p) ω1 <->
     pre
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure F)
-        c2 p) (contract_iso_lr equ ω1).
+      (to_hoare (im:=freer F) c2 p) (contract_iso_lr equ ω1).
 
 Proof.
   elim: equ => f g iso1 iso2 caller_equ callee_equ witness_equ.
@@ -170,13 +153,12 @@ Qed.
 
 Lemma contract_equ_post `(c1 : contract F Ω1) `(c2 : contract F Ω2)
    `(equ : contract_equ c1 c2) (ω1 ω1' : Ω1)
-   `(p : impure F a) (x : a)
+   `(p : freer F a) (x : a)
     (post1 : post
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure F)
-        c1 p) ω1 x ω1')
+      (to_hoare (im:=freer F) c1 p) ω1 x ω1')
   : post
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure F)
-        c2 p) (contract_iso_lr equ ω1) x (contract_iso_lr equ ω1').
+      (to_hoare (im:=freer F) c2 p)
+      (contract_iso_lr equ ω1) x (contract_iso_lr equ ω1').
 
 Proof.
   induction equ.

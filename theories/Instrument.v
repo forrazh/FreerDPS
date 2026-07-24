@@ -32,8 +32,8 @@ Program Definition effect_to_instrument
     >>= fun _ => Ret x.
 
 Definition to_instrument `{MayProvide Fx F} `(c : contract F Ω)
-    {im : impureMonad Fx}
+    {im : freerMonad Fx}
   : im ~~> instrument Ω Fx :=
-  impure_lift _ $ effect_to_instrument c.
+  denote _ $ effect_to_instrument c.
 
 Arguments to_instrument {Fx F _ Ω} (c) {α} : rename.

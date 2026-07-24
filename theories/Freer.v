@@ -10,12 +10,12 @@
     allow for manipulating _polymorphic effect composite_.
 
 
-    In this library, we provide the [impure] monad, defined after the
+    In this library, we provide the [freer] monad, defined after the
     <<Program>> monad introduced by the <<operational>> package (see
     <<https://github.com/whitequark/unfork#introduction>>). *)
 
 From FreerDPS Require Import Init.
-From mathcomp Require Import ssrfun.
+From mathcomp Require Import all_boot.
 From FreerDPS Require Export Effect.
 
 Local Open Scope monae_scope.
@@ -26,219 +26,193 @@ Unset Printing Implicit Defensive.
 
 Generalizable All Variables.
 
-(** We introduce the [impure] monad to describe impure computations, that is
+(** We introduce the [freer] monad to describe impure computations, that is
     computations which uses primitives from certain effects. *)
 
 (** * Definition *)
 
-(** The [impure] monad is an inductive datatype with two parameters: the
+(** The [freer] monad is an inductive datatype with two parameters: the
     effect [F] to be used, and the type [α] of the result of the computation.
-    The fact that [impure] is inductive rather than co-inductive means it is not
+    The fact that [freer] is inductive rather than co-inductive means it is not
     possible to describe infinite computations.  This also means it is possible
     to interpret impure computations within Coq, providing an operational
     semantics for [F]. *)
 
 Inductive freer (F : effect) (α : Type) : Type :=
-| local (x : α) : freer F α
-| request_then {β} (e : F β) (f : β -> freer F α) : freer F α.
+| pure (x : α) : freer F α
+| impure {β} (op : F β) (f : β -> freer F α) : freer F α.
 
-#[deprecated(note="Name will change to `freer`.")]
-Notation impure := freer (only parsing).
+Arguments pure [F α] (x).
+Arguments impure [F α β] (op f).
 
-Arguments local [F α] (x).
-Arguments request_then [F α β] (e f).
+Register freer as freespec.core.freer.type.
+Register pure as freespec.core.freer.pure.
+Register impure as freespec.core.freer.impure.
 
-Register freer as freespec.core.impure.type.
-Register local as freespec.core.impure.local.
-Register request_then as freespec.core.impure.request_then.
+Fixpoint freer_bind (F : effect) {α β} (p : freer F α) (f : α -> freer F β)
+    : freer F β :=
+  match p with
+  | pure x => f x
+  | impure Y op g => impure op (fun x => freer_bind (g x) f)
+  end.
 
-Declare Scope impure_scope.
-Bind Scope impure_scope with freer.
-Delimit Scope impure_scope with impure.
-
-HB.mixin Record isMonadImpure (F : effect) (M : UU0 -> UU0) of Monad M := {
-    request : F ~~> M ;
-    impure_lift (N : monad) (l : F ~~> N) : M ~~> N ;
-    impure_lift_ret : forall (N : monad) (l : F ~~> N) X (x : X),
-        impure_lift N l X (ret X x) = @ret N X x;
-    impure_lift_bind : forall (N : monad) (l : F ~~> N) X Y m
-        (f : X -> M Y),
-        impure_lift N l Y (m >>= f) = (impure_lift N l X m) >>= (fun x => impure_lift N l Y (f x)) ;
-    impure_lift_request : forall (N : monad) (l : F ~~> N) X (fx : F X),
-        impure_lift N l X (request X fx) = l X fx;
-    impure_lift_unique : forall (N : monad) (l : F ~~> N) (impure_lift' : M ~~> N),
-            (forall X (x : X), impure_lift' X (ret X x) = @ret N X x) ->
-            (forall X Y (m : M X) (f : X -> M Y), impure_lift' Y (m >>= f) = (impure_lift' X m) >>= (fun x => impure_lift' Y (f x))) ->
-            (forall X (fx : F X), (impure_lift' X (request X fx)) = l X fx) ->
-        forall X (m : M X), impure_lift' X m = impure_lift N l X m
-}.
-
-
-#[short(type=impureMonad)]
-HB.structure Definition MonadImpure (F : effect) :=
-  {M of isMonadImpure F M & isMonad M & isFunctor M}.
-
-(** * Monad Instances *)
+Declare Scope freer_scope.
+Bind Scope freer_scope with freer.
+Delimit Scope freer_scope with freer.
 
 (** We then provide the necessary instances of the <<coq-prelude>> Monad
     typeclasses hierarchy. *)
-Module ImpureModule.
+(* mode of the freer monad *)
 Section freer.
+Context (F : effect).
+Notation acto := (@freer F).
 
-Variable F : UU0 -> UU0.
-Definition acto := fun X => @impure F X.
-Notation FM := acto.
+Let ret : idfun ~~> acto := fun x => @pure F x.
 
-Definition impure_pure {α} (x : α) : impure F α := local x.
-
-Let ret : idfun ~~> FM := fun _ => impure_pure. 
-
-Fixpoint impure_bind {α β} (p : impure F α) (f : α -> impure F β) : impure F β :=
-  match p with
-  | local x => f x
-  | request_then Y e g => request_then e (fun x => impure_bind (g x) f)
-  end.
-
-Let bind := fun A B m f => @impure_bind A B m f.
+Let bind := fun A B m f => @freer_bind F A B m f.
 
 Let left_neutral : BindLaws.left_neutral bind ret.
-Proof.
-     by [].
-Qed.
+Proof. by []. Qed.
 
 Let right_neutral : BindLaws.right_neutral bind ret.
-Proof.
-    move=>/=A.
-    elim=>[x|Y fy k IHm]//=.
-    congr request_then.
-    exact/boolp.funext=>y.
-Qed.
+Proof. by move=> T; elim => //b op f ih/=; congr impure; exact/funext. Qed.
 
 Let assoc : BindLaws.associative bind.
-Proof.
-    move=>/=A B C m f g.
-    elim:m=>//=Y fy k IHm.
-    congr request_then.
-    exact/boolp.funext=>y.
-Qed.
+Proof. by move=> A B C + f g; elim=>//= *; congr impure; exact/funext. Qed.
 
-HB.instance Definition _ := @isMonad_ret_bind.Build acto ret bind left_neutral right_neutral assoc.
+#[export]
+HB.instance Definition _ := @isMonad_ret_bind.Build acto ret bind
+  left_neutral right_neutral assoc.
 
-(** * Defining Impure Computations *)
+(** * Defining Freer Computations *)
 
-(** FreeSpec users shall not use the [impure] monad constructors directly.  The
+(** FreeSpec users shall not use the [freer] monad constructors directly.  The
     [pure] function from the [Applicative] typeclass allows for defining pure
-    computations which do not depend on any impure primitive.  The [bind]
-    function from the [Monad] typeclass allows for seamlessly combine impure
+    computations which do not depend on any freer primitive.  The [bind]
+    function from the [Monad] typeclass allows for seamlessly combine freer
     computations together.
 
     To complete these two monadic operations, we introduce the [request]
-    function, whose purpose is to define an impure computation that uses a given
-    primitive [e] from an effect [F], and returns its result.  [request] does
-    not parameterize the [impure] monad with [F] directly, but rather with a
+    function, whose purpose is to define an freer computation that uses a given
+    primitive [op] from an effect [F], and returns its result.  [request] does
+    not parameterize the [freer] monad with [F] directly, but rather with a
     generic effect [Fx].  [Fx] is constrained with the [Provide] notation, so
     that it has to provide at least [F]'s primitives.  *)
 
 End freer.
-End ImpureModule.
 
-HB.export ImpureModule.
+HB.mixin Record isMonadFreer (F : effect) (M : UU0 -> UU0) of Monad M := {
+  request : F ~~> M ;
+  denote (N : monad) (l : F ~~> N) : M ~~> N ;
+  denote_ret : forall (N : monad) (l : F ~~> N) X (x : X),
+    denote N l X (Ret x) = Ret x ;
+  denote_bind : forall (N : monad) (l : F ~~> N) X Y m (f : X -> M Y),
+    denote N l Y (m >>= f) = denote N l X m >>= (denote N l Y \o f) ;
+  denote_request : forall (N : monad) (l : F ~~> N) X (op : F X),
+    denote N l X (request X op) = l X op ;
+  denote_unique : forall (N : monad) (l : F ~~> N) (denote' : M ~~> N),
+      (forall X (x : X), denote' X (ret X x) = Ret x) ->
+      (forall X Y (m : M X) (f : X -> M Y), denote' Y (m >>= f) =
+         denote' X m >>= (denote' Y \o f)) ->
+      (forall X (op : F X), denote' X (request X op) = l X op) ->
+    forall X (m : M X), denote' X m = denote N l X m
+}.
 
-Module Impure.
+#[short(type=freerMonad)]
+HB.structure Definition MonadFreer (F : effect) :=
+  {M of isMonadFreer F M & isMonad M & isFunctor M}.
+
+(** * Monad Instances *)
+Module Freer.
 Section freer.
-
 Variable F : effect.
 
-Local Notation M := (acto F).
+Import Monad.
 
-Definition request_effect : F ~~> acto F := fun α e =>
-  request_then (inj_p e) (fun x => local x).
+Notation acto := (@freer F).
 
-Definition lifter (M : monad) `(l : F ~~> M) : acto F ~~> M :=
-  fix aux a (p : acto F a) :=
+Definition request_effect : F ~~> acto := fun α op =>
+  impure (inj_p op) (@pure _ _).
+
+Definition lifter (M : monad) `(l : F ~~> M) : acto ~~> M :=
+  fix aux a (p : acto a) :=
     match p with
-    | local x => Ret x
-    | request_then Y e f => l _ e >>= fun x => aux a (f x)
+    | pure x => Ret x
+    | impure Y op f => l _ op >>= fun x => aux a (f x)
     end.
 
-Let lifter_ret : forall (cm : monad) (lifter_effect : F ~~> cm) X (x : X),
-        lifter lifter_effect (ret X x) = @hierarchy.ret cm X x.
-Proof.
-  rewrite/=/lifter.
-    by [].
-Qed.
-
+Let lifter_ret (cm : monad) (lifter_effect : F ~~> cm) X (x : X) :
+  lifter lifter_effect (ret X x) = @hierarchy.ret cm X x.
+Proof. by []. Qed.
 
 Let lifter_bind : forall (cm : monad) (lifter_effect : F ~~> cm) X Y m
-    (f : X -> M Y),
-        lifter lifter_effect (m >>= f) = ( lifter lifter_effect m) >>= (fun x => lifter lifter_effect (f x)) .
+    (f : X -> acto Y),
+  lifter lifter_effect (m >>= f) =
+  lifter lifter_effect m >>= (fun x => lifter lifter_effect (f x)).
 Proof.
     move=>cm lifter_effect X Y m f.
     elim:m=>[x | Z fz k]/=.
-    - by rewrite !bindretf. 
+    - by rewrite !bindretf.
     rewrite bindA=>H.
     congr bind.
     exact/boolp.funext/H.
 Qed.
 
-Let lifter_trigger : forall (cm : monad) (lifter_effect : F ~~> cm)
-    X (fx : F X),
-        lifter lifter_effect (request_effect fx) = lifter_effect X fx.
-Proof.
-    move=>cm lifter_effect X fx.
-    by rewrite /lifter /request_effect /= bindmret.
-Qed.
+Let lifter_trigger (cm : monad) (lifter_effect : F ~~> cm) X (op : F X) :
+  lifter lifter_effect (request_effect op) = lifter_effect X op.
+Proof. by rewrite /lifter /request_effect/= bindmret. Qed.
 
-Let lifter_unique : forall (cm : monad) (lifter_effect : F ~~> cm) (lifter' : M ~~> cm),
-            (forall X (x : X), lifter' X (ret X x) = @hierarchy.ret cm X x) ->
-            (forall X Y (m : M X) (f : X -> M Y), lifter' Y (m >>= f) = (lifter' X m) >>= (fun x => lifter' Y (f x))) ->
-            (forall X (fx : F X),
-              lifter' X (request_effect fx) = lifter_effect X fx) ->
-        forall X (m : M X), lifter' X m = lifter lifter_effect m.
+Let lifter_unique : forall (cm : monad) (lifter_effect : F ~~> cm)
+    (lifter' : acto ~~> cm),
+  (forall X (x : X), lifter' X (ret X x) = @hierarchy.ret cm X x) ->
+  (forall X Y (m : acto X) (f : X -> acto Y),
+    lifter' Y (m >>= f) = lifter' X m >>= (fun x => lifter' Y (f x))) ->
+  (forall X (op : F X),
+    lifter' X (request_effect op) = lifter_effect X op) ->
+  forall X (m : acto X), lifter' X m = lifter lifter_effect m.
 Proof.
     move=>cm lifter_effect lifter' dret' dbind' dtrigger' X m.
     rewrite/lifter.
     elim:m=>[x| Y fy k Hy]/=.
     - exact/dret'.
     under [in RHS]eq_bind do rewrite -Hy.
-    by rewrite -dtrigger' -dbind' /request_effect.
+    by rewrite -dtrigger'-dbind'/request_effect.
 Qed.
 
-HB.instance Definition _ := isMonadImpure.Build F M
-  lifter_ret 
-  lifter_bind 
-  lifter_trigger
-  lifter_unique.
+#[export]
+HB.instance Definition _ := isMonadFreer.Build F acto
+  lifter_ret lifter_bind lifter_trigger lifter_unique.
 
 End freer.
-End Impure.
-HB.export Impure.
+End Freer.
+HB.export Freer.
 
-Lemma impure_lift_if : forall (F : effect) (M : impureMonad F) (cm : monad)
-    (lifter_effect : F ~~> cm) X (m m' : M X) b,
-        impure_lift cm lifter_effect X (if b then m else m') = if b then ( impure_lift cm lifter_effect X m) else ( impure_lift cm lifter_effect X m').
-Proof.
-    by move=>? ? ? ? ? ? ?; case.
-Qed.
-HB.export impure_lift_if.
+Lemma denote_if : forall (F : effect) (M : freerMonad F) (cm : monad)
+   (lifter_effect : F ~~> cm) X (m m' : M X) b,
+  denote cm lifter_effect X (if b then m else m') =
+  if b then (denote cm lifter_effect X m) else (denote cm lifter_effect X m').
+Proof. by move=> ? ? ? ? ? ? ?; case. Qed.
 
+(* example of freer monad using state *)
 Module ImpSt.
-  Section impstate.
-        Variable F : effect.
-        Variable S : UU0.
-Definition request_effect `{Provide Fx F} {A} (e : F A) : acto Fx A :=
-  request_then (inj_p e) (fun x => local x).
+Section impstate.
+Context (F : effect) (S : UU0).
 
-  Let iget `{Provide F (STORE S)} : acto F S :=
-    request_effect (inj_p Get).
-  Let iput `{Provide F (STORE S)} (s : S) : acto F () :=
-    request_effect (inj_p (Put s)).
+Import Monad.
+
+Definition request_effect {Fx : effect} `{Provide Fx F} {A}
+    (op : F A) : freer Fx A :=
+  impure (inj_p op) (@pure _ _).
+
+Let iget `{Provide F (STORE S)} : freer F S := request_effect (inj_p Get).
+Let iput `{Provide F (STORE S)} (s : S) : freer F () :=
+  request_effect (inj_p (Put s)).
 
 (** Note: there have been attempts to turn [request] into a typeclass
     function (to seamlessly use [request] with a [MonadTrans] instance such as
     [state_t]). The reason why it has not been kept into the codebase is that
     the flexibility it gives for writing code has a real impact on the
-    verification process. It is simpler to reason about “pure” impure
+    verification process. It is simpler to reason about “pure” freer
     computations (that is, not within a monad stack), then wrapping these
     computations thanks to [lift].
 
@@ -248,16 +222,20 @@ Definition request_effect `{Provide Fx F} {A} (e : F A) : acto Fx A :=
 
 (** * Lift *)
 
-  End impstate.
+End impstate.
 End ImpSt.
 
 (* HB.export ImpSt. *)
 
-Module ImpureFuns.
-Definition trigger `{Provide Fx F} {im : impureMonad Fx} : Fx ~~> im :=
-  fun a e => request a (inj_p e).
-Definition iget {S} `{Provide F (STORE S)} {im : impureMonad F} : im S:= trigger (inj_p Get).
-Definition iput {S} `{Provide F (STORE S)} {im : impureMonad F} (s : S) : im unit:= trigger (inj_p (Put s)).
-End ImpureFuns.
+Module FreerFuns.
+Definition trigger {Fx : effect} `{Provide Fx F}
+    {im : freerMonad Fx} : Fx ~~> im :=
+  fun a op => request a (inj_p op).
+Definition iget {S} `{Provide F (STORE S)} {im : freerMonad F} : im S :=
+  trigger (inj_p Get).
+Definition iput {S} `{Provide F (STORE S)} {im : freerMonad F}
+    (s : S) : im unit :=
+  trigger (inj_p (Put s)).
+End FreerFuns.
 
-HB.export ImpureFuns.
+HB.export FreerFuns.

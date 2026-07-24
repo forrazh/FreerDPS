@@ -34,15 +34,21 @@ Check request.
 
 Section a.
 
-Definition is_open `{Provide Fx DOORS} {im : impureMonad Fx} (d : door) : im bool := trigger (inj_p $ IsOpen d).
+Definition is_open `{Provide Fx DOORS} {im : freerMonad Fx}
+    (d : door) : im bool :=
+  trigger (inj_p $ IsOpen d).
 
-Definition toggle `{Provide Fx DOORS} {im : impureMonad Fx} (d : door) : im unit := trigger (inj_p $ Toggle d).
+Definition toggle `{Provide Fx DOORS} {im : freerMonad Fx}
+    (d : door) : im unit :=
+  trigger (inj_p $ Toggle d).
 
-Definition open_door `{Provide Fx DOORS} {im : impureMonad Fx} (d : door) : im unit :=
+Definition open_door `{Provide Fx DOORS} {im : freerMonad Fx}
+    (d : door) : im unit :=
   is_open d >>= fun open =>
   when (negb open) (toggle d).
 
-Definition close_door `{Provide Fx DOORS} {im : impureMonad Fx} (d : door) : im unit :=
+Definition close_door `{Provide Fx DOORS} {im : freerMonad Fx}
+    (d : door) : im unit :=
   is_open d >>= fun open =>
   when open (toggle d).
 
@@ -52,10 +58,11 @@ Inductive CONTROLLER : effect :=
 | Tick : CONTROLLER unit
 | RequestOpen (d : door) : CONTROLLER unit.
 
-Definition tick `{Provide Fx CONTROLLER} {im : impureMonad Fx} : im unit :=
+Definition tick `{Provide Fx CONTROLLER} {im : freerMonad Fx} : im unit :=
   trigger (inj_p Tick).
 
-Definition request_open `{Provide Fx CONTROLLER} {im : impureMonad Fx}  (d : door) : im unit :=
+Definition request_open `{Provide Fx CONTROLLER} {im : freerMonad Fx}
+    (d : door) : im unit :=
   trigger (inj_p $ RequestOpen d).
 
 Definition co (d : door) : door :=
@@ -64,7 +71,8 @@ Definition co (d : door) : door :=
   | right => left
   end.
 
-Definition controller `{Provide Fx DOORS, Provide Fx (STORE nat)} {im : impureMonad Fx}
+Definition controller `{Provide Fx DOORS, Provide Fx (STORE nat)}
+    {im : freerMonad Fx}
   : component (im:=im) CONTROLLER Fx
   (* .
   move=>X; case=>[|d].
@@ -192,9 +200,10 @@ Definition doors_contract : contract DOORS Ω :=
 
 (** Closing a door [d] in any system [ω] is always a respectful operation. *)
 
-Lemma close_door_respectful `{Provide Fx DOORS} {im : impureMonad Fx} (ω : Ω) (d : door)
+Lemma close_door_respectful `{Provide Fx DOORS} {im : freerMonad Fx}
+    (ω : Ω) (d : door)
   : pre (to_hoare
-      (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+      (im:=freer Fx)
       doors_contract (close_door d)) ω.
 
 Proof.
@@ -217,7 +226,7 @@ Qed.
 Lemma open_door_respectful `{Provide Fx DOORS} (ω : Ω)
     (d : door) (safe : sel (co d) ω = false)
   : pre (to_hoare
-      (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+      (im:=freer Fx)
       doors_contract (open_door (Fx:=Fx) d)) ω.
 
 Proof.
@@ -229,7 +238,7 @@ Qed.
 
 Lemma close_door_run `{Provide Fx DOORS} (ω : Ω) (d : door) (ω' : Ω) (x : unit)
   (run : post
-    (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+    (to_hoare (im:=freer Fx)
       doors_contract (close_door d)) ω x ω')
   : sel d ω' = false.
 Proof.
@@ -273,20 +282,20 @@ Qed.
 
 #[local] Opaque sel.
 
-Lemma respectful_run_inv `{Provide Fx DOORS} {A} (p : impure Fx A)
+Lemma respectful_run_inv `{Provide Fx DOORS} {A} (p : freer Fx A)
     (ω : Ω) (safe : sel left ω = false \/ sel right ω = false)
     (a : A) (ω' : Ω)
     (hpre : pre
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+      (to_hoare (im:=freer Fx)
         doors_contract p) ω)
     (hpost : post
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+      (to_hoare (im:=freer Fx)
         doors_contract p) ω a ω')
   : sel left ω' = false \/ sel right ω' = false.
 
 (** We reason by induction on the impure computation [p]:
 
-    - Either [p] is a local, pure computation; in such a case, the doors state
+    - Either [p] is a pure computation; in such a case, the doors state
       does not change, hence the proof is trivial.
 
     - Or [p] consists in a request to the doors effect, and a continuation
@@ -321,7 +330,7 @@ Proof.
   induction p; intros ω hpre run safe.
   + by unroll_post run.
   + run_simpl run.
-    have hpost : post (hoare_of_contract doors_contract (A:=β) e) ω x ω0
+    have hpost : post (hoare_of_contract doors_contract (A:=β) op) ω x ω0
       by split; [apply H2| by rewrite H3].
     (* move: H1 => /(_ x ω0) => H1. *)
      apply/(H1 x ω0) => //; [by apply hpre|].
@@ -330,7 +339,7 @@ Proof.
     (* simplify_gens *)
     unfold gen_caller_obligation, gen_callee_obligation, gen_witness_update in *.
     cbn in *.
-    destruct (proj_p e) as [e'|].
+    destruct (proj_p op) as [e'|].
     ++ destruct hpost as [o_callee equω].
        destruct e' as [d|d].
        +++ rewrite H3.
@@ -348,14 +357,14 @@ Qed.
 
 Lemma controller_correct `{StrictProvide2 Fx DOORS (STORE nat)}
   : correct_component
-      (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx) controller
+      (im:=freer Fx) controller
                       (no_contract CONTROLLER)
                       doors_contract
                       (fun _ ω => sel left ω = false \/ sel right ω = false).
 Proof.
   move=>ωc ωd pred A eff req.
   have hpre : pre
-      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+      (to_hoare (im:=freer Fx)
         doors_contract (controller A eff)) ωd.
     {
       case eff; do ! [prove impure with airlock; ssubst; constructor => //].
