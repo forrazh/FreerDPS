@@ -109,7 +109,7 @@ Ltac prove_impure :=
     | |- pre ?pcond ?ω =>
 
     lazymatch pcond with 
-      | lifter (F:=?ifce) (M:=?m) (contract_of_hoare ?c) (A:=_) ?p => let p := (eval hnf in p) in
+      | lifter (F:=?ifce) (M:=?m) (hoare_of_contract ?c) (A:=_) ?p => let p := (eval hnf in p) in
         lazymatch p with
         | request_then ?e ?f =>
           let o_caller := fresh "o_caller" in
@@ -178,7 +178,7 @@ Ltac unroll_post run :=
       inversion run; ssubst;
       clear run;
       lazymatch goal with
-      | next : exists _, post (contract_of_hoare c _ e) _ _ _ /\ _ |- _ =>
+      | next : exists _, post (hoare_of_contract c _ e) _ _ _ /\ _ |- _ =>
         let ω'' := fresh "ω" in
         let o_callee := fresh "o_callee" in
         let run := fresh "run" in
@@ -229,7 +229,7 @@ Ltac run_simpl run :=
     cleanvert run;
     idtac "=> => inverted";
     match goal with
-    | next : exists _, post (contract_of_hoare c (A:=_) e) _ _ _ /\ _ |- _ =>
+    | next : exists _, post (hoare_of_contract c (A:=_) e) _ _ _ /\ _ |- _ =>
         idtac "=> => => found next: " next;
         let ω'' := fresh "ω" in 
         let o_callee := fresh "o_callee" in 
@@ -243,7 +243,7 @@ Ltac run_simpl run :=
   | local ?x => idtac "=> => PURE!"; cleanvert run
   | _ => idtac "<== freer out" 
   end
-| post (lifter (F:=?ifce) (M:=?m) (contract_of_hoare ?c)
+| post (lifter (F:=?ifce) (M:=?m) (hoare_of_contract ?c)
     (A:=_) (bind ?f ?g)) _ _ _ =>
       idtac "=> lifter bind";
       let run1 := fresh "lrun" in

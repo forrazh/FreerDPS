@@ -311,7 +311,7 @@ Proof.
   induction p; intros ω hpre run safe.
   + by unroll_post run.
   + run_simpl run.
-    have hpost : post (contract_of_hoare doors_contract (A:=β) e) ω x ω0
+    have hpost : post (hoare_of_contract doors_contract (A:=β) e) ω x ω0
       by split; [apply H2| by rewrite H3].
     (* move: H1 => /(_ x ω0) => H1. *)
      apply/(H1 x ω0) => //; [by apply hpre|].

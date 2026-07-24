@@ -122,7 +122,7 @@ HB.export hoare_mon.
 
 (** * Reasoning about Programs *)
 
-Definition contract_of_hoare `{MayProvide Fx F} `(c : contract F Ω)
+Definition hoare_of_contract `{MayProvide Fx F} `(c : contract F Ω)
     : Fx ~~> hoare Ω :=
   fun a e => mk_hoare
     (fun ω => gen_caller_obligation c ω e)
@@ -131,5 +131,5 @@ Definition contract_of_hoare `{MayProvide Fx F} `(c : contract F Ω)
 
 Definition to_hoare `{MayProvide Fx F} {im : impureMonad Fx} `(c : contract F Ω)
     : im ~~> hoare Ω :=
-  impure_lift _ (contract_of_hoare c).
+  impure_lift _ (hoare_of_contract c).
 Arguments to_hoare {Fx F _ im Ω} c {α} : rename.
