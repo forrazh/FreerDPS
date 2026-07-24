@@ -6,7 +6,7 @@
 
 From Coq Require Import Arith.
 From FreerDPS Require Import Init.
-From FreerDPS Require Import Core Impure Hoare.
+From FreerDPS Require Import Core Freer Hoare.
 
 #[local] Open Scope nat_scope.
 #[local] Open Scope monae_scope.
@@ -193,7 +193,9 @@ Definition doors_contract : contract DOORS Ω :=
 (** Closing a door [d] in any system [ω] is always a respectful operation. *)
 
 Lemma close_door_respectful `{Provide Fx DOORS} {im : impureMonad Fx} (ω : Ω) (d : door)
-  : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) (doors_contract) (close_door d))( ω).
+  : pre (to_hoare
+      (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+      doors_contract (close_door d)) ω.
 
 Proof.
   prove impure with airlock; subst ; constructor.
@@ -214,7 +216,9 @@ Qed.
 
 Lemma open_door_respectful `{Provide Fx DOORS} (ω : Ω)
     (d : door) (safe : sel (co d) ω = false)
-  : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) doors_contract (open_door (Fx := Fx) d)) ω.
+  : pre (to_hoare
+      (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+      doors_contract (open_door (Fx:=Fx) d)) ω.
 
 Proof.
   prove impure; repeat constructor; subst.
@@ -224,7 +228,9 @@ Qed.
  Hint Resolve open_door_respectful : airlock.
 
 Lemma close_door_run `{Provide Fx DOORS} (ω : Ω) (d : door) (ω' : Ω) (x : unit)
-  (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) doors_contract (close_door d)) ω x ω')
+  (run : post
+    (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+      doors_contract (close_door d)) ω x ω')
   : sel d ω' = false.
 Proof.
   run_simpl run;
@@ -270,8 +276,12 @@ Qed.
 Lemma respectful_run_inv `{Provide Fx DOORS} {A} (p : impure Fx A)
     (ω : Ω) (safe : sel left ω = false \/ sel right ω = false)
     (a : A) (ω' : Ω)
-    (hpre : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) doors_contract p) ω)
-    (hpost: post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) doors_contract p) ω a ω')
+    (hpre : pre
+      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+        doors_contract p) ω)
+    (hpost : post
+      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+        doors_contract p) ω a ω')
   : sel left ω' = false \/ sel right ω' = false.
 
 (** We reason by induction on the impure computation [p]:
@@ -344,7 +354,11 @@ Definition correct_component `{MayProvide Ex E}
    forall (ωF : ΩF) (ωE : ΩE) (init : pred ωF ωE)
          `(e : F α) (o_caller : caller_obligation ci ωF e),
     pre (to_hoare cj $ c α e) ωE /\
-    forall (x : α) (ωE' : ΩE) (run : post (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Ex) cj $ c α e) ωE x ωE'),
+    forall (x : α) (ωE' : ΩE)
+        (run : post
+          (to_hoare
+            (im:=ImpureModule_acto__canonical__Freer_MonadImpure Ex)
+            cj $ c α e) ωE x ωE'),
       callee_obligation ci ωF e x /\ pred (witness_update ci ωF e x) ωE'.
 
 
@@ -356,7 +370,9 @@ Lemma controller_correct `{StrictProvide2 Fx DOORS (STORE nat)}
                       (fun _ ω => sel left ω = false \/ sel right ω = false).
 Proof.
   move=>ωc ωd pred A eff req.
-  have hpre : pre (to_hoare (im:=ImpureModule_acto__canonical__Impure_MonadImpure Fx) doors_contract (controller A eff)) ωd.
+  have hpre : pre
+      (to_hoare (im:=ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+        doors_contract (controller A eff)) ωd.
     {
       case eff; do ! [prove impure with airlock; ssubst; constructor => //].
 

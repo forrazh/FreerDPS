@@ -19,7 +19,7 @@ Attributes deprecated(
 
 From FreerDPS Require Import Init.
 (* From ExtLib Require Import Monad StateMonad. *)
-From FreerDPS Require Export Effect Impure.
+From FreerDPS Require Export Effect Freer.
 From monae Require Import monad_model.
 
 #[local] Open Scope signature_scope.
@@ -136,7 +136,7 @@ Definition exec_impure {F a} {im : impureMonad F} (sem : semantics F) (p : im a)
 Fixpoint with_semantics {Fx E α} (sem : semantics E) (p : impure (Fx + E) α)
   : impure Fx α :=
   match p with
-  | Impure.local x => Impure.local x
+  | Freer.local x => Freer.local x
   | request_then _ (in_right e) f =>
     let (res, next) := run_effect sem e in
     with_semantics next (f res)

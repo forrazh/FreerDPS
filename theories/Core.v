@@ -8,7 +8,7 @@ From FreerDPS Require Import Init.
 From FreerDPS Require Export
      Effect
      Typeclasses
-     Impure
+     Freer
      Semantics
      Component
      Contract

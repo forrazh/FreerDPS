@@ -7,7 +7,7 @@
 Attributes deprecated(note="This file will be deleted.").
 
 (* From ExtLib Require Import Monad. *)
-From FreerDPS Require Import Init Effect Contract Impure Hoare HoareFacts.
+From FreerDPS Require Import Init Effect Contract Freer Hoare HoareFacts.
 
 Ltac destruct_if_when :=
   let equ_cond := fresh "equ_cond" in
