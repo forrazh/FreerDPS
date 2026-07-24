@@ -257,13 +257,15 @@ Definition doors_safe (ω : Ω) := ~~ sel left ω \/ ~~ sel right ω.
 
 Section RespectfulAndRunLemmas.
 Context `{Provide Fx DOORS} {im : freerMonad Fx}.
+Local Notation "p ||= c" := (to_hoare (im:=im) c p) (at level 70).
+
 (** Closing a door [d] in any system [ω] is always a respectful operation. *)
 Lemma close_door_respectful (d : door) :
-  pre (to_hoare (im:=im) doors_c (close_door d)) = [set: _].
+  pre (close_door d ||= doors_c) = [set: _].
 Proof.
 rewrite /close_door -subTset=> ω _; apply: to_hoare_bind_preI.
 - by rewrite to_hoare_requestE doors_is_open_preE.
-move=> [|] ?;
+case=> ?;
   rewrite to_hoare_when_preE // to_hoare_requestE doors_is_open_post_retE
   => -[? <-].
 by rewrite to_hoare_requestE;
@@ -271,12 +273,11 @@ by rewrite to_hoare_requestE;
 Qed.
 
 Lemma open_door_respectful (ω : Ω) (d : door) (safe : ~~ sel (co d) ω) :
-  pre (to_hoare (im:=im) doors_c
-    (open_door (Fx := Fx) d)) ω.
+  pre (open_door d ||= doors_c) ω.
 Proof.
 rewrite /open_door; apply: to_hoare_bind_preI.
 - by rewrite to_hoare_requestE doors_is_open_preE.
-move=> [|] ?;
+case=> ?;
   rewrite to_hoare_when_preE // to_hoare_requestE doors_is_open_post_retE
   => -[_ <-].
 rewrite to_hoare_requestE;
@@ -285,34 +286,28 @@ by move: safe=> /[swap] ->.
 Qed.
 
 Lemma close_door_run (ω : Ω) (d : door) (ω' : Ω) (x : unit)
-  (run : post (to_hoare (im:=im) doors_c (close_door d)) ω x ω') :
+  (run : post (close_door d ||= doors_c) ω x ω') :
 ~~ sel d ω'.
 Proof.
 move: run; rewrite /close_door to_hoare_bind_postE.
 move=> [opened [? [ ]]].
 rewrite to_hoare_requestE doors_is_open_post_retE to_hoare_when_postE
   => -[+ <-].
-case: opened; last first.
-- by move=> /[swap] -> ->.
-by move=> + [[] ];
-  rewrite to_hoare_requestE doors_toggle_postE=> /[swap] ->;
+case: opened=> [ + [[]] | /[swap] -> -> ] //.
+by rewrite to_hoare_requestE doors_toggle_postE
+  => /[swap] ->;
   rewrite tog_equ_1=> ->.
 Qed.
 
 Opaque close_door.
 Opaque open_door.
 Opaque Nat.ltb.
-
-(** The objective of this lemma is to prove that, if either the right door or
-    the left door is closed, then after any respectful run of a computation
-    [p] that interacts with doors, this fact remains true. *)
-
 Opaque sel.
 
 Lemma doors_request_preserves_safe
     `(op : Fx a) (ω : Ω) (x : a) (ω' : Ω) :
-  pre (to_hoare (im:=im) doors_c (trigger op)) ω ->
-  post (to_hoare (im:=im) doors_c (trigger op)) ω x ω' ->
+  pre (trigger op ||= doors_c) ω ->
+  post (trigger op ||= doors_c) ω x ω' ->
   doors_safe ω -> doors_safe ω'.
 Proof.
 rewrite to_hoare_requestE doors_effect_preE doors_effect_postE.
@@ -362,40 +357,39 @@ Qed.
 End RespectfulAndRunLemmas.
 
 (** ** Main Theorem *)
-(* TODO(cleanup): Check whether this proof can be shortened. *)
+Section controller_s.
+Context `{StrictProvide2 Fx DOORS (STORE nat)} {im : freerMonad Fx}.
 
-Section theo_cont.
-Theorem controller_correct
-    `{StrictProvide2 Fx DOORS (STORE nat)} {im : freerMonad Fx}
-  : correct_component controller
-    (im:=im)
-    (no_contract CONTROLLER)
-    doors_c
-    (fun _ ω => ~~ sel left ω \/ ~~ sel right ω).
+Lemma controller_pre `(op: CONTROLLER α) (ω : Ω)
+  : pre ((controller (im:=im) α op) |= doors_c) ω.
 Proof.
-rewrite /correct_component=> ωF ω safe α op _.
-have controller_pre :
-    pre ((controller (im:=im) α op) |= doors_c) ω.
-  case: op=> [|d]; rewrite /controller.
-  - apply: to_hoare_bind_preI.
-    + exact: to_hoare_distinguished_request_preI.
-    move=> cpt state /to_hoare_distinguished_request_postE ->.
-    rewrite to_hoare_when_preE.
-    case: (15 <? cpt)%nat=> //=.
-    apply: to_hoare_bind_preI.
-    + by apply: to_hoare_bind_preI=>
-        [|result state' close_post]; rewrite close_door_respectful.
-    by move=> result state' closes_post;
-      exact: to_hoare_distinguished_request_preI.
-  apply: to_hoare_bind_preI.
-  - apply: to_hoare_bind_preI.
-    + by rewrite close_door_respectful.
-    move=> result state close_post.
-    exact: (open_door_respectful (Fx:=Fx) (im:=im) state d
-      (close_door_run ω (co d) state result close_post)).
-  by move=> result state body_post;
-    exact: to_hoare_distinguished_request_preI.
-split=> // x ω' run; split; first exact: mk_no_callee_obligation.
-exact: (respectful_run_inv (Fx:=Fx) (im:=im)
-  (controller (im:=im) α op) ω safe x ω' controller_pre run).
+case: op=> [|d].
+- apply: to_hoare_bind_preI.
+  + exact: to_hoare_distinguished_request_preI.
+  + move=> cpt? /to_hoare_distinguished_request_postE ->.
+    rewrite to_hoare_when_preE;
+      case: (15 <? cpt)%nat=> //=;
+      apply: to_hoare_bind_preI.
+    * by apply: to_hoare_bind_preI=>[|*];
+        rewrite close_door_respectful.
+    * by move=>*;
+        exact: to_hoare_distinguished_request_preI.
+
+- apply: to_hoare_bind_preI=>[|*].
+  + apply: to_hoare_bind_preI.
+    * by rewrite close_door_respectful.
+    * by move=>?? Hclose; exact/open_door_respectful/close_door_run/Hclose.
+  + exact: to_hoare_distinguished_request_preI.
 Qed.
+
+Theorem controller_correct
+  : correct_component controller (im:=im)
+    (no_contract CONTROLLER) doors_c (fun=> doors_safe).
+Proof.
+move=>? ω ?? op _.
+split=> [|?? postc]; [exact: controller_pre|split=> //].
+have prec := controller_pre op ω; move: prec postc.
+exact: respectful_run_inv.
+Qed.
+
+End controller_s.
