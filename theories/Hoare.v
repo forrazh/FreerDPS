@@ -129,7 +129,8 @@ Definition hoare_of_contract `{MayProvide Fx F} `(c : contract F Ω)
     (fun ω x ω' => gen_callee_obligation c ω e x /\
                    ω' = gen_witness_update c ω e x).
 
-Definition to_hoare `{MayProvide Fx F} {im : impureMonad Fx} `(c : contract F Ω)
+Definition to_hoare `{MayProvide Fx F} {im : freerMonad Fx}
+    `(c : contract F Ω)
     : im ~~> hoare Ω :=
-  impure_lift _ (hoare_of_contract c).
+  denote _ (hoare_of_contract c).
 Arguments to_hoare {Fx F _ im Ω} c {α} : rename.

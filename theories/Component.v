@@ -33,10 +33,10 @@ Generalizable All Variables.
     Thus, a component [c : component F E] is a polymorphic function which
     maps primitives of [F] to impure computations using [E]. *)
 
-Definition component (F E : effect) `{im : impureMonad E} : Type :=
+Definition component (F E : effect) `{im : freerMonad E} : Type :=
   forall (α : Type), F α -> im α.
 
-Definition correct_component `{MayProvide Ex E} {im : impureMonad Ex}
+Definition correct_component `{MayProvide Ex E} {im : freerMonad Ex}
     `(c : component F Ex) `(cF : contract F ΩF)
     `(cE : contract E ΩE) (pred : ΩF -> ΩE -> Prop) :
   Prop :=
@@ -62,8 +62,8 @@ Definition correct_component `{MayProvide Ex E} {im : impureMonad Ex}
 (** * Semantics Derivation *)
 
 
-CoFixpoint derive_semantics {F E} {im : impureMonad E} (c : component F E) (sem : semantics E)
-  : semantics F :=
+CoFixpoint derive_semantics {F E} {im : freerMonad E}
+    (c : component F E) (sem : semantics E) : semantics F :=
   mk_semantics (fun a p =>
                   let (res, next) := (to_state (α:=im) _ $ c a p) sem in
                   (res, derive_semantics c next)).
@@ -75,14 +75,14 @@ CoFixpoint derive_semantics {F E} {im : impureMonad E} (c : component F E) (sem 
     independently, then composing them together with [semprod] and
     [derive_semantics]. *)
 
-Definition bootstrap {F} {im : impureMonad eempty}
+Definition bootstrap {F} {im : freerMonad eempty}
     (c : component F eempty) : semantics F :=
   derive_semantics (im:=im) c eempty_semantics.
 
 (** * In-place Primitives Handling *)
 
 (** The function [with_component] allows for locally providing an additional
-    effect [E] within an impure computation of type [impure Fx a]. The
+    effect [E] within an impure computation of type [freer Fx a]. The
     primitives of [E] will be handled by impure computations, i.e., a component.
     of type [c : compoment E Fx s]. *)
 Local Open Scope monae_scope.
@@ -90,35 +90,35 @@ Local Open Scope monae_scope.
 
 #[local]
 Fixpoint with_component_aux {Fx E α}
- (* {im : impureMonad Fx}  *)
- (* {jm : impureMonad (Fx + E)} *)
+ (* {im : freerMonad Fx}  *)
+ (* {jm : freerMonad (Fx + E)} *)
 (c : component
-       (im:=Freer.Impure.ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+       (im:=freer Fx)
        E Fx)
-    (p : impure (Fx + E) α)
-  : impure Fx α :=
+    (p : freer (Fx + E) α)
+  : freer Fx α :=
   match p with
-  | local x => local x
-  | request_then T (in_right e) f =>
+  | pure x => pure x
+  | impure T (in_right e) f =>
     c T e >>= fun res => with_component_aux c (f res)
-  | request_then _ (in_left e) f =>
-    request_then e (fun x => with_component_aux c (f x))
+  | impure _ (in_left e) f =>
+    impure e (fun x => with_component_aux c (f x))
   end.
 
-Notation "m >>= f" := (impure_bind m f).
-Notation "m >> f" := (impure_bind m (fun _ =>f)).
+Notation "m >>= f" := (freer_bind m f).
+Notation "m >> f" := (freer_bind m (fun _ => f)).
 
 Definition with_component {Fx E α}
-  (* `{im : impureMonad Fx}
-  `{ixjm : impureMonad (Fx+E)} *)
-  (initializer : impure Fx unit)
+  (* `{im : freerMonad Fx}
+  `{ixjm : freerMonad (Fx+E)} *)
+  (initializer : freer Fx unit)
   (c : component
-         (im:=Freer.Impure.ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+         (im:=freer Fx)
          E Fx)
-  (finalizer : impure Fx unit)
-  (p : impure (Fx+E) α)
-  : impure Fx α :=
+  (finalizer : freer Fx unit)
+  (p : freer (Fx + E) α)
+  : freer Fx α :=
   initializer >>
   with_component_aux c p >>= fun res =>
   finalizer >>
-  local res.
+  pure res.

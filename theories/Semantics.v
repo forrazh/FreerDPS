@@ -94,14 +94,15 @@ Infix "*" := semprod : semantics_scope.
 
 (** * Interpreting Impure Computations *)
 
-(** A term of type [impure a] describes an impure computation expected to return
+(** A term of type [freer F a] describes an impure computation expected to
+    return
     a term of type [a].  Interpreting this term means actually realizing the
     computation and producing the result.  This requires to provide an
     operational semantics for the effects used by the computation.
 
     Some operational semantics may be defined in Gallina by means of the
     [semantics] type. In such a case, we provide helper functions to use them in
-    conjunction with [impure] terms. The terminology follows a logic similar to
+    conjunction with [freer] terms. The terminology follows a logic similar to
     the Haskell state monad:
 
     - [run_impure] interprets an impure computation [p] with an operational
@@ -116,39 +117,42 @@ Definition effect_to_state {F : effect} : F ~~> interp F :=
   fun a e => (fun sem => run_effect sem e).
 
 
-Definition to_state {F} {im : impureMonad F} : im ~~> interp F :=
-  impure_lift _ effect_to_state.
+Definition to_state {F} {im : freerMonad F} : im ~~> interp F :=
+  denote _ effect_to_state.
 
 Arguments to_state {F α} _ : rename.
 
-Definition run_impure {F a} {im : impureMonad F} (sem : semantics F) (p : im a) : a * semantics F :=
-   (to_state _ p) sem.
+Definition run_impure {F a} {im : freerMonad F}
+    (sem : semantics F) (p : im a) : a * semantics F :=
+  (to_state _ p) sem.
 
-Definition eval_impure {F a} {im : impureMonad F} (sem : semantics F) (p : im a) : a :=
+Definition eval_impure {F a} {im : freerMonad F}
+    (sem : semantics F) (p : im a) : a :=
   fst (run_impure sem p).
 
-Definition exec_impure {F a} {im : impureMonad F} (sem : semantics F) (p : im a) : semantics F :=
+Definition exec_impure {F a} {im : freerMonad F}
+    (sem : semantics F) (p : im a) : semantics F :=
   snd (run_impure sem p).
 
 (** * In-place Primitives Handling *)
 
 
-Fixpoint with_semantics {Fx E α} (sem : semantics E) (p : impure (Fx + E) α)
-  : impure Fx α :=
+Fixpoint with_semantics {Fx E α}
+    (sem : semantics E) (p : freer (Fx + E) α) : freer Fx α :=
   match p with
-  | Freer.local x => Freer.local x
-  | request_then _ (in_right e) f =>
+  | pure x => Freer.pure x
+  | impure _ (in_right e) f =>
     let (res, next) := run_effect sem e in
     with_semantics next (f res)
-  | request_then _ (in_left e) f =>
-    request_then e (fun x => with_semantics sem (f x))
+  | impure _ (in_left e) f =>
+    impure e (fun x => with_semantics sem (f x))
   end.
 
 (** We provide [with_store], a helper function to locally provide a mutable
     variable. *)
 
-Definition with_store {Fx s a} (x : s) (p : impure (Fx + STORE s) a)
-  : impure Fx a :=
+Definition with_store {Fx s a} (x : s) (p : freer (Fx + STORE s) a)
+  : freer Fx a :=
   with_semantics (store x) p.
 
 (** Nesting [with_semantics] calls works to some extends. If each
@@ -165,6 +169,6 @@ Compute (with_store 0 (with_store 1 get)).
     returns
 
 <<
-     = local 1
-     : impure ?Fx nat
+     = pure 1
+     : freer ?Fx nat
 >> *)

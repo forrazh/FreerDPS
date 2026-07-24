@@ -50,7 +50,7 @@ Arguments Put [s] (x).
     fact, one effect may have many legitimate semantics.
 
     Impure computations are likely to use more than one effect, but the
-    [impure] monad takes only one argument.  We introduce [eplus] (denoted by
+    [freer] monad takes only one argument.  We introduce [eplus] (denoted by
     [<+>] or [⊕]) to compose effects together.  An impure computation
     parameterized by [F ⊕ E] can therefore leverage the primitives of both [F]
     and [E]. *)
@@ -128,7 +128,7 @@ Infix "+" := eplus : effect_scope.
     The main use case for [eplus] is to locally provide an additional
     effect. For instance, we can consider a [with_state] function which would
     locally give access to the [STORE] effect, that is [with_state : forall
-    Fx s α, s -> impure (Fx + STORE s) α -> impure Fx α]. In such a case, the
+    Fx s α, s -> freer (Fx + STORE s) α -> freer Fx α]. In such a case, the
     effect made locally available shall be the right operand of [eplus]. This
     way, functions such as [with_state] are reentrant. If we take an example,
     the following impure computation:
