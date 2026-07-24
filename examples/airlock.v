@@ -8,10 +8,9 @@ From FreerDPS Require Import Init.
 (* WARNING: Move this import to its MathComp counterpart. *)
 From Stdlib Require Import Arith.
 From mathcomp Require Import all_boot classical_sets.
-From FreerDPS Require Import Core Freer Hoare HoareFacts.
-From examples Require Import airlock_helper.
+From FreerDPS Require Import Core Freer Hoare.
 
-Import SpecializedHoareModule FreerFuns.
+Import FreerFuns.
 Generalizable All Variables.
 
 
@@ -203,7 +202,7 @@ Lemma doors_is_open_post_retE (opened : bool) (ω' : Ω) :
           (A := bool) (inj_p (IsOpen d))) ω opened ω' <->
   post (@ret (hoare Ω) bool (sel d ω)) ω opened ω'.
 Proof.
-rewrite doors_post_condE hoare_pure_postE;
+rewrite doors_post_condE hoare_pureE;
   split=> [ [-> callee] | [<- <-] ];
   split=> //.
 - by inversion callee; ssubst.
@@ -215,7 +214,7 @@ Lemma doors_is_open_preE :
           (A := bool) (inj_p (IsOpen d))) ω <->
   pre (@ret (hoare Ω) bool (sel d ω)) ω.
 Proof.
-by rewrite hoare_pure_preE; split=> // _;
+by rewrite hoare_pureE; split=> // _;
   rewrite doors_pre_condE;
   exact: req_is_open.
 Qed.
@@ -231,14 +230,14 @@ by rewrite doors_post_condE;
 Qed.
 
 Lemma doors_toggle_preE
-    (* Safe : porte 1 ferméE -> porte 2 ferméE *)
-    (* (safe : sel d ω = false -> sel (co d) ω = false) *)
+    (* Safe means : door 1 is closed -> door 2 is closed *)
+    (* Previous: (safe : sel d ω = false -> sel (co d) ω = false) *)
     (safe : sel (co d) ω -> sel d ω) :
   pre (hoare_of_contract doors_c
           (A := unit) (inj_p (Toggle d))) ω <->
   pre (@ret (hoare Ω) unit tt) ω.
 Proof.
-by rewrite hoare_pure_preE; split=> // _;
+by rewrite hoare_pureE; split=> // _;
   rewrite doors_pre_condE;
   exact: req_toggle safe.
 Qed.
@@ -263,7 +262,7 @@ Local Notation "p ||= c" := (to_hoare (im:=im) c p) (at level 70).
 Lemma close_door_respectful (d : door) :
   pre (close_door d ||= doors_c) = [set: _].
 Proof.
-rewrite /close_door -subTset=> ω _; apply: to_hoare_bind_preI.
+rewrite /close_door -subTset=> ω _; apply: th_pre_bindA.
 - by rewrite to_hoare_requestE doors_is_open_preE.
 case=> ?;
   rewrite to_hoare_when_preE // to_hoare_requestE doors_is_open_post_retE
@@ -275,7 +274,7 @@ Qed.
 Lemma open_door_respectful (ω : Ω) (d : door) (safe : ~~ sel (co d) ω) :
   pre (open_door d ||= doors_c) ω.
 Proof.
-rewrite /open_door; apply: to_hoare_bind_preI.
+rewrite /open_door; apply: th_pre_bindA.
 - by rewrite to_hoare_requestE doors_is_open_preE.
 case=> ?;
   rewrite to_hoare_when_preE // to_hoare_requestE doors_is_open_post_retE
@@ -289,7 +288,7 @@ Lemma close_door_run (ω : Ω) (d : door) (ω' : Ω) (x : unit)
   (run : post (close_door d ||= doors_c) ω x ω') :
 ~~ sel d ω'.
 Proof.
-move: run; rewrite /close_door to_hoare_bind_postE.
+move: run; rewrite /close_door th_post_bindA.
 move=> [opened [? [ ]]].
 rewrite to_hoare_requestE doors_is_open_post_retE to_hoare_when_postE
   => -[+ <-].
@@ -339,7 +338,7 @@ Lemma doors_run_preserves_safe `(p : freer Fx A) :
   preserves_invariant doors_safe (p |= doors_c).
 Proof.
 elim: p=> [value | X op k IH].
-- by rewrite to_hoare_localE; exact: preserves_invariant_ret.
+- exact: preserves_invariant_ret.
 exact: (preserves_invariant_bind (doors_handler_preserves_safe op) IH).
 Qed.
 
@@ -351,7 +350,7 @@ Lemma respectful_run_inv `(p : im A)
   ~~ sel left ω' \/ ~~ sel right ω'.
 Proof.
 by move: hpre hpost safe;
-  rewrite -to_hoare_reifyE;
+  rewrite -ToHoareFreerBridge.to_hoare_reifyE;
   exact: doors_run_preserves_safe.
 Qed.
 End RespectfulAndRunLemmas.
@@ -364,19 +363,19 @@ Lemma controller_pre `(op: CONTROLLER α) (ω : Ω)
   : pre ((controller (im:=im) α op) |= doors_c) ω.
 Proof.
 case: op=> [|d].
-- apply: to_hoare_bind_preI.
+- apply: th_pre_bindA.
   + exact: to_hoare_distinguished_request_preI.
   + move=> cpt? /to_hoare_distinguished_request_postE ->.
     rewrite to_hoare_when_preE;
       case: (15 <? cpt)%nat=> //=;
-      apply: to_hoare_bind_preI.
-    * by apply: to_hoare_bind_preI=>[|*];
+      apply: th_pre_bindA.
+    * by apply: th_pre_bindA=>[|*];
         rewrite close_door_respectful.
     * by move=>*;
         exact: to_hoare_distinguished_request_preI.
 
-- apply: to_hoare_bind_preI=>[|*].
-  + apply: to_hoare_bind_preI.
+- apply: th_pre_bindA=>[|*].
+  + apply: th_pre_bindA.
     * by rewrite close_door_respectful.
     * by move=>?? Hclose; exact/open_door_respectful/close_door_run/Hclose.
   + exact: to_hoare_distinguished_request_preI.

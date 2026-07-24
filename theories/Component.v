@@ -92,8 +92,6 @@ Import Freer.
 
 #[local]
 Fixpoint with_component_aux {Fx E α}
- (* {im : freerMonad Fx}  *)
- (* {jm : freerMonad (Fx + E)} *)
 (c : component
        (im:=freer Fx)
        E Fx)
@@ -108,8 +106,6 @@ Fixpoint with_component_aux {Fx E α}
   end.
 
 Definition with_component {Fx E α}
-  (* `{im : freerMonad Fx}
-  `{ixjm : freerMonad (Fx+E)} *)
   (initializer : freer Fx unit)
   (c : component
          (im:=freer Fx)

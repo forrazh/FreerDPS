@@ -8,13 +8,7 @@
 From monae Require Export preamble hierarchy.
 From HB Require Export structures.
 From mathcomp Require Export ssreflect boolp.
-(* Ltac done :=
-  trivial; hnf; intros; solve
-   [ do ![solve [trivial | simple refine (@sym_equal _ _ _ _); trivial]
-         | discriminate | contradiction | split]
-   | match goal with H : ~ _ |- _ => solve [case H; trivial] end
-   | auto with freespec
-   ]. *)
+
 Global Close Scope nat_scope.
 Global Open Scope monae_scope.
 

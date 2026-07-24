@@ -1,5 +1,4 @@
 -Q theories FreerDPS
--Q examples examples
 
 -arg -w -arg -projection-no-head-constant
 
@@ -8,12 +7,10 @@
 ./theories/Core.v
 ./theories/mathcomp_extra.v
 ./theories/Hoare.v
-./theories/HoareFacts.v
 ./theories/Freer.v
 ./theories/Init.v
 ./theories/Instrument.v
 ./theories/Effect.v
 ./theories/Semantics.v
 ./theories/Typeclasses.v
-./examples/airlock_helper.v
 ./examples/airlock.v

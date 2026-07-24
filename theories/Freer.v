@@ -189,6 +189,20 @@ Lemma denote_if : forall (F : effect) (M : freerMonad F) (cm : monad)
   if b then (denote cm lifter_effect X m) else (denote cm lifter_effect X m').
 Proof. by move=> ? ? ? ? ? ? ?; case. Qed.
 
+Lemma denote_when_request (Fx : effect) (M : freerMonad Fx) (cm : monad)
+    (l : Fx ~~> cm) (A X : Type) (guard : A -> bool) (op : Fx X) :
+  denote cm l unit \o
+      (fun x => when (guard x) (request X op : M X)) =
+    fun x =>
+      if guard x then
+        l X op >>= (denote cm l unit \o fun=> (skip : M unit))
+      else denote cm l unit (skip : M unit).
+Proof.
+by apply/funext=> x; rewrite compE denote_if;
+  case: (guard x)=> //=;
+  rewrite denote_bind denote_request.
+Qed.
+
 (* example of freer monad using state *)
 Module ImpSt.
 Section impstate.
