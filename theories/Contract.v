@@ -12,7 +12,7 @@
 
 From FreerDPS Require Import Init.
 (* From ExtLib Require Import StateMonad MonadState MonadTrans. *)
-From FreerDPS Require Import Effect Impure.
+From FreerDPS Require Import Effect Freer.
 #[local]
 Open Scope signature_scope.
 Open Scope monae_scope.
@@ -280,7 +280,7 @@ Infix "^" := sharedcontractprod  : contract_scope.
 (** * Contract By Example *)
 
 (** Finally, and as an example, we define a contract for the effect
-    [STORE s] we discuss in [FreeSpec.Core.Impure].  As a reminder, the
+    [STORE s] we discuss in [FreerDPS.Freer].  As a reminder, the
     effect is defined as follows:
 
 <<

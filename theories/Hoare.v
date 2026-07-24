@@ -6,7 +6,7 @@
 
 From FreerDPS Require Import Init.
 (* From ExtLib Require Import Functor Applicative Monad. *)
-From FreerDPS Require Import Effect Impure Contract mathcomp_extra.
+From FreerDPS Require Import Effect Freer Contract mathcomp_extra.
 From mathcomp Require Import all_boot classical_sets.
 
 Generalizable All Variables.

@@ -9,7 +9,7 @@ Attributes deprecated(
 
 From FreerDPS Require Import Init.
 (* From ExtLib Require Import StateMonad. *)
-From FreerDPS Require Export Effect Semantics Impure.
+From FreerDPS Require Export Effect Semantics Freer.
 From monae Require Import monad_lib.
 (** * Definition *)
 
@@ -76,7 +76,10 @@ Local Open Scope monae_scope.
 Fixpoint with_component_aux {Fx E α}
  (* {im : impureMonad Fx}  *)
  (* {jm : impureMonad (Fx + E)} *)
-(c : component (im:=Impure.ImpureModule_acto__canonical__Impure_MonadImpure Fx) E Fx) (p : impure (Fx + E) α)
+(c : component
+       (im:=Freer.Impure.ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+       E Fx)
+    (p : impure (Fx + E) α)
   : impure Fx α :=
   match p with
   | local x => local x
@@ -93,7 +96,9 @@ Definition with_component {Fx E α}
   (* `{im : impureMonad Fx}
   `{ixjm : impureMonad (Fx+E)} *)
   (initializer : impure Fx unit)
-  (c : component (im:=Impure.ImpureModule_acto__canonical__Impure_MonadImpure Fx) E Fx)
+  (c : component
+         (im:=Freer.Impure.ImpureModule_acto__canonical__Freer_MonadImpure Fx)
+         E Fx)
   (finalizer : impure Fx unit)
   (p : impure (Fx+E) α)
   : impure Fx α :=

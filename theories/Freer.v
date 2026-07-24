@@ -4,8 +4,6 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
-Attributes deprecated(note="This file will be renamed to `Freer.v`.").
-
 (** In [FreeSpec.Core.Effect], we have introduced the [effect] type, to
     model the set of primitives an impure computation can use. We also introduce
     [MayProvide], [Provide] and [Distinguish]. They are three type classes which

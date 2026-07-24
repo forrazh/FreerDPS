@@ -7,7 +7,7 @@
 ./theories/mathcomp_extra.v
 ./theories/Hoare.v
 ./theories/HoareFacts.v
-./theories/Impure.v
+./theories/Freer.v
 ./theories/Init.v
 ./theories/Instrument.v
 ./theories/Effect.v
