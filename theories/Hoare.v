@@ -194,7 +194,11 @@ Definition to_hoare `{MayProvide Fx F} {im : freerMonad Fx}
   denote _ (hoare_of_contract c).
 Arguments to_hoare {Fx F _ im Ω} c {α} : rename.
 
-Notation "p |= c" := (to_hoare c p) (at level 70).
+(** A Hoare triple can be interpreted from the program `p`
+  * through the contract `c`.
+  *)
+Notation "p |> c" := (to_hoare c p)
+  (at level 50, no associativity).
 
 (* --------------------------------- Facts ---------------------------------- *)
 
@@ -207,7 +211,7 @@ Lemma to_hoare_requestE `(op : Fx a) :
 Proof. exact: denote_request. Qed.
 
 Lemma to_hoare_skip_preI (ω : Ω) :
-  pre ((skip : im unit) |= c) ω.
+  pre ((skip : im unit) |> c) ω.
 Proof. by rewrite /to_hoare denote_ret. Qed.
 
 Section BindFacts.
@@ -238,8 +242,8 @@ Section WhenFacts.
 Context `(p : im a) (guard : bool).
 
 Lemma to_hoare_when_preE (ω : Ω) :
-  pre (when guard p |= c) ω <->
-  if guard then pre (p |= c) ω else True.
+  pre (when guard p |> c) ω <->
+  if guard then pre (p |> c) ω else True.
 Proof.
 by case: guard=> /=;
   [rewrite to_hoare_bindE; split=> [[ ] | ] //|];
@@ -247,9 +251,9 @@ by case: guard=> /=;
 Qed.
 
 Lemma to_hoare_when_postE (ω : Ω) (x : unit) (ω' : Ω) :
-  post (when guard p |= c) ω x ω' <->
+  post (when guard p |> c) ω x ω' <->
   if guard
-  then exists y, post (p |= c) ω y ω'
+  then exists y, post (p |> c) ω y ω'
   else ω' = ω.
 Proof.
 case: x; case: guard=> /=;
@@ -270,11 +274,13 @@ Context {Fx F G : effect}
     {im : freerMonad Fx} `(c : contract F Ω)
     {A} (op : G A).
 
-Local Notation "p ||= c" := (to_hoare (im:=im) c p) (at level 70).
+(* Local Notation used to fix the freerMonad used with the to_hoare mapper. *)
+Local Notation "p ||> c" := (to_hoare (im:=im) c p)
+  (at level 50, no associativity).
 
 Lemma to_hoare_distinguished_request_preI
      (ω : Ω) :
-  pre (trigger op ||= c) ω.
+  pre (trigger op ||> c) ω.
 Proof.
 by rewrite to_hoare_requestE /hoare_of_contract
   /gen_caller_obligation (@distinguish Fx G F).
@@ -282,7 +288,7 @@ Qed.
 
 Lemma to_hoare_distinguished_request_postE
   (ω : Ω) (x : A) (ω' : Ω) :
-  post (trigger op ||= c) ω x ω' <->
+  post (trigger op ||> c) ω x ω' <->
   ω' = ω.
 Proof.
 by rewrite to_hoare_requestE /=

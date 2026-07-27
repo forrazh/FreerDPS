@@ -256,11 +256,12 @@ Definition doors_safe (ω : Ω) := ~~ sel left ω \/ ~~ sel right ω.
 
 Section RespectfulAndRunLemmas.
 Context `{Provide Fx DOORS} {im : freerMonad Fx}.
-Local Notation "p ||= c" := (to_hoare (im:=im) c p) (at level 70).
+Local Notation "p ||> c" := (to_hoare (im:=im) c p)
+  (at level 50, no associativity).
 
 (** Closing a door [d] in any system [ω] is always a respectful operation. *)
 Lemma close_door_respectful (d : door) :
-  pre (close_door d ||= doors_c) = [set: _].
+  pre (close_door d ||> doors_c) = [set: _].
 Proof.
 rewrite /close_door -subTset=> ω _; apply: th_pre_bindA.
 - by rewrite to_hoare_requestE doors_is_open_preE.
@@ -272,7 +273,7 @@ by rewrite to_hoare_requestE;
 Qed.
 
 Lemma open_door_respectful (ω : Ω) (d : door) (safe : ~~ sel (co d) ω) :
-  pre (open_door d ||= doors_c) ω.
+  pre (open_door d ||> doors_c) ω.
 Proof.
 rewrite /open_door; apply: th_pre_bindA.
 - by rewrite to_hoare_requestE doors_is_open_preE.
@@ -285,7 +286,7 @@ by move: safe=> /[swap] ->.
 Qed.
 
 Lemma close_door_run (ω : Ω) (d : door) (ω' : Ω) (x : unit)
-  (run : post (close_door d ||= doors_c) ω x ω') :
+  (run : post (close_door d ||> doors_c) ω x ω') :
 ~~ sel d ω'.
 Proof.
 move: run; rewrite /close_door th_post_bindA.
@@ -305,8 +306,8 @@ Opaque sel.
 
 Lemma doors_request_preserves_safe
     `(op : Fx a) (ω : Ω) (x : a) (ω' : Ω) :
-  pre (trigger op ||= doors_c) ω ->
-  post (trigger op ||= doors_c) ω x ω' ->
+  pre (trigger op ||> doors_c) ω ->
+  post (trigger op ||> doors_c) ω x ω' ->
   doors_safe ω -> doors_safe ω'.
 Proof.
 rewrite to_hoare_requestE doors_effect_preE doors_effect_postE.
@@ -336,7 +337,7 @@ Qed.
   * induction but can't find one right now.
   *)
 Lemma doors_run_preserves_safe `(p : freer Fx A) :
-  preserves_invariant doors_safe (p |= doors_c).
+  preserves_invariant doors_safe (p |> doors_c).
 Proof.
 elim: p=> [value | X op k IH].
 - exact: preserves_invariant_ret.
@@ -347,8 +348,8 @@ Qed.
 Lemma respectful_run_inv `(p : im A)
     (ω : Ω) (safe : ~~ sel left ω \/ ~~ sel right ω)
     (a : A) (ω' : Ω)
-    (hpre : pre (p |= doors_c) ω)
-    (hpost : post (p |= doors_c) ω a ω') :
+    (hpre : pre (p |> doors_c) ω)
+    (hpost : post (p |> doors_c) ω a ω') :
   ~~ sel left ω' \/ ~~ sel right ω'.
 Proof.
 by move: hpre hpost safe;
@@ -367,7 +368,7 @@ Section controller_s.
 Context `{StrictProvide2 Fx DOORS (STORE nat)} {im : freerMonad Fx}.
 
 Lemma controller_pre `(op: CONTROLLER α) (ω : Ω)
-  : pre ((controller (im:=im) α op) |= doors_c) ω.
+  : pre ((controller (im:=im) α op) |> doors_c) ω.
 Proof.
 case: op=> [|d].
 - (* Tick *) apply: th_pre_bindA.
