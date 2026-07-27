@@ -44,16 +44,8 @@ Definition hoare_bind {Σ α β}
   mk_hoare (fun s => pre h s /\ (forall x s', post h s x s' -> pre (k x) s'))
            (fun s x s'' => exists y s', post h s y s' /\ post (k y) s' x s'').
 
-(** * Instances *)
-
-
-
-(** ** Functor *)
-
 Definition hoare_map {Σ α β} (f : α -> β) (h : hoare Σ α) : hoare Σ β :=
   hoare_bind h (fun x => hoare_pure (f x)).
-
-(** ** Applicative *)
 
 Definition hoare_apply {Σ α β} (hf : hoare Σ (α -> β)) (h : hoare Σ α)
   : hoare Σ β :=
@@ -137,10 +129,6 @@ HB.instance Definition _ (S : UU0) :=
 
 (** ** Primitive Views *)
 
-Lemma hoare_pureE {Σ α} (x : α) :
-  @ret (hoare Σ) α x = @hoare_pure Σ α x.
-Proof. by []. Qed.
-
 Lemma hoare_bindE {Σ α β} (h : hoare Σ α) (k : α -> hoare Σ β) :
   @bind (hoare Σ) α β h k = hoare_bind h k.
 Proof. by []. Qed.
@@ -175,9 +163,7 @@ Definition preserves_invariant {S A}
 Lemma preserves_invariant_ret {S A}
     (invariant : S -> Prop) (result : A) :
   preserves_invariant invariant (@ret (hoare S) A result).
-Proof.
-by move=> state result' state' _; rewrite hoare_pureE=> -[_ <-].
-Qed.
+Proof. by move=>???? [_ <-]. Qed.
 
 Lemma preserves_invariant_bind {S A B} (invariant : S -> Prop)
     (h : hoare S A) (k : A -> hoare S B) :
@@ -185,11 +171,11 @@ Lemma preserves_invariant_bind {S A B} (invariant : S -> Prop)
   (forall result, preserves_invariant invariant (k result)) ->
   preserves_invariant invariant (h >>= k).
 Proof.
-move=> h_preserves k_preserves state result state';
-  rewrite hoare_bindE=> -[h_pre k_pre] [x [statex [h_post k_post]]] state_safe.
-exact: k_preserves x statex result state'
-  (k_pre x statex h_post) k_post
-  (h_preserves state x statex h_pre h_post state_safe).
+move=> h_preserves k_preserves ??? [h_pre k_pre] [? [? [h_post k_post]]] Hsafe.
+apply: k_preserves.
+- exact/k_pre/h_post.
+- exact: k_post.
+by move: h_pre h_post Hsafe; exact: h_preserves.
 Qed.
 
 (** * Reasoning about Programs *)

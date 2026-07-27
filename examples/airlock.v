@@ -202,7 +202,7 @@ Lemma doors_is_open_post_retE (opened : bool) (ω' : Ω) :
           (A := bool) (inj_p (IsOpen d))) ω opened ω' <->
   post (@ret (hoare Ω) bool (sel d ω)) ω opened ω'.
 Proof.
-rewrite doors_post_condE hoare_pureE;
+rewrite doors_post_condE;
   split=> [ [-> callee] | [<- <-] ];
   split=> //.
 - by inversion callee; ssubst.
@@ -214,7 +214,7 @@ Lemma doors_is_open_preE :
           (A := bool) (inj_p (IsOpen d))) ω <->
   pre (@ret (hoare Ω) bool (sel d ω)) ω.
 Proof.
-by rewrite hoare_pureE; split=> // _;
+by split=> // _;
   rewrite doors_pre_condE;
   exact: req_is_open.
 Qed.
@@ -237,7 +237,7 @@ Lemma doors_toggle_preE
           (A := unit) (inj_p (Toggle d))) ω <->
   pre (@ret (hoare Ω) unit tt) ω.
 Proof.
-by rewrite hoare_pureE; split=> // _;
+by split=> // _;
   rewrite doors_pre_condE;
   exact: req_toggle safe.
 Qed.
@@ -325,9 +325,10 @@ Qed.
 Lemma doors_handler_preserves_safe `(op : Fx a) :
   preserves_invariant doors_safe (hoare_of_contract doors_c op).
 Proof.
-by move=> state result state' op_pre op_post state_safe;
-  apply: (doors_request_preserves_safe op state result state');
-  rewrite ?to_hoare_requestE.
+move=> ??? Hpre Hpost; apply/doors_request_preserves_safe ;
+  rewrite to_hoare_requestE.
+- exact: Hpre.
+- exact: Hpost.
 Qed.
 
 (** /!\ WARNING: This proof exits the Equational Reasoning.
@@ -339,7 +340,8 @@ Lemma doors_run_preserves_safe `(p : freer Fx A) :
 Proof.
 elim: p=> [value | X op k IH].
 - exact: preserves_invariant_ret.
-exact: (preserves_invariant_bind (doors_handler_preserves_safe op) IH).
+by apply: preserves_invariant_bind=>//;
+  exact: doors_handler_preserves_safe.
 Qed.
 
 Lemma respectful_run_inv `(p : im A)
@@ -350,6 +352,11 @@ Lemma respectful_run_inv `(p : im A)
   ~~ sel left ω' \/ ~~ sel right ω'.
 Proof.
 by move: hpre hpost safe;
+  (** /!\ WARNING: Reifying bridge used here.
+    * This currently holds only with a known
+    * instance of FreerMonad being Freer (and
+    * not for all Freer Monads...).
+    *)
   rewrite -ToHoareFreerBridge.to_hoare_reifyE;
   exact: doors_run_preserves_safe.
 Qed.
@@ -363,7 +370,7 @@ Lemma controller_pre `(op: CONTROLLER α) (ω : Ω)
   : pre ((controller (im:=im) α op) |= doors_c) ω.
 Proof.
 case: op=> [|d].
-- apply: th_pre_bindA.
+- (* Tick *) apply: th_pre_bindA.
   + exact: to_hoare_distinguished_request_preI.
   + move=> cpt? /to_hoare_distinguished_request_postE ->.
     rewrite to_hoare_when_preE;
@@ -373,8 +380,7 @@ case: op=> [|d].
         rewrite close_door_respectful.
     * by move=>*;
         exact: to_hoare_distinguished_request_preI.
-
-- apply: th_pre_bindA=>[|*].
+- (* Request Open *) apply: th_pre_bindA=>[|*].
   + apply: th_pre_bindA.
     * by rewrite close_door_respectful.
     * by move=>?? Hclose; exact/open_door_respectful/close_door_run/Hclose.
@@ -385,9 +391,8 @@ Theorem controller_correct
   : correct_component controller (im:=im)
     (no_contract CONTROLLER) doors_c (fun=> doors_safe).
 Proof.
-move=>? ω ?? op _.
-split=> [|?? postc]; [exact: controller_pre|split=> //].
-have prec := controller_pre op ω; move: prec postc.
+move=>? ω ?? op _; split=> [|?? Hpost]; [exact: controller_pre|split=> //].
+have Hpre := controller_pre op ω; move: Hpre Hpost.
 exact: respectful_run_inv.
 Qed.
 
