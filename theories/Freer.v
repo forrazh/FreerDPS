@@ -242,10 +242,7 @@ Definition trigger {Fx : effect} `{Provide Fx F}
     {im : freerMonad Fx} : F ~~> im :=
   fun a op => request a (inj_p op).
 
-Check @trigger.
 Arguments trigger {_ _ _ _ _ _} _.
-
-Check (trigger Get).
 
 Definition iget {S} `{Provide F (STORE S)} {im : freerMonad F} : im S :=
   trigger Get.
