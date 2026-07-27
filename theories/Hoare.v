@@ -61,7 +61,7 @@ Definition hoare_apply {Σ α β} (hf : hoare Σ (α -> β)) (h : hoare Σ α)
 
 (** ** Monad *)
 
-(** A nominal class for monads with Hoare semantics. *)
+(** Easier to had future laws from there. *)
 HB.mixin Record isMonadHoare (S : UU0)
     (M : UU0 -> UU0) of Monad M := {}.
 

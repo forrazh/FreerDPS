@@ -5,7 +5,8 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 Attributes deprecated(
-  note="This file is unused and will probably be removed in later versions.").
+  note="This file will probably be removed or
+    largely reworked in later versions.").
 
 From FreerDPS Require Import Init.
 (* From ExtLib Require Import StateMonad. *)
@@ -87,9 +88,6 @@ Definition bootstrap {F} {im : freerMonad eempty}
     of type [c : compoment E Fx s]. *)
 Local Open Scope monae_scope.
 
-Section tmp.
-Import Freer.
-
 #[local]
 Fixpoint with_component_aux {Fx E α}
 (c : component
@@ -117,5 +115,3 @@ Definition with_component {Fx E α}
   with_component_aux c p >>= fun res =>
   finalizer >>
   pure res.
-
-End tmp.
