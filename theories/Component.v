@@ -5,7 +5,8 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 Attributes deprecated(
-  note="This file is unused and will probably be removed in later versions.").
+  note="This file will probably be removed or
+    largely reworked in later versions.").
 
 From FreerDPS Require Import Init.
 (* From ExtLib Require Import StateMonad. *)
@@ -87,11 +88,8 @@ Definition bootstrap {F} {im : freerMonad eempty}
     of type [c : compoment E Fx s]. *)
 Local Open Scope monae_scope.
 
-
 #[local]
 Fixpoint with_component_aux {Fx E α}
- (* {im : freerMonad Fx}  *)
- (* {jm : freerMonad (Fx + E)} *)
 (c : component
        (im:=freer Fx)
        E Fx)
@@ -99,18 +97,13 @@ Fixpoint with_component_aux {Fx E α}
   : freer Fx α :=
   match p with
   | pure x => pure x
-  | impure T (in_right e) f =>
-    c T e >>= fun res => with_component_aux c (f res)
-  | impure _ (in_left e) f =>
-    impure e (fun x => with_component_aux c (f x))
+  | impure T (in_right op) k =>
+    c T op >>= fun res => with_component_aux c (k res)
+  | impure _ (in_left op) k =>
+    impure op (fun x => with_component_aux c (k x))
   end.
 
-Notation "m >>= f" := (freer_bind m f).
-Notation "m >> f" := (freer_bind m (fun _ => f)).
-
 Definition with_component {Fx E α}
-  (* `{im : freerMonad Fx}
-  `{ixjm : freerMonad (Fx+E)} *)
   (initializer : freer Fx unit)
   (c : component
          (im:=freer Fx)
