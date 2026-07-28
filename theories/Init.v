@@ -5,9 +5,7 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 (** * Utils Functions *)
-From monae Require Export preamble hierarchy.
-From HB Require Export structures.
-From mathcomp Require Export ssreflect boolp.
+From monae Require Import hierarchy.
 
 Global Close Scope nat_scope.
 Global Open Scope monae_scope.
@@ -19,7 +17,7 @@ Notation "f $ x" := (f x) (at level 60, right associativity, only parsing).
 (** * Tactics *)
 
 (* WARNING: Move this import to its MathComp counterpart. *)
-From Stdlib Require Export Eqdep Program Setoid Morphisms.
+From Stdlib Require Import Eqdep.
 
 Ltac ssubst :=
   lazymatch goal with
@@ -30,7 +28,7 @@ end.
 
 Reserved Infix "===" (at level 70, no associativity).
 
-Generalizable All Variables.
-
 Definition function_eq {a b} (r : b -> b -> Prop) (f g : a -> b) : Prop :=
   forall (x : a), r (f x) (g x).
+
+Set Typeclasses Strict Resolution.

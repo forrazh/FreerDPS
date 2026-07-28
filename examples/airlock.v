@@ -4,19 +4,14 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
-From FreerDPS Require Import Init.
+From HB Require Import structures.
+From mathcomp Require Import all_boot classical_sets boolp.
+From monae Require Import hierarchy.
 (* WARNING: Move this import to its MathComp counterpart. *)
 From Stdlib Require Import Arith.
-From mathcomp Require Import all_boot classical_sets.
-From FreerDPS Require Import Core Freer Hoare.
+From FreerDPS Require Import Core.
 
 Import FreerFuns.
-Generalizable All Variables.
-
-
-(** * Specifying *)
-(* Opaque denote. *)
-
 
 Module Export DoorsControllerM.
 (** ** Doors *)
@@ -30,25 +25,24 @@ Inductive DOORS : effect :=
 | Toggle : door -> DOORS unit.
 
 Section doors_s.
-Context `{Provide Fx DOORS} {im : freerMonad Fx}.
+Context {Fx : effect} `{DOORS -< Fx} {M : freerMonad Fx}.
 
-Definition is_open (d : door) : im bool := trigger $ IsOpen d.
-Definition toggle (d : door) : im unit := trigger $ Toggle d.
-Definition open_door (d : door) : im unit :=
+Definition is_open (d : door) : M bool := trigger $ IsOpen d.
+Definition toggle (d : door) : M unit := trigger $ Toggle d.
+Definition open_door (d : door) : M unit :=
   is_open d >>= fun open => when (~~ open) (toggle d).
-Definition close_door (d : door) : im unit :=
+Definition close_door (d : door) : M unit :=
   is_open d >>= (when ^~ (toggle d)).
 End doors_s.
-(** ** Controller *)
 
 Inductive CONTROLLER : effect :=
 | Tick : CONTROLLER unit
 | RequestOpen (d : door) : CONTROLLER unit.
 
 Section controller_s.
-Context `{Provide Fx CONTROLLER} {im : freerMonad Fx}.
-Definition tick : im unit := trigger Tick.
-Definition request_open (d : door) : im unit := trigger $ RequestOpen d.
+Context {Fx : effect} `{CONTROLLER -< Fx} {M : freerMonad Fx}.
+Definition tick : M unit := trigger Tick.
+Definition request_open (d : door) : M unit := trigger $ RequestOpen d.
 End controller_s.
 
 Definition co (d : door) : door :=
@@ -60,8 +54,8 @@ Definition co (d : door) : door :=
 Lemma co_leftE : co left = right.
 Proof. by []. Qed.
 
-Definition controller `{Provide Fx DOORS, Provide Fx (STORE nat)}
-    {im : freerMonad Fx} : component (im:=im) CONTROLLER Fx :=
+Definition controller {Fx : effect} `{DOORS -< Fx, (STORE nat) -< Fx}
+    {M : freerMonad Fx} : component (M:=M) CONTROLLER Fx :=
   fun _ op =>
     match op with
     | Tick =>
@@ -125,7 +119,7 @@ Definition step (ω : Ω) (a : Type) (op : DOORS a) (_ : a) : Ω :=
   if op is Toggle d then tog d ω else ω.
 
 (** *** Requirements / Precondition *)
-Inductive doors_o_caller : Ω -> forall (a : Type), DOORS a -> Prop :=
+Inductive doors_o_caller : Ω -> forall (a : Type), set $ DOORS a :=
 (** - Given the door [d] of o system [ω], it is always possible to ask for the
       state of [d]. *)
 | req_is_open (d : door) (ω : Ω)
@@ -146,102 +140,16 @@ Inductive doors_o_callee : Ω -> forall (a : Type), DOORS a -> a -> Prop :=
 | doors_o_callee_toggle (d : door) (ω : Ω) (x : unit)
   : doors_o_callee ω unit (Toggle d) x.
 
+Lemma doors_o_callee_is_openE
+    {ω : Ω} {d : door} {opened : bool} :
+  doors_o_callee ω bool (IsOpen d) opened ->
+  sel d ω = opened.
+Proof. by inversion 1;ssubst. Qed.
+
 (* doors_c => {{door_caller}} p%step {{door_callee}} *)
 Definition doors_c : contract DOORS Ω :=
   make_contract step doors_o_caller doors_o_callee.
 (* -------------------------------------------------------------------------- *)
-
-Section doors_pre_post_helpers.
-Context `{Provide Fx DOORS} {a : Type}.
-
-Lemma doors_effect_preE (op : Fx a) (ω : Ω) :
-  pre (hoare_of_contract doors_c op) ω <->
-  match proj_p op with
-  | Some door_op => doors_o_caller ω a door_op
-  | None => True
-  end.
-Proof. by rewrite /hoare_of_contract /= /gen_caller_obligation. Qed.
-
-Lemma doors_effect_postE
-    (op : Fx a) (ω : Ω) (x : a) (ω' : Ω) :
-  post (hoare_of_contract doors_c op) ω x ω' <->
-  match proj_p op with
-  | Some door_op =>
-      ω' = step ω a door_op x /\ doors_o_callee ω a door_op x
-  | None => ω' = ω
-  end.
-Proof.
-rewrite /hoare_of_contract /= /gen_witness_update
-  /gen_callee_obligation.
-case: (proj_p op)=> [door_op |] /=.
-- by [].
-by split=> [[-> _] | ->].
-Qed.
-
-Lemma doors_pre_condE
-    (ω : Ω) (op : DOORS a) :
-  pre (hoare_of_contract doors_c (inj_p op)) ω <->
-  doors_o_caller ω a op.
-Proof. by rewrite doors_effect_preE proj_inj_p_equ. Qed.
-
-Lemma doors_post_condE
-    (ω : Ω) (op : DOORS a) (x : a) (ω' : Ω) :
-  post (hoare_of_contract doors_c (inj_p op)) ω x ω' <->
-  ω' = step ω a op x /\ doors_o_callee ω a op x.
-Proof. by rewrite doors_effect_postE proj_inj_p_equ. Qed.
-End doors_pre_post_helpers.
-
-Opaque hoare_of_contract.
-
-(*--------------------------- Intermediary Lemmas ----------------------------*)
-Section IntermLemmaS.
-Context `{Provide Fx DOORS} (ω : Ω) (d : door).
-
-Lemma doors_is_open_post_retE (opened : bool) (ω' : Ω) :
-  post (hoare_of_contract doors_c
-          (A := bool) (inj_p (IsOpen d))) ω opened ω' <->
-  post (@ret (hoare Ω) bool (sel d ω)) ω opened ω'.
-Proof.
-rewrite doors_post_condE;
-  split=> [ [-> callee] | [<- <-] ];
-  split=> //.
-- by inversion callee; ssubst.
-- exact: doors_o_callee_is_open.
-Qed.
-
-Lemma doors_is_open_preE :
-  pre (hoare_of_contract doors_c
-          (A := bool) (inj_p (IsOpen d))) ω <->
-  pre (@ret (hoare Ω) bool (sel d ω)) ω.
-Proof.
-by split=> // _;
-  rewrite doors_pre_condE;
-  exact: req_is_open.
-Qed.
-
-Lemma doors_toggle_postE (u : unit) (ω' : Ω) :
-  post (hoare_of_contract doors_c
-          (A := unit) (inj_p (Toggle d))) ω u ω' <->
-  ω' = tog d ω.
-Proof.
-by rewrite doors_post_condE;
-  split=> [ [-> _] | ->] //; split=>//;
-  exact: doors_o_callee_toggle.
-Qed.
-
-Lemma doors_toggle_preE
-    (* Safe means : door 1 is closed -> door 2 is closed *)
-    (* Previous: (safe : sel d ω = false -> sel (co d) ω = false) *)
-    (safe : sel (co d) ω -> sel d ω) :
-  pre (hoare_of_contract doors_c
-          (A := unit) (inj_p (Toggle d))) ω <->
-  pre (@ret (hoare Ω) unit tt) ω.
-Proof.
-by split=> // _;
-  rewrite doors_pre_condE;
-  exact: req_toggle safe.
-Qed.
-End IntermLemmaS.
 
 Local Open Scope classical_set_scope.
 
@@ -255,48 +163,48 @@ Qed.
 Definition doors_safe (ω : Ω) := ~~ sel left ω \/ ~~ sel right ω.
 
 Section RespectfulAndRunLemmas.
-Context `{Provide Fx DOORS} {im : freerMonad Fx}.
-Local Notation "p ||> c" := (to_hoare (im:=im) c p)
+Context {Fx : effect} `{DOORS -< Fx} {M : freerMonad Fx}.
+Local Notation "c ||> p" :=
+  (to_hoare (M:=M) c p)
   (at level 50, no associativity).
 
 (** Closing a door [d] in any system [ω] is always a respectful operation. *)
 Lemma close_door_respectful (d : door) :
-  pre (close_door d ||> doors_c) = [set: _].
+  pre (doors_c ||> close_door d) = [set: _].
 Proof.
-rewrite /close_door -subTset=> ω _; apply: th_pre_bindA.
-- by rewrite to_hoare_requestE doors_is_open_preE.
+rewrite /close_door -subTset=> hω _; apply: th_pre_bindA.
+- by rewrite to_hoare_trigger_preE; exact: req_is_open.
 case=> ?;
-  rewrite to_hoare_when_preE // to_hoare_requestE doors_is_open_post_retE
-  => -[? <-].
-by rewrite to_hoare_requestE;
-  apply/(doors_toggle_preE ω d).
+  rewrite to_hoare_when_preE // to_hoare_trigger_postE
+    => -[ /[swap] ]=>/doors_o_callee_is_openE ? -> .
+by rewrite to_hoare_trigger_preE;
+  apply: req_toggle.
 Qed.
 
 Lemma open_door_respectful (ω : Ω) (d : door) (safe : ~~ sel (co d) ω) :
-  pre (open_door d ||> doors_c) ω.
+  pre (doors_c ||> open_door d) ω.
 Proof.
 rewrite /open_door; apply: th_pre_bindA.
-- by rewrite to_hoare_requestE doors_is_open_preE.
+- by rewrite to_hoare_trigger_preE; exact: req_is_open.
 case=> ?;
-  rewrite to_hoare_when_preE // to_hoare_requestE doors_is_open_post_retE
-  => -[_ <-].
-rewrite to_hoare_requestE;
-  apply/(doors_toggle_preE ω d)=>//.
+  rewrite to_hoare_when_preE // to_hoare_trigger_postE
+    => -[ /[swap] ]=>/doors_o_callee_is_openE ? ->.
+rewrite /= to_hoare_trigger_preE;
+  apply: req_toggle=>//.
 by move: safe=> /[swap] ->.
 Qed.
 
 Lemma close_door_run (ω : Ω) (d : door) (ω' : Ω) (x : unit)
-  (run : post (close_door d ||> doors_c) ω x ω') :
+  (run : post (doors_c ||> close_door d) ω x ω') :
 ~~ sel d ω'.
 Proof.
-move: run; rewrite /close_door th_post_bindA.
-move=> [opened [? [ ]]].
-rewrite to_hoare_requestE doors_is_open_post_retE to_hoare_when_postE
-  => -[+ <-].
-case: opened=> [ + [[]] | /[swap] -> -> ] //.
-by rewrite to_hoare_requestE doors_toggle_postE
-  => /[swap] ->;
-  rewrite tog_equ_1=> ->.
+move: run; rewrite /close_door th_post_bindA;
+  move=> [opened [? [ ] ] ];
+  rewrite to_hoare_trigger_postE /=;
+  rewrite to_hoare_when_postE=> -[<-] //;
+  case: opened=> /doors_o_callee_is_openE=> [H' [?] | /[swap] <- ->] //.
+by rewrite to_hoare_trigger_postE /= => -[-> _];
+  rewrite tog_equ_1 H'.
 Qed.
 
 Opaque close_door.
@@ -305,13 +213,13 @@ Opaque Nat.ltb.
 Opaque sel.
 
 Lemma doors_request_preserves_safe
-    `(op : Fx a) (ω : Ω) (x : a) (ω' : Ω) :
-  pre (trigger op ||> doors_c) ω ->
-  post (trigger op ||> doors_c) ω x ω' ->
+    {a : Type} (op : Fx a) (ω : Ω) (x : a) (ω' : Ω) :
+  pre (doors_c ||> trigger op) ω ->
+  post (doors_c ||> trigger op) ω x ω' ->
   doors_safe ω -> doors_safe ω'.
 Proof.
-rewrite to_hoare_requestE doors_effect_preE doors_effect_postE.
-case: (proj_p op)=> [door_op |] /=; last first.
+rewrite to_hoare_request_preE to_hoare_request_postE.
+case: (proj op)=> [door_op |] /=; last first.
 - by move=> _ ->.
 move=> + [-> _].
 move: door_op x; case=> d [] caller safe //=.
@@ -323,52 +231,48 @@ by inversion caller as [|?? Hsafe]; subst;
   move: co_open Hsafe d_closed=> -> ->.
 Qed.
 
-Lemma doors_handler_preserves_safe `(op : Fx a) :
+Lemma doors_handler_preserves_safe {a : Type} (op : Fx a) :
   preserves_invariant doors_safe (hoare_of_contract doors_c op).
 Proof.
-move=> ??? Hpre Hpost; apply/doors_request_preserves_safe ;
+move=> ??? Hpre Hpost.
+apply: doors_request_preserves_safe;
   rewrite to_hoare_requestE.
 - exact: Hpre.
 - exact: Hpost.
 Qed.
-
-(** /!\ WARNING: This proof exits the Equational Reasoning.
-  * This is a known issue. I need to find a way to remove this
-  * induction but can't find one right now.
-  *)
-Lemma doors_run_preserves_safe `(p : freer Fx A) :
-  preserves_invariant doors_safe (p |> doors_c).
-Proof.
-elim: p=> [value | X op k IH].
-- exact: preserves_invariant_ret.
-by apply: preserves_invariant_bind=>//;
-  exact: doors_handler_preserves_safe.
-Qed.
-
-Lemma respectful_run_inv `(p : im A)
-    (ω : Ω) (safe : ~~ sel left ω \/ ~~ sel right ω)
-    (a : A) (ω' : Ω)
-    (hpre : pre (p |> doors_c) ω)
-    (hpost : post (p |> doors_c) ω a ω') :
-  ~~ sel left ω' \/ ~~ sel right ω'.
-Proof.
-by move: hpre hpost safe;
-  (** /!\ WARNING: Reifying bridge used here.
-    * This currently holds only with a known
-    * instance of FreerMonad being Freer (and
-    * not for all Freer Monads...).
-    *)
-  rewrite -ToHoareFreerBridge.to_hoare_reifyE;
-  exact: doors_run_preserves_safe.
-Qed.
 End RespectfulAndRunLemmas.
+
+(* From now on, proofs will use the inductive version. *)
+Section InvariantRunLemmas.
+Context {Fx : effect} `{DOORS -< Fx} {M : inductiveFreerMonad Fx}.
+
+(** /!\ WARNING: This lemma is the only one needing `f_ind`  because we
+  * require to "execute" the freer program in order to denote it and see
+  * if the invariant was preserved all along.
+  *)
+Lemma doors_run_preserves_safe {A : Type} (p : M A) :
+  preserves_invariant doors_safe (doors_c |> p).
+Proof.
+by apply: to_hoare_preserves_invariant=> *;
+  exact: (doors_handler_preserves_safe (M:=M)).
+Qed.
+
+Lemma respectful_run_inv {A : Type} (p : M A)
+    (ω : Ω) (safe : doors_safe ω)
+    (a : A) (ω' : Ω)
+    (hpre : pre (doors_c |> p) ω)
+    (hpost : post (doors_c |> p) ω a ω') :
+  doors_safe ω'.
+Proof. by move: hpre hpost safe; exact: doors_run_preserves_safe. Qed.
+End InvariantRunLemmas.
 
 (** ** Main Theorem *)
 Section controller_s.
-Context `{StrictProvide2 Fx DOORS (STORE nat)} {im : freerMonad Fx}.
+Context {Fx : effect} `{StrictProvide2 Fx DOORS (STORE nat)}
+  {M : inductiveFreerMonad Fx}.
 
-Lemma controller_pre `(op: CONTROLLER α) (ω : Ω)
-  : pre ((controller (im:=im) α op) |> doors_c) ω.
+Lemma controller_pre {α : Type} (op : CONTROLLER α) (ω : Ω)
+  : pre (doors_c |> controller (M:=M) α op) ω.
 Proof.
 case: op=> [|d].
 - (* Tick *) apply: th_pre_bindA.
@@ -389,7 +293,7 @@ case: op=> [|d].
 Qed.
 
 Theorem controller_correct
-  : correct_component controller (im:=im)
+  : correct_component controller (M:=M)
     (no_contract CONTROLLER) doors_c (fun=> doors_safe).
 Proof.
 move=>? ω ?? op _; split=> [|?? Hpost]; [exact: controller_pre|split=> //].

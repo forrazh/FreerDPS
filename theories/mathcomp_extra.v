@@ -23,8 +23,7 @@
 (*                                                                            *)
 (******************************************************************************)
 
-From FreerDPS Require Import Init.
-From mathcomp Require Import all_boot.
+From mathcomp Require Import ssreflect boolp.
 
 Lemma eq4_exists T S R N
   (U V : forall (x : T) (y : S x) (z : R x y), N x y z -> Prop) :
