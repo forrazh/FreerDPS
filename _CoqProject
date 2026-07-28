@@ -9,8 +9,6 @@
 ./theories/Hoare.v
 ./theories/Freer.v
 ./theories/Init.v
-./theories/Instrument.v
 ./theories/Effect.v
-./theories/Semantics.v
 ./theories/Typeclasses.v
 ./examples/airlock.v
