@@ -248,14 +248,13 @@ Definition contractprod {Fx F E : effect} `{F -< Fx, E -< Fx}
                    gen_callee_obligation ci (fst ω) e x /\ gen_callee_obligation cj (snd ω) e x
   |}.
 
-Infix "*" := contractprod : contract_scope.
+Infix "-*-" := contractprod (at level 20) : contract_scope .
 
 (** We also introduce a second composition operator which shares the
     witness state among its two operands. *)
 
-(* FIXME: Should be [StrictProvide2 Fx F E] *)
-
-Definition sharedcontractprod {Fx F E : effect} `{F -< Fx, E -< Fx}
+Definition sharedcontractprod {Fx F E : effect}
+    `{StrictProvide2 Fx F E}
     {Ω : Type} (ci : contract F Ω) (cj : contract E Ω)
   : contract Fx Ω :=
   {|
@@ -275,7 +274,7 @@ Definition sharedcontractprod {Fx F E : effect} `{F -< Fx, E -< Fx}
       gen_callee_obligation ci ω e x /\ gen_callee_obligation cj ω e x
   |}.
 
-Infix "^" := sharedcontractprod  : contract_scope.
+Infix "-^-" := sharedcontractprod (at level 20, right associativity) : contract_scope.
 
 (** * Contract By Example *)
 
