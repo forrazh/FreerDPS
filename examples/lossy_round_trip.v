@@ -1,8 +1,10 @@
 (* Monae version poc *)
-From mathcomp Require Import ssreflect ssrbool eqtype ssrnum ssralg reals sequences
-  interval_inference.
+From mathcomp Require Import ssreflect ssrbool eqtype interval_inference ssrnum
+  ssralg.
+From mathcomp Require Import reals sequences.
 From infotheo Require Import realType_ext.
 From monae Require Import preamble hierarchy monad_lib proba_lib proba_model.
+From FreerDPS Require Import freer_lossy_round_trip.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -17,84 +19,129 @@ Local Open Scope reals_ext_scope.
 
 Import GRing.Theory.
 
-Module LossyRoundTripMod.
+Section syntactic_sugar_for_probabilities.
+Context {R : realType}.
+
+  (* q^2 *)
+Definition round_trip_success_probability (p : {prob R}) : {prob R} :=
+  (* let psucc := loss%:num.~%:i01 in *)
+  [p_of p, p].
+
+Lemma round_trip_success_probabilityE p :
+  round_trip_success_probability p = [p_of p, p].
+Proof. by []. Qed.
+
+Definition retry_step_probability (psucc retry : {prob R}) : {prob R} :=
+  [s_of (round_trip_success_probability psucc), retry].
+
+(* q ^ n *)
+Fixpoint retry_success_probability (loss : {prob R}) n : {prob R} :=
+  match n with
+  | O => round_trip_success_probability loss
+  | S n' =>
+      retry_step_probability loss (retry_success_probability loss n')
+  end.
+
+Lemma retry_success_probabilityE psucc n :
+  retry_success_probability psucc n =
+    match n with
+    | O => round_trip_success_probability psucc
+    | S n' => retry_step_probability psucc (retry_success_probability psucc n')
+    end.
+Proof. by case: n. Qed.
+
+Lemma retry_step_probabilityE psucc retry :
+  retry_step_probability psucc retry =
+    [s_of (round_trip_success_probability psucc), retry].
+Proof. by []. Qed.
+
+Lemma retry_success_probability_stepE psucc n :
+  retry_success_probability psucc (S n) =
+    [s_of [p_of psucc, psucc], retry_success_probability psucc n].
+Proof.
+  by rewrite retry_success_probabilityE retry_step_probabilityE
+     round_trip_success_probabilityE.
+Qed.
+
+Fact retry0 : forall n, retry_success_probability (widen_itv 0%:itv) n = 0%:i01.
+Proof.
+  elim=> [|n IH].
+  - by rewrite retry_success_probabilityE round_trip_success_probabilityE p_of_0s.
+  by rewrite retry_success_probability_stepE p_of_0s s_of_0q IH.
+Qed.
+
+Fact retry1 : forall n, retry_success_probability (widen_itv 1%:itv) n = 1%:i01.
+Proof.
+case=> [|n].
+- by rewrite retry_success_probabilityE round_trip_success_probabilityE p_of_1s.
+by rewrite retry_success_probability_stepE p_of_1s s_of_1q.
+Qed.
+
+End syntactic_sugar_for_probabilities.
+
+Section about_probMonad.
+Context {R : realType} {M : probMonad R}.
+
+Lemma bcoinE p : bcoin p = (Ret true <| p |> Ret false :> M bool).
+Proof. by rewrite /bcoin. Qed.
+
+Fact bcoin_or_true (p q : {prob R}) :
+  Ret true <| p |> bcoin q = bcoin [s_of p, q] :> M bool.
+Proof. by rewrite !bcoinE choiceA choicemm. Qed.
+
+End about_probMonad.
 
 Section lossy_round_trip_sec.
-  Context {R : realType} {M : probMonad R}.
+Context {R : realType} {M : probMonad R}.
+Implicit Types (psucc : {prob R}) (m : msg).
 
-  Inductive packet := Ping | Pong.
+Definition prob_transmit psucc m : M (option msg) :=
+  Ret (Some m) <| psucc |> Ret None.
 
-  Inductive outcome :=
-  | GotPong
-  | LostPing
-  | LostPong.
+Definition client_send psucc : M (option msg) :=
+  prob_transmit psucc Ping.
 
-  Definition transmit (delivery : {prob R}) (m : packet) : M (option packet) :=
-    Ret (Some m) <| delivery |> Ret None.
+Definition server_reply (psucc : {prob R}) (incoming : option msg)
+    : M (option msg) :=
+  match incoming with
+  | Some Ping => prob_transmit psucc Pong
+  | Some Pong => Ret None
+  | None => Ret None
+  end.
 
-  Definition client_send (delivery : {prob R}) : M (option packet) :=
-    transmit delivery Ping.
+Definition client_receive (incoming : option msg) : M outcome :=
+  match incoming with
+  | Some Pong => Ret GotPong
+  | Some Ping => Ret LostPong
+  | None => Ret LostPong
+  end.
 
-  Definition server_reply (delivery : {prob R}) (incoming : option packet)
-      : M (option packet) :=
-    match incoming with
-    | Some Ping => transmit delivery Pong
-    | Some Pong => Ret None
-    | None => Ret None
-    end.
+Definition ping_pong_once psucc : M outcome :=
+  client_send psucc >>= fun to_server =>
+  match to_server with
+  | Some Ping => server_reply psucc to_server >>= client_receive
+  | Some Pong => Ret LostPing
+  | None => Ret LostPing
+  end.
 
-  Definition client_receive (incoming : option packet) : M outcome :=
-    match incoming with
-    | Some Pong => Ret GotPong
-    | Some Ping => Ret LostPong
-    | None => Ret LostPong
-    end.
-
-  Definition ping_pong_once (delivery : {prob R}) : M outcome :=
-    client_send delivery >>= fun to_server =>
-    match to_server with
-    | Some Ping => server_reply delivery to_server >>= client_receive
-    | Some Pong => Ret LostPing
-    | None => Ret LostPing
-    end.
-
-  Fixpoint ping_pong_retry (delivery : {prob R}) (fuel : nat) : M outcome :=
-    match fuel with
-    | O => ping_pong_once delivery
-    | S fuel' =>
-        ping_pong_once delivery >>= fun result =>
-        match result with
-        | GotPong => Ret GotPong
-        | LostPing | LostPong => ping_pong_retry delivery fuel'
-        end
-    end.
-
-  (* --- Probabilites --- *)
-  
-  (* q^2 *)
-  Definition round_trip_success_probability (p : {prob R}) : {prob R} :=
-    (* let delivery := loss%:num.~%:i01 in *)
-    [p_of p, p].
-
-  Definition retry_step_probability (delivery retry : {prob R}) : {prob R} :=
-    [s_of (round_trip_success_probability delivery), retry].
-
-  (* q ^ n *)
-  Fixpoint retry_success_probability (loss : {prob R}) (n : nat) : {prob R} :=
-    match n with
-    | O => round_trip_success_probability loss
-    | S n' =>
-        retry_step_probability loss (retry_success_probability loss n')
-    end.
+Fixpoint ping_pong_retry (psucc : {prob R}) (fuel : nat) : M outcome :=
+  match fuel with
+  | O => ping_pong_once psucc
+  | S fuel' =>
+      ping_pong_once psucc >>= fun result =>
+      match result with
+      | GotPong => Ret GotPong
+      | LostPing | LostPong => ping_pong_retry psucc fuel'
+      end
+  end.
 
   (* --- Event distribution --- *)
-  
-  Definition one_attempt_distribution (p : {prob R}) : M outcome :=
+  Definition prob_exchange (p : {prob R}) : M outcome :=
     (Ret GotPong <| p |> Ret LostPong) <| p |> Ret LostPing.
 
   Fixpoint retry_success_distribution (loss : {prob R}) (n : nat) : M outcome :=
     match n with
-    | O => one_attempt_distribution loss
+    | O => prob_exchange loss
     | S n' =>
         (Ret GotPong <| loss |> retry_success_distribution loss n') <| loss |>
         retry_success_distribution loss n'
@@ -120,18 +167,18 @@ Section lossy_round_trip_sec.
 
   (* --- Unfolding lemmas --- *)
 
-  Lemma transmitE delivery m :
-    transmit delivery m = (Ret (Some m) <| delivery |> Ret None :> M _).
+  Lemma prob_transmitE psucc m :
+    prob_transmit psucc m = (Ret (Some m) <| psucc |> Ret None :> M _).
   Proof. by []. Qed.
 
-  Lemma client_sendE delivery :
-    client_send delivery = transmit delivery Ping.
+  Lemma client_sendE psucc :
+    client_send psucc = prob_transmit psucc Ping.
   Proof. by []. Qed.
 
-  Lemma server_replyE delivery incoming :
-    server_reply delivery incoming =
+  Lemma server_replyE psucc incoming :
+    server_reply psucc incoming =
       match incoming with
-      | Some Ping => transmit delivery Pong
+      | Some Ping => prob_transmit psucc Pong
       | Some Pong | None => Ret None
       end.
   Proof. by case: incoming => [[]|]. Qed.
@@ -144,73 +191,50 @@ Section lossy_round_trip_sec.
           end.
   Proof. by case: incoming => [[]|]. Qed.
 
-  Lemma ping_pong_onceE delivery :
-    ping_pong_once delivery =
-      client_send delivery >>= fun to_server =>
+  Lemma ping_pong_onceE psucc :
+    ping_pong_once psucc =
+      client_send psucc >>= fun to_server =>
       match to_server with
       | Some Ping =>
-          server_reply delivery to_server >>= client_receive
+          server_reply psucc to_server >>= client_receive
       | Some Pong | None => Ret LostPing
       end.
   Proof. by []. Qed.
 
-  Lemma ping_pong_retryE delivery fuel :
-    ping_pong_retry delivery fuel =
+  Lemma ping_pong_retryE psucc fuel :
+    ping_pong_retry psucc fuel =
       match fuel with
-      | O => ping_pong_once delivery
+      | O => ping_pong_once psucc
       | S fuel' =>
-          ping_pong_once delivery >>= fun result =>
+          ping_pong_once psucc >>= fun result =>
           match result with
           | GotPong => Ret GotPong
-          | LostPing | LostPong => ping_pong_retry delivery fuel'
+          | LostPing | LostPong => ping_pong_retry psucc fuel'
           end
       end.
   Proof. by case: fuel. Qed.
 
-  Lemma ping_pong_retry_stepE delivery fuel :
-    ping_pong_retry delivery (S fuel) =
-      (Ret GotPong <| delivery |> ping_pong_retry delivery fuel) <| delivery |>
-      ping_pong_retry delivery fuel.
+  Lemma ping_pong_retry_stepE psucc fuel :
+    ping_pong_retry psucc (S fuel) =
+      (Ret GotPong <| psucc |> ping_pong_retry psucc fuel) <| psucc |>
+      ping_pong_retry psucc fuel.
   Proof.
-    rewrite ping_pong_retryE ping_pong_onceE client_sendE !transmitE.
-    rewrite !choice_bindDl !bindretf server_replyE !transmitE.
+    rewrite ping_pong_retryE ping_pong_onceE client_sendE !prob_transmitE.
+    rewrite !choice_bindDl !bindretf server_replyE !prob_transmitE.
     by rewrite !choice_bindDl !bindretf.
   Qed.
 
-  Lemma round_trip_success_probabilityE p :
-    round_trip_success_probability p = [p_of p, p].
-  Proof. by []. Qed.
 
-  Lemma retry_step_probabilityE delivery retry :
-    retry_step_probability delivery retry =
-      [s_of (round_trip_success_probability delivery), retry].
-  Proof. by []. Qed.
 
-  Lemma retry_success_probabilityE loss n :
-    retry_success_probability loss n =
-      match n with
-      | O => round_trip_success_probability loss
-      | S n' => retry_step_probability loss (retry_success_probability loss n')
-      end.
-  Proof. by case: n. Qed.
-
-  Lemma retry_success_probability_stepE loss n :
-    retry_success_probability loss (S n) =
-      [s_of [p_of loss, loss], retry_success_probability loss n].
-  Proof.
-    by rewrite retry_success_probabilityE retry_step_probabilityE
-       round_trip_success_probabilityE.
-  Qed.
-
-  Lemma one_attempt_distributionE p :
-    one_attempt_distribution p =
+  Lemma prob_exchangeE p :
+    prob_exchange p =
       (Ret GotPong <| p |> Ret LostPong) <| p |> Ret LostPing :> M _.
   Proof. by []. Qed.
 
   Lemma retry_success_distributionE loss n :
     retry_success_distribution loss n =
       match n with
-      | O => one_attempt_distribution loss
+      | O => prob_exchange loss
       | S n' =>
           (Ret GotPong <| loss |> retry_success_distribution loss n') <| loss |>
           retry_success_distribution loss n'
@@ -247,41 +271,35 @@ Section lossy_round_trip_sec.
     by rewrite -!success_ofE -!ping_pong_retry_successE.
   Qed.
 
-  Lemma bcoinE p :
-    bcoin p = (Ret true <| p |> Ret false :> M bool).
-  Proof. by rewrite /bcoin. Qed.
-
   (* === Proofs === *)
 
   (* p = 1 *)
 
-  Fact transmit_certain m :
-    transmit 1%:i01 m = Ret (Some m) :> M _.
-  Proof.
-    by rewrite transmitE choice1.
-  Qed.
+Fact prob_transmit_certain m : prob_transmit 1%:i01 m = Ret (Some m) :> M _.
+Proof.
+  by rewrite prob_transmitE choice1.
+Qed.
 
-  Fact ping_pong_once_certain :
-    ping_pong_once 1%:i01 = Ret GotPong :> M _.
-  Proof.
-    by rewrite ping_pong_onceE client_sendE transmit_certain bindretf
-               server_replyE transmit_certain bindretf client_receiveE.
-  Qed.
+Fact ping_pong_once_certain : ping_pong_once 1%:i01 = Ret GotPong :> M _.
+Proof.
+  by rewrite ping_pong_onceE client_sendE prob_transmit_certain bindretf
+             server_replyE prob_transmit_certain bindretf client_receiveE.
+Qed.
 
-  Fact ping_pong_retry_certain fuel :
-    ping_pong_retry 1%:i01 fuel = Ret GotPong :> M _.
-  Proof.
-    by elim : fuel => [|n IH];
-       rewrite ping_pong_retryE ping_pong_once_certain ?bindretf.
-  Qed.
+Fact ping_pong_retry_certain fuel :
+  ping_pong_retry 1%:i01 fuel = Ret GotPong :> M _.
+Proof.
+  by elim : fuel => [|n IH];
+     rewrite ping_pong_retryE ping_pong_once_certain ?bindretf.
+Qed.
 
   (* == One round == *)
 
   Lemma ping_pong_once_distribution_shape (loss : {prob R}) :
-    ping_pong_once (loss%:num.~%:i01) = one_attempt_distribution (loss%:num.~%:i01).
+    ping_pong_once (loss%:num.~%:i01) = prob_exchange (loss%:num.~%:i01).
   Proof.
-    by rewrite ping_pong_onceE one_attempt_distributionE client_sendE !transmitE
-               !choice_bindDl !bindretf server_replyE !transmitE
+    by rewrite ping_pong_onceE prob_exchangeE client_sendE !prob_transmitE
+               !choice_bindDl !bindretf server_replyE !prob_transmitE
                !choice_bindDl !bindretf client_receiveE.
   Qed.
 
@@ -290,7 +308,7 @@ Section lossy_round_trip_sec.
       bcoin (round_trip_success_probability (loss%:num.~%:i01)).
   Proof.
     rewrite ping_pong_once_successE success_ofE ping_pong_once_distribution_shape.
-    rewrite one_attempt_distributionE round_trip_success_probabilityE bcoinE
+    rewrite prob_exchangeE round_trip_success_probabilityE bcoinE
             !choice_bindDl !bindretf !success_eventE.
 
     set d := loss%:num.~%:i01.
@@ -307,26 +325,6 @@ Section lossy_round_trip_sec.
 
   (* == Multiple rounds *)
 
-  Fact bcoin_or_true (p q : {prob R}) :
-    Ret true <| p |> bcoin q = bcoin [s_of p, q] :> M bool.
-  Proof.
-    by rewrite !bcoinE choiceA choicemm.
-  Qed.
-
-  Fact retry0 : forall n, retry_success_probability (widen_itv 0%:itv) n = 0%:i01.
-  Proof.
-    elim=> [|n IH].
-    - by rewrite retry_success_probabilityE round_trip_success_probabilityE p_of_0s.
-    by rewrite retry_success_probability_stepE p_of_0s s_of_0q IH.
-  Qed.
-
-  Fact retry1 : forall n, retry_success_probability (widen_itv 1%:itv) n = 1%:i01.
-  Proof.
-    case=> [|n].
-    - by rewrite retry_success_probabilityE round_trip_success_probabilityE p_of_1s.
-    by rewrite retry_success_probability_stepE p_of_1s s_of_1q.
-  Qed.
-  
   Lemma ping_pong_retry_distribution_shape (loss : {prob R}) (fuel : nat) :
     ping_pong_retry (loss%:num.~%:i01) fuel = retry_success_distribution (loss%:num.~%:i01) fuel.
   Proof.
@@ -335,15 +333,15 @@ Section lossy_round_trip_sec.
     by rewrite ping_pong_retry_stepE retry_success_distributionE IH.
   Qed.
 
-  Theorem ping_pong_retry_success_probability (delivery : {prob R}) (fuel : nat) :
-    ping_pong_retry_success (delivery%:num.~%:i01) fuel =
-      bcoin (retry_success_probability (delivery%:num.~%:i01) fuel).
+  Theorem ping_pong_retry_success_probability psucc (fuel : nat) :
+    ping_pong_retry_success (psucc%:num.~%:i01) fuel =
+      bcoin (retry_success_probability (psucc%:num.~%:i01) fuel).
   Proof.
     elim : fuel => [|n].
     - exact: ping_pong_once_success_probability.
     rewrite ping_pong_retry_success_stepE retry_success_probability_stepE => ->.
 
-    set d := delivery%:num.~%:i01.
+    set d := psucc%:num.~%:i01.
 
     have [->/=|d0] := eqVneq d 0%:i01.
     - by rewrite !bcoinE p_of_0s s_of_0q retry0 !choice0.
@@ -357,4 +355,3 @@ Section lossy_round_trip_sec.
   Qed.
 
 End lossy_round_trip_sec.
-End LossyRoundTripMod.

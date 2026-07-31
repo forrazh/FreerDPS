@@ -23,6 +23,8 @@
 (******************************************************************************)
 
 From mathcomp Require Import ssreflect ssrfun.
+From mathcomp Require Import reals.
+From infotheo Require Import realType_ext.
 From monae Require Import hierarchy.
 
 Local Open Scope monae_scope.
@@ -260,3 +262,6 @@ Arguments Put [s] (x).
     [<+>] or [⊕]) to compose effects together.  An impure computation
     parameterized by [F ⊕ E] can therefore leverage the primitives of both [F]
     and [E]. *)
+
+Inductive FlipEff {R : realType} : effect :=
+  flip_e (p : {prob R}) : FlipEff bool.
