@@ -76,9 +76,12 @@ Class Distinguish (Fx F E : effect) `{Hp: F -< Fx, Hmp : E -<? Fx} : Prop :=
   {
     injK_None : forall {A} (e: F A), Hmp.(prj) (Hp.(inj) e) = None
   }.
-(* @proj Fx E H1 A (@inj Fx F H H0 A e) *)
-(* F -< Fx
-Subev -< Ev *)
+
+Class StrictProvide2 Fx F1 F2
+    `{Provide Fx F1, Provide Fx F2,
+      ! Distinguish Fx F1 F2, ! Distinguish Fx F2 F1}.
+
+#[global] Hint Resolve Build_StrictProvide2 : typeclass_instances.
 
 (** * Composing Effects *)
 

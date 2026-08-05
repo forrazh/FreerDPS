@@ -10,7 +10,6 @@
 ./theories/contract.v
 ./theories/mathcomp_extra.v
 ./theories/hoare.v
-./theories/typeclasses.v
 ./theories/all_freerdps.v
 
 ./examples/airlock.v

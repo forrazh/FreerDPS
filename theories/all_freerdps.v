@@ -7,7 +7,6 @@
 From FreerDPS Require Export
   init
   effect
-  typeclasses
   freer
   component
   contract
