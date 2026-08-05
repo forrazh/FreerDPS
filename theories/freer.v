@@ -4,8 +4,9 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 Local Close Scope nat_scope.
-From mathcomp Require Import all_boot.
-From mathcomp Require Import boolp.
+From mathcomp Require Import all_boot all_order all_algebra interval_inference.
+From mathcomp Require Import boolp functions reals.
+From infotheo Require Import realType_ext.
 From monae Require Import hierarchy.
 From FreerDPS Require Import init effect.
 From HB Require Import structures.
@@ -22,6 +23,8 @@ Reserved Notation "a === b" (at level 70).
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
+
+Import Order.TTheory Order.Syntax GRing.Theory Num.Theory.
 
 Local Open Scope ring_scope.
 
@@ -129,7 +132,7 @@ Import FreerMonadModel.
 
 Notation acto := (@freer F).
 
-Definition trigger_eff : F ~~> acto := fun α op =>
+Definition trigger_effect : F ~~> acto := fun α op =>
   impure (inj op) (@pure _ _).
 
 Definition dnt (M : monad) (l : F ~~> M) : acto ~~> M :=
@@ -139,16 +142,16 @@ Definition dnt (M : monad) (l : F ~~> M) : acto ~~> M :=
     | impure Y op f => l _ op >>= fun x => aux a (f x)
     end.
 
-Let dnt_ret (cm : monad) (dnt_eff : F ~~> cm) X (x : X) :
-  dnt dnt_eff (ret X x) = @hierarchy.ret cm X x.
+Let dnt_ret (cm : monad) (dnt_effect : F ~~> cm) X (x : X) :
+  dnt dnt_effect (ret X x) = @hierarchy.ret cm X x.
 Proof. by []. Qed.
 
-Let dnt_bind : forall (cm : monad) (dnt_eff : F ~~> cm) X Y m
+Let dnt_bind : forall (cm : monad) (dnt_effect : F ~~> cm) X Y m
     (f : X -> acto Y),
-  dnt dnt_eff (m >>= f) =
-  dnt dnt_eff m >>= (fun x => dnt dnt_eff (f x)).
+  dnt dnt_effect (m >>= f) =
+  dnt dnt_effect m >>= (fun x => dnt dnt_effect (f x)).
 Proof.
-    move=>cm dnt_eff X Y m f.
+    move=>cm dnt_effect X Y m f.
     elim:m=>[x | Z fz k]/=.
     - by rewrite !bindretf.
     rewrite bindA=>H.
@@ -156,25 +159,25 @@ Proof.
     exact/boolp.funext/H.
 Qed.
 
-Let dnt_trigger (cm : monad) (dnt_eff : F ~~> cm) X (op : F X) :
-  dnt dnt_eff (trigger_eff op) = dnt_eff X op.
-Proof. by rewrite /dnt /trigger_eff/= bindmret. Qed.
+Let dnt_trigger (cm : monad) (dnt_effect : F ~~> cm) X (op : F X) :
+  dnt dnt_effect (trigger_effect op) = dnt_effect X op.
+Proof. by rewrite /dnt /trigger_effect/= bindmret. Qed.
 
-Let dnt_unique : forall (cm : monad) (dnt_eff : F ~~> cm)
+Let dnt_unique : forall (cm : monad) (dnt_effect : F ~~> cm)
     (dnt' : acto ~~> cm),
   (forall X (x : X), dnt' X (ret X x) = @hierarchy.ret cm X x) ->
   (forall X Y (m : acto X) (f : X -> acto Y),
     dnt' Y (m >>= f) = dnt' X m >>= (fun x => dnt' Y (f x))) ->
   (forall X (op : F X),
-    dnt' X (trigger_eff op) = dnt_eff X op) ->
-  forall X (m : acto X), dnt' X m = dnt dnt_eff m.
+    dnt' X (trigger_effect op) = dnt_effect X op) ->
+  forall X (m : acto X), dnt' X m = dnt dnt_effect m.
 Proof.
-    move=>cm dnt_eff dnt' dret' dbind' dtrigger' X m.
+    move=>cm dnt_effect dnt' dret' dbind' dtrigger' X m.
     rewrite/dnt.
     elim:m=>[x| Y fy k Hy]/=.
     - exact/dret'.
     under [in RHS]eq_bind do rewrite -Hy.
-    by rewrite -dtrigger'-dbind'/trigger_eff.
+    by rewrite -dtrigger'-dbind'/trigger_effect.
 Qed.
 
 #[export]
@@ -226,9 +229,9 @@ End FreerInductionModel.
 HB.export FreerInductionModel.
 
 Lemma denote_if : forall (F : effect) (M : freerMonad F) (cm : monad)
-   (dnt_eff : F ~~> cm) X (m m' : M X) b,
-  denote cm dnt_eff X (if b then m else m') =
-  if b then (denote cm dnt_eff X m) else (denote cm dnt_eff X m').
+   (dnt_effect : F ~~> cm) X (m m' : M X) b,
+  denote cm dnt_effect X (if b then m else m') =
+  if b then (denote cm dnt_effect X m) else (denote cm dnt_effect X m').
 Proof. by move=> ? ? ? ? ? ? ?; case. Qed.
 
 Lemma denote_when_trigger (Fx : effect) (M : freerMonad Fx) (cm : monad)
@@ -240,7 +243,7 @@ Lemma denote_when_trigger (Fx : effect) (M : freerMonad Fx) (cm : monad)
         l X op >>= (denote cm l unit \o fun=> (skip : M unit))
       else denote cm l unit (skip : M unit).
 Proof.
-by apply/funext=> x; rewrite functions.compE denote_if;
+by apply/funext=> x; rewrite compE denote_if;
   case: (guard x)=> //=;
   rewrite denote_bind denote_trigger.
 Qed.
@@ -258,7 +261,7 @@ Lemma denote_ind {Fx : effect} {M : inductiveFreerMonad Fx}
 Proof.
 move=> ?? P? Hb *;
 apply: (f_ind (fun X => P X \o (denote _ _ X))) => *;
-  rewrite functions.compE.
+  rewrite compE.
 - by rewrite denote_ret.
 - by rewrite denote_bind denote_trigger; exact: Hb.
 Qed.
@@ -279,3 +282,162 @@ Definition iput {S} {Fx : effect} `{STORE S -< Fx} {M : freerMonad Fx} (s : S)
     : M unit :=
   ptrigger (Put s).
 
+Module FreerFlipDenote.
+From monae Require Export proba_lib.
+Section freer_flip.
+Context {R : realType} {M : freerMonad (@FlipEff R)} {pM : probMonad R}.
+Implicit Type p q r s : {prob R}.
+
+Definition flip p : M bool := ptrigger $ flip_e p.
+
+Definition denote_flip_effect : FlipEff ~~> pM :=
+  fun X fx => let: flip_e p := fx in bcoin p.
+
+Lemma denote_flip_effect_inj_pE p : denote_flip_effect (flip_e p) = bcoin p.
+Proof. by []. Qed.
+
+Lemma denote_flipE p :
+  denote (s := M) pM denote_flip_effect bool (flip p) = bcoin p.
+Proof. exact: denote_trigger. Qed.
+
+Definition freer_choice p {X} (a b : M X) :=
+  flip p >>= (fun b0 => if b0 then a else b).
+
+Notation "x <|| p ||> y" := (@freer_choice p _ x y).
+(* TODO: use this notation *)
+
+Lemma denote_freer_choiceE (X : UU0) p (a b : M X) :
+  denote (s := M) pM denote_flip_effect X (a <|| p ||> b) =
+    denote (s := M) pM denote_flip_effect bool (flip p) >>=
+      (fun b0 => denote (s := M) pM denote_flip_effect X (if b0 then a else b)).
+Proof.
+by rewrite denote_bind; under eq_bind do rewrite compE denote_if.
+Qed.
+
+Lemma denote_choiceA_leftE (T : UU0) p q (a b c : M T) :
+  denote (s := M) pM denote_flip_effect bool (flip p) >>=
+    ((denote (s := M) pM denote_flip_effect T) \o
+      (fun b0 => if b0 then a else b <|| q ||> c)) =
+  denote (s := M) pM denote_flip_effect bool (flip p) >>=
+    (fun b0 =>
+      if b0 then denote (s := M) pM denote_flip_effect T a
+      else denote (s := M) pM denote_flip_effect bool (flip q) >>=
+        (fun b1 => denote (s := M) pM denote_flip_effect T (if b1 then b else c))).
+Proof.
+by under eq_bind do rewrite compE denote_if denote_freer_choiceE.
+Qed.
+
+Local Open Scope reals_ext_scope.
+
+Lemma denote_choiceA_rightE (T : UU0) p q (a b c : M T) :
+  denote (s := M) pM denote_flip_effect bool (flip [s_of p, q]) >>=
+    ((denote (s := M) pM denote_flip_effect T) \o
+      (fun b0 => if b0 then a <|| [r_of p, q] ||> b else c)) =
+  denote (s := M) pM denote_flip_effect bool (flip [s_of p, q]) >>=
+    (fun b0 =>
+      if b0 then
+        denote (s := M) pM denote_flip_effect bool
+          (flip [r_of p, q]) >>=
+            (fun b1 => denote (s := M) pM denote_flip_effect T (if b1 then a else b))
+      else
+        denote (s := M) pM denote_flip_effect T c).
+Proof.
+by under eq_bind do rewrite compE denote_if denote_freer_choiceE.
+Qed.
+
+Lemma denote_choice_bindDlE (A B : UU0) p (a b : M A)
+  (f : A -> M B) :
+  denote pM denote_flip_effect B (a <|| p ||> b >>= f) =
+    denote pM denote_flip_effect B ((a >>= f) <|| p ||> (b >>= f)).
+Proof.
+rewrite denote_bind denote_freer_choiceE [in RHS]denote_freer_choiceE.
+rewrite -compE bindA; congr bind.
+by apply/funext => -[]; rewrite denote_bind.
+Qed.
+
+End freer_flip.
+Notation "x <|| p ||> y" := (@freer_choice _ _ p _ x y).
+End FreerFlipDenote.
+
+Module FreerFlipChoiceRel.
+Section freerflipchoicerel.
+Context {R : realType} {M : freerMonad (@FlipEff R)} {pM : probMonad R}.
+Implicit Type p q r s : {prob R}.
+
+Import FreerFlipDenote.
+
+Local Open Scope reals_ext_scope.
+
+(* 5th step : Choice equiv laws *)
+Inductive choice_rel : forall `[X : UU0] (m1 m2 : M X), Prop :=
+| rchoice1 : forall (A : UU0) (a b : M A),
+    (a <|| 1%:i01 ||> b) === a
+| rchoiceC : forall (A : UU0) p (a b : M A),
+    a <|| p ||> b === b <|| p%:num.~%:i01 ||> a
+| rchoicemm : forall (A : UU0) p (a : M A),
+    a <|| p ||> a === a
+    (* quasi associativity *)
+| rchoiceA : forall (T : UU0) p q r s (a b c : M T),
+    a <|| p ||> (b <|| q ||> c) ===
+    (a <|| [r_of p, q] ||> b) <|| [s_of p, q] ||> c
+  (* (flipf p >>= (fun x : bool => if x then a else flipf q >>= (fun x0 : bool => if x0 then b else c))) *)
+  (* (flipf [s_of p, q] >>= (fun x : bool => if x then flipf [r_of p, q] >>= (fun x0 : bool => if x0 then a else b) else c))  *)
+| equiv_bind_congr : forall (A B :UU0) (a b : M A) (f g : A -> M B),
+  (* a === b -> (forall x, (f x) === (g x)) -> (a >>= f) === (b >>= g) *)
+  a === b -> (forall x, f x === g x) ->
+  (a >>= f) === (b >>= g)
+| equiv_refl : forall (A : UU0) (m : M A), m === m
+| equiv_sym : forall (A : UU0) (m n : M A), m === n -> n === m
+| equiv_trans : forall (A : UU0) (m n o : M A), m === n -> n === o -> m === o
+| rchoice_bindDl : forall (A B : UU0) p (a b : M A) (f : A -> M B),
+    (a <|| p ||> b) >>= f === (a >>= f) <|| p ||> (b >>= f)
+where "a === b" := (@choice_rel _ a b).
+
+Lemma rchoice_bindDl_trans (A B : UU0) (p : {prob R}) (a b : M A)
+    (f : A -> M B) (c : M B) :
+    ((a >>= f) <|| p ||> (b >>= f)) === c ->
+    ((a <|| p ||> b) >>= f) === c.
+Proof. exact/equiv_trans/rchoice_bindDl. Qed.
+
+Lemma rchoice_bindDl_choice_congr (A B : UU0) (p : {prob R}) (a b : M A)
+    (f : A -> M B) (a' b' : M B) :
+  (a >>= f) === a' ->
+  (b >>= f) === b' ->
+  ((a <|| p ||> b) >>= f) === (a' <|| p ||> b').
+Proof.
+move=>??; apply/rchoice_bindDl_trans/equiv_bind_congr.
+  exact: equiv_refl.
+by case.
+Qed.
+
+Lemma equiv_bind_congr_trans (A B : UU0) (a b : M A) (f g : A -> M B)
+    (c : M B) :
+  a === b ->
+  (forall x, (f x) === (g x)) ->
+  (b >>= g) === c ->
+  (a >>= f) === c.
+Proof.
+by move=> ? ?; exact/equiv_trans/equiv_bind_congr.
+Qed.
+
+(* 6th step : Equiv correct *)
+Lemma equiv_correct (X : UU0) (m1 m2 : M X) : @choice_rel X m1 m2 ->
+  denote pM denote_flip_effect X m1 = denote pM denote_flip_effect X m2.
+Proof.
+elim => [*|*|*|*|*|*|????->|?????->?->|*] //=;
+  last first; rewrite ?denote_bind.
+- rewrite bindA; congr bind.
+  by apply/funext;
+    case; rewrite !compE denote_bind.
+- by congr bind; [| apply/funext].
+all: rewrite ?denote_choiceA_leftE ?denote_choiceA_rightE ?denote_trigger
+  !denote_flip_effect_inj_pE !choice_bindDl !bindretf.
+- exact: choiceA.
+- exact: choicemm.
+- exact: choiceC.
+- exact: choice1.
+Qed.
+
+End freerflipchoicerel.
+Notation "a === b" := (@choice_rel _ _ _ a b).
+End FreerFlipChoiceRel.
