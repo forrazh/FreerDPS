@@ -11,7 +11,7 @@
     semantics (according to a certain definition of “correct”). *)
 
 From mathcomp Require Import ssreflect.
-From FreerDPS Require Import Effect Freer.
+From FreerDPS Require Import effect freer.
 #[local]
 Open Scope signature_scope.
 Open Scope monae_scope.
@@ -222,28 +222,19 @@ Definition gen_witness_update {Fx F : effect} `{F -<? Fx}
     {Ω α : Type} (c : contract F Ω)
     (ω :  Ω) (e : Fx α) (x : α)
   : Ω :=
-  match proj e with
-  | Some e => witness_update c ω e x
-  | None => ω
-  end.
+  if prj e is Some e then witness_update c ω e x else ω.
 
 Definition gen_caller_obligation {Fx F : effect} `{F -<? Fx}
     {Ω α : Type} (c : contract F Ω)
     (ω :  Ω) (e : Fx α)
   : Prop :=
-  match proj e with
-  | Some e => caller_obligation c ω e
-  | None => True
-  end.
+  if prj e is Some e then caller_obligation c ω e else True.
 
 Definition gen_callee_obligation {Fx F : effect} `{F -<? Fx}
     {Ω α : Type} (c : contract F Ω)
     (ω :  Ω) (e : Fx α) (x : α)
   : Prop :=
-  match proj e with
-  | Some e => callee_obligation c ω e x
-  | None => True
-  end.
+  if prj e is Some e then callee_obligation c ω e x else True.
 
 Definition contractprod {Fx F E : effect} `{F -< Fx, E -< Fx}
     {ΩF ΩE : Type}
@@ -272,12 +263,9 @@ Definition sharedcontractprod {Fx F E : effect} `{F -< Fx, E -< Fx}
     fun (ω : Ω) (α : Type) (e : Fx α) (x : α) =>
       (* we need to check [F] before [E] because [sharedcontractprod]
          will be right associative *)
-      match proj (F:=F) e with
+      match prj (F:=F) e with
       | Some e => witness_update ci ω e x
-      | _ => match proj (F:=E) e with
-             | Some e => witness_update cj ω e x
-             | _ => ω
-             end
+      | _ => if prj (F:=E) e is Some e then witness_update cj ω e x else ω
       end;
   caller_obligation :=
     fun (ω : Ω) (α : Type) (e : Fx α) =>

@@ -6,9 +6,9 @@
 
 From FreerDPS Require Export
   Init
-  Effect
+  effect
   Typeclasses
-  Freer
+  freer
   Component
   Contract
   Hoare
