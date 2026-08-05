@@ -15,3 +15,5 @@
 ./examples/airlock.v
 ./examples/lossy_round_trip.v
 ./examples/freer_lossy_round_trip.v
+
+./wip/interaction_trees.v
