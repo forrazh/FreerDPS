@@ -76,19 +76,31 @@ Class Distinguish (Fx F E : effect) `{Hp: F -< Fx, Hmp : E -<? Fx} : Prop :=
   {
     injK_None : forall {A} (e: F A), Hmp.(prj) (Hp.(inj) e) = None
   }.
+(* Notation "F1  F2 @ Fx" := *)
+(* Notation "Fx |- F1 != F2" :=
+  (Distinguish Fx F1 F2)
+  (at level 75, no associativity). *)
 
-Class StrictProvide2 Fx F1 F2
-    `{Provide Fx F1, Provide Fx F2,
-      ! Distinguish Fx F1 F2, ! Distinguish Fx F2 F1}.
 
-#[global] Hint Resolve Build_StrictProvide2 : typeclass_instances.
+Class StrictProvide2 (Fx F1 F2 : effect)
+  `{p1: F1 -< Fx} `{p2: F2 -< Fx}
+  `{! Distinguish Fx F1 F2} `{! Distinguish Fx F2 F1}
+  : Type
+.
+
+(*****************************************************************************
+  * Sadly, this can't be used to declare StrictProvide right now because     *
+  * for an unknown reason, this notation does not create the instances for   *
+  * prov/dist by itself.                                                     *
+  * TODO: Investigate why.                                                   *
+  ****************************************************************************)
+Notation "F1 ;; F2 -<< Fx" := (StrictProvide2 Fx F1 F2) (at level 50, no associativity): type_scope.
 
 (** * Composing Effects *)
 
 (** We provide the [eplus] operator to compose effects together. That is,
     [eplus] can be used to build _concrete_ (as opposed to polymorphic)
     effect composite. *)
-
 
 Inductive eplus (F E : effect) (α : Type) :=
 | in_left (e : F α) : eplus F E α
