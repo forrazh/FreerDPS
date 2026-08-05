@@ -4,73 +4,56 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
+(******************************************************************************)
+(* Definition of effects *)
+(*                                                                            *)
+(* effect := Type -> Type *)
+(* MayProvide, -<? == TODO *)
+(* prj == TODO *)
+(* Provide, -< == TODO *)
+(* inj == TODO (see Kiselyov) *)
+(* Distinguish == *)
+(*                                                                            *)
+(* Examples of effect: *)
+(* eempty == empty effect *)
+(* STORE s == example of effect *)
+(* FlipEff == effect for a probabilistic boolean choice *)
+(*                                                                            *)
+(* References: Kiselyov, FreeSpec *)
+(******************************************************************************)
+
 From mathcomp Require Import ssreflect ssrfun.
+(* From mathcomp Require Import reals. *)
+(* From infotheo Require Import realType_ext. *)
 From monae Require Import hierarchy.
-From Stdlib Require Import Program.
 
 Local Open Scope monae_scope.
 
 (** * Definition  *)
 
-(** Following the definition of the <<operational>> package, effs in
+(** Following the definition of the <<operational>> package, effects in
     FreeSpec are parameterized inductive types whose terms purposely describe
-    the primitives the eff provides. *)
+    the primitives the effect provides. *)
 
-Definition eff := Type -> Type.
+Definition effect := Type -> Type.
 
-Declare Scope eff_scope.
-Bind Scope eff_scope with eff.
+Declare Scope effect_scope.
+Bind Scope effect_scope with effect.
 
-(** Given [F : eff], a term of type [F α] identifies a primitive of [F]
-    expected to produce a result of type [α].
-
-    The simpler eff is the empty eff, which provides no primitives
-    whatsoever. *)
-
-Inductive eempty : eff := .
-
-(** Another example of general-purpose eff we can define is the [STORE s]
-    eff, where [s] is a type for a state, and [STORE s] allows for
-    manipulating a global, mutable variable of type [s] within an impure
-    computation. *)
-
-Inductive STORE (s : Type) : eff :=
-| Get : STORE s s
-| Put (x : s) : STORE s unit.
-
-Arguments Get {s}.
-Arguments Put [s] (x).
-
-(** According to the definition of [STORE s], an impure computation can use two
-    primitives. The term [Get : STORE s s] describes a primitive expected to
-    produce a result of type [s], that is the current value of the mutable
-    variable.  Terms of the form [Put x : STORE s unit] describe a primitive
-    which does not produce any meaningful result, but is expected to update the
-    current value of the mutable variable.
-
-    The use of the word “expected” to describe the primitive of [STORE s] is
-    voluntary.  The definition of an eff does not attach any particular
-    semantics to the primitives it describes.  This will come later, and in
-    fact, one eff may have many legitimate semantics.
-
-    Impure computations are likely to use more than one eff, but the
-    [freer] monad takes only one argument.  We introduce [eplus] (denoted by
-    [<+>] or [⊕]) to compose effs together.  An impure computation
-    parameterized by [F ⊕ E] can therefore leverage the primitives of both [F]
-    and [E]. *)
+(** Given [F : effect], a term of type [F α] identifies a primitive of [F]
+    expected to produce a result of type [α]. *)
 
 (** * Polymorphic Effect Composites *)
-Class MayProvide (Fx F : eff) : Type :=
-  { prj: Fx ~~> option \o F (* retraction *)
-  }.
+Class MayProvide (Fx F : effect) : Type :=
+  { prj: Fx ~~> option \o F}.
 Arguments prj {_ _ _ _} _.
 
 Notation "F -<? Fx" := (MayProvide Fx F)
   (at level 92, left associativity) : type_scope.
 
-Class Provide (Fx F : eff) : Type :=
+Class Provide (Fx F : effect) : Type :=
   { may_prov :: F -<? Fx ;
-    inj : F ~~> Fx (* section *);
+    inj : F ~~> Fx ;
     injK_Some {A} : forall e : F A, may_prov.(prj) (inj _ e) = Some e }.
 Arguments inj {_ _ _ _} _.
 
@@ -78,35 +61,35 @@ Notation "F -< Fx" := (Provide Fx F)
   (at level 92, left associativity) : type_scope.
 
 (** We provide a default instance for [MayProvide] in the form of a function
-    [prj] which always return [None].  We give to this default instance a
+    [proj] which always return [None].  We give to this default instance a
     ridiculously high priority number to ensure it is selected only if no other
     instances are found. *)
 
-Instance default_MayProvide (F E : eff) : (E -<? F) |1000 :=
+Instance default_MayProvide (F E : effect) : (E -<? F) |1000 :=
   { prj := fun _ _ => None }.
 
-(** It is expected that, for an eff composite [Fx] which provides [F] and
-    may provide [E], [inj] and [prj] do not mix up [F] and [E]
+(** It is expected that, for an effect composite [Fx] which provides [F] and
+    may provide [E], [inj] and [proj] do not mix up [F] and [E]
     primitives. That is, injecting a primitive [e] of [F] inside [Fx], then
-    prjecting the resulting primitive into [E] returns [None] as long as [F]
-    and [E] are two different effs. *)
+    projecting the resulting primitive into [E] returns [None] as long as [F]
+    and [E] are two different effects. *)
 
-Class Distinguish (Fx F E : eff) `{Hp: F -< Fx, Hmp : E -<? Fx} : Prop :=
+Class Distinguish (Fx F E : effect) `{Hp: F -< Fx, Hmp : E -<? Fx} : Prop :=
   {
     injK_None : forall {A} (e: F A), Hmp.(prj) (Hp.(inj) e) = None
   }.
-(* @prj Fx E H1 A (@inj Fx F H H0 A e) *)
+(* @proj Fx E H1 A (@inj Fx F H H0 A e) *)
 (* F -< Fx
 Subev -< Ev *)
 
 (** * Composing Effects *)
 
-(** We provide the [eplus] operator to compose effs together. That is,
+(** We provide the [eplus] operator to compose effects together. That is,
     [eplus] can be used to build _concrete_ (as opposed to polymorphic)
-    eff composite. *)
+    effect composite. *)
 
 
-Inductive eplus (F E : eff) (α : Type) :=
+Inductive eplus (F E : effect) (α : Type) :=
 | in_left (e : F α) : eplus F E α
 | in_right (e : E α) : eplus F E α.
 
@@ -117,9 +100,9 @@ Register eplus as freespec.core.eplus.type.
 Register in_left as freespec.core.eplus.in_left.
 Register in_right as freespec.core.eplus.in_right.
 
-Infix "+" := eplus : eff_scope.
+Infix "+" := eplus : effect_scope.
 
-(** For [eplus] to be used seamlessly as a concrete eff composite, we
+(** For [eplus] to be used seamlessly as a concrete effect composite, we
     provide the necessary instances for the [MayProvide], [Provide] and
     [Distinguish] type classes. Note that these instances always prefer the
     left operand of [eplus]. For instance, considering a situation where
@@ -127,10 +110,10 @@ Infix "+" := eplus : eff_scope.
     the instance of [F -< (Fx + Ex)] will rely on [Fx].
 
     The main use case for [eplus] is to locally provide an additional
-    eff. For instance, we can consider a [with_state] function which would
-    locally give access to the [STORE] eff, that is [with_state : forall
+    effect. For instance, we can consider a [with_state] function which would
+    locally give access to the [STORE] effect, that is [with_state : forall
     Fx s α, s -> freer (Fx + STORE s) α -> freer Fx α]. In such a case, the
-    eff made locally available shall be the right operand of [eplus]. This
+    effect made locally available shall be the right operand of [eplus]. This
     way, functions such as [with_state] are reentrant. If we take an example,
     the following impure computation:
 
@@ -140,45 +123,36 @@ with_state true (with_state false get)
 
     will return false (that is, the variable in the inner store). *)
 
-Instance refl_MayProvide (F : eff) : F -<? F :=
-  { prj := fun _ e => Some e
-  }.
+Instance refl_MayProvide (F : effect) : F -<? F :=
+  { prj := fun _ e => Some e }.
 
-Program Instance refl_Provide (F : eff) : F -< F :=
-  { inj := fun (a : Type) (e : F a) => e
-  }.
+Program Instance refl_Provide (F : effect) : F -< F :=
+  { inj := fun (a : Type) (e : F a) => e }.
+Next Obligation. by move=> */=. Qed.
 
-Instance eplus_left_MayProvide (Fx F E : eff) `{F -<? Fx}
+Instance eplus_left_MayProvide (Fx F E : effect) `{F -<? Fx}
   : F -<? (Fx + E) :=
   { prj := fun A e => if e is in_left e then prj e else None
                 (* match e with *)
-                (* | in_left e => prj e *)
+                (* | in_left e => proj e *)
                 (* | _ => None *)
                 (* end *)
   }.
 
-Program Instance eplus_left_Provide (Fx F E : eff) `{F -< Fx}
+Program Instance eplus_left_Provide (Fx F E : effect) `{F -< Fx}
   : F -< (Fx + E) :=
   { inj := fun (a : Type) (e : F a) => in_left (inj e)
   }.
+Next Obligation. by move=> */=; rewrite injK_Some. Qed.
 
-Next Obligation. by rewrite injK_Some. Qed.
-
-Instance eplus_right_MayProvide (F Ex E : eff) `{E -<? Ex}
+Instance eplus_right_MayProvide (F Ex E : effect) `{E -<? Ex}
   : E -<? (F + Ex) :=
-  { prj := fun _ e =>
-                match e with
-                | in_right e => prj e
-                | _ => None
-                end
-  }.
+  { prj := fun _ e => if e is in_right e then prj e else None }.
 
-Program Instance eplus_right_Provide (F Ex E : eff) `{E -< Ex}
+Program Instance eplus_right_Provide (F Ex E : effect) `{E -< Ex}
   : E -< (F + Ex) :=
-  { inj := fun _ e => in_right (inj e)
-  }.
-
-Next Obligation. by rewrite injK_Some. Qed.
+  { inj := fun _ e => in_right (inj e) }.
+Next Obligation. by move=> */=; rewrite injK_Some. Qed.
 
 (** By default, Coq's inference algorithm for type classe instances inference is
     a depth-first search. This is not without consequence in our case. For
@@ -199,51 +173,82 @@ Ltac find_may_provide :=
 #[global] Hint Extern 1 (_ -<? (eplus _ _)) =>
   find_may_provide : typeclass_instances.
 
-Program Instance refl_Distinguish (F E : eff)
+Program Instance refl_Distinguish (F E : effect)
   : @Distinguish F F E (refl_Provide F) (default_MayProvide F E).
 
-Program Instance eplus_left_default_Distinguish (Fx Ex F E : eff)
+Program Instance eplus_left_default_Distinguish (Fx Ex F E : effect)
    `{P1 : F -< Fx}
   : @Distinguish (Fx + Ex) F E
                  (eplus_left_Provide Fx F Ex)
                  (default_MayProvide _ E).
 
-Program Instance eplus_right_default_Distinguish (Fx Ex F E : eff)
+Program Instance eplus_right_default_Distinguish (Fx Ex F E : effect)
    `{P1 : F -< Ex}
   : @Distinguish (Fx + Ex) F E
                  (eplus_right_Provide Fx Ex F)
                  (default_MayProvide _ E).
 
-Program Instance eplus_left_may_right_Distinguish (Fx Ex F E : eff)
+Program Instance eplus_left_may_right_Distinguish (Fx Ex F E : effect)
    `{P1 : F -< Fx} `{M2 : E -<? Ex}
   : @Distinguish (Fx + Ex) F E
                  (eplus_left_Provide Fx F Ex)
                  (eplus_right_MayProvide Fx Ex E).
 
-Program Instance eplus_right_may_left_Distinguish (Fx Ex F E : eff)
+Program Instance eplus_right_may_left_Distinguish (Fx Ex F E : effect)
    `{P1 : F -< Ex} `{M2 : E -<? Fx}
   : @Distinguish (Fx + Ex) F E
                  (eplus_right_Provide Fx Ex F)
                  (eplus_left_MayProvide Fx E Ex).
 
-Program Instance eplus_left_distinguish_left_Distinguish (Fx Ex F E : eff)
+Program Instance eplus_left_distinguish_left_Distinguish (Fx Ex F E : effect)
    `{P1 : F -< Fx} `{M2 : E -<? Fx}
    `{@Distinguish Fx F E P1 M2}
   : @Distinguish (Fx + Ex) F E
                  (eplus_left_Provide Fx F Ex)
                  (eplus_left_MayProvide Fx E Ex).
+Next Obligation. by move=> */=. Qed.
+Next Obligation. by move=> */=; exact: injK_None. Defined.
+Next Obligation. by move=> */=. Defined.
 
-Next Obligation.
-  apply: injK_None.
-Defined.
-
-Program Instance eplus_right_distinguish_right_Distinguish (Fx Ex F E : eff)
+Program Instance eplus_right_distinguish_right_Distinguish (Fx Ex F E : effect)
    `{P1 : F -< Ex} `{M2 : E -<? Ex}
    `{@Distinguish Ex F E P1 M2}
   : @Distinguish (Fx + Ex) F E
                  (eplus_right_Provide Fx Ex F)
                  (eplus_right_MayProvide Fx Ex E).
+Next Obligation. by move=> */=. Qed.
+Next Obligation. by move=> */=; exact: injK_None. Defined.
+Next Obligation. by move=> */=. Qed.
+Next Obligation. by move=> */=. Qed.
 
-Next Obligation.
-  apply: injK_None.
-Defined.
+Inductive eempty : effect := .
+
+(** Another example of general-purpose effect we can define is the [STORE s]
+    effect, where [s] is a type for a state, and [STORE s] allows for
+    manipulating a global, mutable variable of type [s] within an impure
+    computation. *)
+
+Inductive STORE (s : Type) : effect :=
+| Get : STORE s s
+| Put (x : s) : STORE s unit.
+
+Arguments Get {s}.
+Arguments Put [s] (x).
+
+(** According to the definition of [STORE s], an impure computation can use two
+    primitives. The term [Get : STORE s s] describes a primitive expected to
+    produce a result of type [s], that is the current value of the mutable
+    variable.  Terms of the form [Put x : STORE s unit] describe a primitive
+    which does not produce any meaningful result, but is expected to update the
+    current value of the mutable variable.
+
+    The use of the word “expected” to describe the primitive of [STORE s] is
+    voluntary.  The definition of an effect does not attach any particular
+    semantics to the primitives it describes.  This will come later, and in
+    fact, one effect may have many legitimate semantics.
+
+    Impure computations are likely to use more than one effect, but the
+    [freer] monad takes only one argument.  We introduce [eplus] (denoted by
+    [<+>] or [⊕]) to compose effects together.  An impure computation
+    parameterized by [F ⊕ E] can therefore leverage the primitives of both [F]
+    and [E]. *)

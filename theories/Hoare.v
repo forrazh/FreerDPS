@@ -176,7 +176,7 @@ apply: k_preserves.
 by move: h_pre h_post Hsafe; exact: h_preserves.
 Qed.
 
-Lemma denote_preserves_invariant {Fx : eff} {M : inductiveFreerMonad Fx}
+Lemma denote_preserves_invariant {Fx : effect} {M : inductiveFreerMonad Fx}
   {S : UU0} (invariant : set S) (handler : Fx ~~> hoare S) (A : UU0) (p : M A) :
   (forall (X : Type) (op : Fx X),
     preserves_invariant invariant (handler _ op)) ->
@@ -194,7 +194,7 @@ Qed.
 
 (** * Reasoning about Programs *)
 
-Definition hoare_of_contract {Fx F : eff} `{F -<? Fx}
+Definition hoare_of_contract {Fx F : effect} `{F -<? Fx}
     (Ω : Type) (c : contract F Ω)
     : Fx ~~> hoare Ω :=
   fun a op => mk_hoare
@@ -205,7 +205,7 @@ Definition hoare_of_contract {Fx F : eff} `{F -<? Fx}
 (** ** Contract Views *)
 
 Section contract_eff_views.
-Context {Fx F : eff} `{F -<? Fx}
+Context {Fx F : effect} `{F -<? Fx}
     (Ω : Type) (c : contract F Ω) {A : Type}.
 
 Lemma hoc_eff_preE (operation : Fx A) (witness : Ω) :
@@ -233,7 +233,7 @@ Qed.
 
 End contract_eff_views.
 Section contract_operation_views.
-Context {Fx F : eff} `{F -< Fx}
+Context {Fx F : effect} `{F -< Fx}
     (Ω : Type) (c : contract F Ω) {A : Type}.
 
 Lemma hoc_pre_condE (witness : Ω) (operation : F A) :
@@ -253,7 +253,7 @@ End contract_operation_views.
 
 (** ** Program Interpretation *)
 
-Definition to_hoare {Fx F : eff} `{F -<? Fx} {M : freerMonad Fx}
+Definition to_hoare {Fx F : effect} `{F -<? Fx} {M : freerMonad Fx}
     (Ω : Type) (c : contract F Ω)
     : M ~~> hoare Ω :=
   denote _ (hoare_of_contract c).
@@ -268,7 +268,7 @@ Notation "c |> p" := (to_hoare c p)
 (* --------------------------------- Facts ---------------------------------- *)
 
 Section GenericToHoareSection.
-Context {Fx F : eff} `{F -<? Fx} {M : freerMonad Fx}
+Context {Fx F : effect} `{F -<? Fx} {M : freerMonad Fx}
     (Ω : Type) (c : contract F Ω).
 
 Lemma to_hoare_triggerE (a : Type) (op : Fx a) :
@@ -353,7 +353,7 @@ Qed.
 End WhenFacts.
 End GenericToHoareSection.
 
-Lemma to_hoare_preserves_invariant {Fx F : eff} `{F -<? Fx}
+Lemma to_hoare_preserves_invariant {Fx F : effect} `{F -<? Fx}
   {M : inductiveFreerMonad Fx} {S : UU0}
   (invariant : set S) (c : contract F S)
   (handler_preserves : forall (A : UU0) (op : Fx A),
@@ -364,7 +364,7 @@ Proof. exact: denote_preserves_invariant. Qed.
 (** ** Trigger Views *)
 
 Section contract_trigger_helpers.
-Context {Fx F : eff} `{F -< Fx} {M : freerMonad Fx}
+Context {Fx F : effect} `{F -< Fx} {M : freerMonad Fx}
     (Ω : Type) (c : contract F Ω) {A : Type}.
 
 Lemma to_hoare_ptrigger_preE (op : F A) (ω : Ω) :
@@ -384,7 +384,7 @@ End contract_trigger_helpers.
 (** ** Distinguished Effect Views *)
 
 Section ToHoareDistinguishSection.
-Context {Fx F G : eff}
+Context {Fx F G : effect}
     `{F -<? Fx, G -< Fx, Distinguish Fx G F}
     {M : freerMonad Fx} (Ω : Type) (c : contract F Ω)
     {A : Type} (op : G A).
@@ -410,8 +410,6 @@ by rewrite to_hoare_triggerE /=
    split=> [[-> _] | ->].
 Qed.
 End ToHoareDistinguishSection.
-
-Timeout 3 Check to_hoare_distinguished_trigger_preI.
 
 Global Opaque gen_caller_obligation gen_witness_update gen_callee_obligation.
 Global Opaque hoare_of_contract.
