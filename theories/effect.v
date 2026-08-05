@@ -23,8 +23,6 @@
 (******************************************************************************)
 
 From mathcomp Require Import ssreflect ssrfun.
-(* From mathcomp Require Import reals. *)
-(* From infotheo Require Import realType_ext. *)
 From monae Require Import hierarchy.
 
 Local Open Scope monae_scope.

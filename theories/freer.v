@@ -7,7 +7,7 @@ Local Close Scope nat_scope.
 From mathcomp Require Import all_boot.
 From mathcomp Require Import boolp.
 From monae Require Import hierarchy.
-From FreerDPS Require Import Init effect.
+From FreerDPS Require Import init effect.
 From HB Require Import structures.
 
 (* isMonadFreer == interface of the Freer monad *)

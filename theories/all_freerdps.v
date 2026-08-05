@@ -5,11 +5,11 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 From FreerDPS Require Export
-  Init
+  init
   effect
-  Typeclasses
+  typeclasses
   freer
-  Component
-  Contract
-  Hoare
+  component
+  contract
+  hoare
   .
