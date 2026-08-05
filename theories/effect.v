@@ -76,11 +76,6 @@ Class Distinguish (Fx F E : effect) `{Hp: F -< Fx, Hmp : E -<? Fx} : Prop :=
   {
     injK_None : forall {A} (e: F A), Hmp.(prj) (Hp.(inj) e) = None
   }.
-(* Notation "F1  F2 @ Fx" := *)
-(* Notation "Fx |- F1 != F2" :=
-  (Distinguish Fx F1 F2)
-  (at level 75, no associativity). *)
-
 
 Class StrictProvide2 (Fx F1 F2 : effect)
   `{p1: F1 -< Fx} `{p2: F2 -< Fx}
