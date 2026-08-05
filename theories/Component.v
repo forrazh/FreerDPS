@@ -4,7 +4,7 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
-From FreerDPS Require Import Init Effect Freer Contract Hoare.
+From FreerDPS Require Import Init effect freer Contract Hoare.
 
 (** * Definition *)
 

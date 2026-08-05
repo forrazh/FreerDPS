@@ -1,4 +1,4 @@
-From FreerDPS Require Import Effect.
+From FreerDPS Require Import effect.
 
 Class Provide1 Fx F1 `{Provide Fx F1}.
 
