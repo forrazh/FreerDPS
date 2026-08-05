@@ -8,8 +8,8 @@ From FreerDPS Require Import Init effect freer Contract Hoare.
 
 (** * Definition *)
 
-(** In FreeSpec, a _component_ is an entity which exposes an effect [F],
-    and uses primitives of an effect [E] to compute the results of primitives
+(** In FreeSpec, a _component_ is an entity which exposes an eff [F],
+    and uses primitives of an eff [E] to compute the results of primitives
     of [F].  Besides, a component is likely to carry its own internal state (of
     type [s]).
 
@@ -24,10 +24,10 @@ From FreerDPS Require Import Init effect freer Contract Hoare.
     Thus, a component [c : component F E] is a polymorphic function which
     maps primitives of [F] to impure computations using [E]. *)
 
-Definition component (F E : effect) `{M : freerMonad E} : Type :=
+Definition component (F E : eff) `{M : freerMonad E} : Type :=
   forall (α : Type), F α -> M α.
 
-Definition correct_component {Ex E F : effect} `{E -<? Ex} {M : freerMonad Ex}
+Definition correct_component {Ex E F : eff} `{E -<? Ex} {M : freerMonad Ex}
   {ΩF ΩE : Type}
     (c : component F Ex) (cF : contract F ΩF)
     (cE : contract E ΩE) (pred : ΩF -> ΩE -> Prop) :

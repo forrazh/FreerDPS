@@ -176,7 +176,7 @@ apply: k_preserves.
 by move: h_pre h_post Hsafe; exact: h_preserves.
 Qed.
 
-Lemma denote_preserves_invariant {Fx : effect} {M : inductiveFreerMonad Fx}
+Lemma denote_preserves_invariant {Fx : eff} {M : inductiveFreerMonad Fx}
   {S : UU0} (invariant : set S) (handler : Fx ~~> hoare S) (A : UU0) (p : M A) :
   (forall (X : Type) (op : Fx X),
     preserves_invariant invariant (handler _ op)) ->
@@ -194,7 +194,7 @@ Qed.
 
 (** * Reasoning about Programs *)
 
-Definition hoare_of_contract {Fx F : effect} `{F -<? Fx}
+Definition hoare_of_contract {Fx F : eff} `{F -<? Fx}
     (Ω : Type) (c : contract F Ω)
     : Fx ~~> hoare Ω :=
   fun a op => mk_hoare
@@ -204,25 +204,25 @@ Definition hoare_of_contract {Fx F : effect} `{F -<? Fx}
 
 (** ** Contract Views *)
 
-Section contract_effect_views.
-Context {Fx F : effect} `{F -<? Fx}
+Section contract_eff_views.
+Context {Fx F : eff} `{F -<? Fx}
     (Ω : Type) (c : contract F Ω) {A : Type}.
 
-Lemma hoc_effect_preE (operation : Fx A) (witness : Ω) :
+Lemma hoc_eff_preE (operation : Fx A) (witness : Ω) :
   pre (hoare_of_contract c operation) witness <->
-  if prj operation is Some effect_operation then
-    caller_obligation c witness effect_operation
+  if prj operation is Some eff_operation then
+    caller_obligation c witness eff_operation
   else
     True.
 Proof. by []. Qed.
 
-Lemma hoc_effect_postE
+Lemma hoc_eff_postE
     (operation : Fx A) (witness : Ω) (result : A) (witness' : Ω) :
   post (hoare_of_contract c operation) witness result witness' <->
   match prj operation with
-  | Some effect_operation =>
-      witness' = witness_update c witness effect_operation result /\
-      callee_obligation c witness effect_operation result
+  | Some eff_operation =>
+      witness' = witness_update c witness eff_operation result /\
+      callee_obligation c witness eff_operation result
   | None => witness' = witness
   end.
 Proof.
@@ -231,15 +231,15 @@ case: prj => //=.
 by split=> [[-> _] | ->].
 Qed.
 
-End contract_effect_views.
+End contract_eff_views.
 Section contract_operation_views.
-Context {Fx F : effect} `{F -< Fx}
+Context {Fx F : eff} `{F -< Fx}
     (Ω : Type) (c : contract F Ω) {A : Type}.
 
 Lemma hoc_pre_condE (witness : Ω) (operation : F A) :
   pre (hoare_of_contract (Fx:=Fx) c (inj operation)) witness <->
   caller_obligation c witness operation.
-Proof. by rewrite hoc_effect_preE injK_Some. Qed.
+Proof. by rewrite hoc_eff_preE injK_Some. Qed.
 
 Lemma hoc_post_condE
     (witness : Ω) (operation : F A) (result : A) (witness' : Ω) :
@@ -247,13 +247,13 @@ Lemma hoc_post_condE
     witness result witness' <->
   witness' = witness_update c witness operation result /\
   callee_obligation c witness operation result.
-Proof. by rewrite hoc_effect_postE injK_Some. Qed.
+Proof. by rewrite hoc_eff_postE injK_Some. Qed.
 
 End contract_operation_views.
 
 (** ** Program Interpretation *)
 
-Definition to_hoare {Fx F : effect} `{F -<? Fx} {M : freerMonad Fx}
+Definition to_hoare {Fx F : eff} `{F -<? Fx} {M : freerMonad Fx}
     (Ω : Type) (c : contract F Ω)
     : M ~~> hoare Ω :=
   denote _ (hoare_of_contract c).
@@ -268,7 +268,7 @@ Notation "c |> p" := (to_hoare c p)
 (* --------------------------------- Facts ---------------------------------- *)
 
 Section GenericToHoareSection.
-Context {Fx F : effect} `{F -<? Fx} {M : freerMonad Fx}
+Context {Fx F : eff} `{F -<? Fx} {M : freerMonad Fx}
     (Ω : Type) (c : contract F Ω).
 
 Lemma to_hoare_triggerE (a : Type) (op : Fx a) :
@@ -278,18 +278,18 @@ Proof. exact: denote_trigger. Qed.
 Lemma to_hoare_trigger_preE (a : Type) (op : Fx a) (ω : Ω) :
   pre (to_hoare (M:=M) c (trigger a op)) ω <->
   if prj op is Some eff_op then  caller_obligation c ω eff_op else True.
-Proof. by rewrite to_hoare_triggerE hoc_effect_preE. Qed.
+Proof. by rewrite to_hoare_triggerE hoc_eff_preE. Qed.
 
 Lemma to_hoare_trigger_postE
     (a : Type) (op : Fx a) (ω : Ω) (x : a) (ω' : Ω) :
   post (to_hoare (M:=M) c (trigger a op)) ω x ω' <->
   match prj op with
-  | Some effect_operation =>
-      ω' = witness_update c ω effect_operation x /\
-      callee_obligation c ω effect_operation x
+  | Some eff_operation =>
+      ω' = witness_update c ω eff_operation x /\
+      callee_obligation c ω eff_operation x
   | None => ω' = ω
   end.
-Proof. by rewrite to_hoare_triggerE hoc_effect_postE. Qed.
+Proof. by rewrite to_hoare_triggerE hoc_eff_postE. Qed.
 
 Lemma to_hoare_skip_preI (ω : Ω) :
   pre (c |> (skip : M unit)) ω.
@@ -353,7 +353,7 @@ Qed.
 End WhenFacts.
 End GenericToHoareSection.
 
-Lemma to_hoare_preserves_invariant {Fx F : effect} `{F -<? Fx}
+Lemma to_hoare_preserves_invariant {Fx F : eff} `{F -<? Fx}
   {M : inductiveFreerMonad Fx} {S : UU0}
   (invariant : set S) (c : contract F S)
   (handler_preserves : forall (A : UU0) (op : Fx A),
@@ -364,7 +364,7 @@ Proof. exact: denote_preserves_invariant. Qed.
 (** ** Trigger Views *)
 
 Section contract_trigger_helpers.
-Context {Fx F : effect} `{F -< Fx} {M : freerMonad Fx}
+Context {Fx F : eff} `{F -< Fx} {M : freerMonad Fx}
     (Ω : Type) (c : contract F Ω) {A : Type}.
 
 Lemma to_hoare_ptrigger_preE (op : F A) (ω : Ω) :
@@ -384,7 +384,7 @@ End contract_trigger_helpers.
 (** ** Distinguished Effect Views *)
 
 Section ToHoareDistinguishSection.
-Context {Fx F G : effect}
+Context {Fx F G : eff}
     `{F -<? Fx, G -< Fx, Distinguish Fx G F}
     {M : freerMonad Fx} (Ω : Type) (c : contract F Ω)
     {A : Type} (op : G A).
@@ -410,6 +410,8 @@ by rewrite to_hoare_triggerE /=
    split=> [[-> _] | ->].
 Qed.
 End ToHoareDistinguishSection.
+
+Timeout 3 Check to_hoare_distinguished_trigger_preI.
 
 Global Opaque gen_caller_obligation gen_witness_update gen_callee_obligation.
 Global Opaque hoare_of_contract.

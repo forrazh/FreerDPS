@@ -6,7 +6,7 @@
 
 (** In this library, we provide the necessary material to reason about FreeSpec
     components both in isolation, and in composition.  To do that, we focus our
-    reasoning principles on effects, by defining how their primitives shall
+    reasoning principles on effs, by defining how their primitives shall
     be used, and what to expect the result computed by “correct” operational
     semantics (according to a certain definition of “correct”). *)
 
@@ -18,7 +18,7 @@ Open Scope monae_scope.
 
 (** * Definition *)
 
-(** A contract dedicated to [F : effect] primarily provides two
+(** A contract dedicated to [F : eff] primarily provides two
     predicates.
 
     - [caller_obligation] distinguishes between primitives that can be used (by
@@ -32,12 +32,12 @@ Open Scope monae_scope.
     parameterized by what we have called a “witness.”  A witness is a term which
     describes the necessary information of the past, and allows for taking
     decision for the present.  It can be seen as an abstraction of the concrete
-    state of the effect implementor.
+    state of the eff implementor.
 
     To keep this state up-to-date after each primitive interpretation,
     contracts also define a dedicated function [witness_update]. *)
 
-Record contract (F : effect) (Ω : Type) : Type := make_contract
+Record contract (F : eff) (Ω : Type) : Type := make_contract
   { witness_update (ω : Ω) : forall (α : Type), F α -> α -> Ω
   ; caller_obligation (ω : Ω) : forall (α : Type),  F α -> Prop
   ; callee_obligation (ω : Ω) : forall (α : Type), F α -> α -> Prop
@@ -53,38 +53,38 @@ Arguments callee_obligation [F Ω] (c ω) [α] (_ _).
 
 (** The most simple contract we can define is the one that requires
     anything both for the impure computations which uses the primitives of a
-    given effect, and for the operational semantics which compute results for
+    given eff, and for the operational semantics which compute results for
     these primitives. *)
 
-Definition const_witness {F : effect} :=
+Definition const_witness {F : eff} :=
   fun (u : unit) (α : Type) (e : F α) (x : α) => u.
 
-Inductive no_caller_obligation {F : effect} {Ω : Type}
+Inductive no_caller_obligation {F : eff} {Ω : Type}
     (ω : Ω) (α : Type) (e : F α) : Prop :=
 | mk_no_caller_obligation : no_caller_obligation ω α e.
 
 #[global] Hint Constructors no_caller_obligation : freespec.
 
-Inductive no_callee_obligation {F : effect} {Ω : Type}
+Inductive no_callee_obligation {F : eff} {Ω : Type}
     (ω : Ω) (α : Type) (e : F α) (x : α) : Prop :=
 | mk_no_callee_obligation : no_callee_obligation ω α e x.
 
 #[global] Hint Constructors no_callee_obligation : freespec.
 
-Definition no_contract (F : effect) : contract F unit :=
+Definition no_contract (F : eff) : contract F unit :=
   {| witness_update := const_witness
    ; caller_obligation := no_caller_obligation
    ; callee_obligation := no_callee_obligation
    |}.
 
 (** A similar —and as simple— contract is the one that forbids the use of a
-    given effect. *)
+    given eff. *)
 
-Definition do_no_use {F : effect} {Ω : Type}
+Definition do_no_use {F : eff} {Ω : Type}
     (ω : Ω) (α : Type) (e : F α) : Prop :=
   False.
 
-Definition forbid_specs (F : effect) : contract F unit :=
+Definition forbid_specs (F : eff) : contract F unit :=
   {| witness_update := const_witness
    ; caller_obligation := do_no_use
    ; callee_obligation := no_callee_obligation
@@ -92,28 +92,28 @@ Definition forbid_specs (F : effect) : contract F unit :=
 
 (** * Contract Equivalence *)
 
-Definition contract_caller_equ {F : effect} {Ω1 Ω2 : Type}
+Definition contract_caller_equ {F : eff} {Ω1 Ω2 : Type}
     (c1 : contract F Ω1) (c2 : contract F Ω2)
     (f : Ω1 -> Ω2)
   : Prop :=
   forall ω1 a (p : F a),
     caller_obligation c1 ω1 p <-> caller_obligation c2 (f ω1) p.
 
-Definition contract_callee_equ {F : effect} {Ω1 Ω2 : Type}
+Definition contract_callee_equ {F : eff} {Ω1 Ω2 : Type}
     (c1 : contract F Ω1) (c2 : contract F Ω2)
     (f : Ω1 -> Ω2)
   : Prop :=
   forall ω1 a (p : F a) x,
     callee_obligation c1 ω1 p x <-> callee_obligation c2 (f ω1) p x.
 
-Definition contract_witness_equ {F : effect} {Ω1 Ω2 : Type}
+Definition contract_witness_equ {F : eff} {Ω1 Ω2 : Type}
     (c1 : contract F Ω1) (c2 : contract F Ω2)
     (f : Ω1 -> Ω2)
   : Prop :=
   forall ω1 a (p : F a) x,
     f (witness_update c1 ω1 p x) = witness_update c2 (f ω1) p x.
 
-Inductive contract_equ {F : effect} {Ω1 Ω2 : Type}
+Inductive contract_equ {F : eff} {Ω1 Ω2 : Type}
     (c1 : contract F Ω1) (c2 : contract F Ω2) : Type :=
 | mk_contract_equ (f : Ω1 -> Ω2) (g : Ω2 -> Ω1)
     (iso1 : forall x, f (g x) = x) (iso2 : forall x, g (f x) = x)
@@ -122,7 +122,7 @@ Inductive contract_equ {F : effect} {Ω1 Ω2 : Type}
     (witness_equ : contract_witness_equ c1 c2 f)
   : contract_equ c1 c2.
 
-Definition contract_iso_lr {F : effect} {Ω1 Ω2 : Type}
+Definition contract_iso_lr {F : eff} {Ω1 Ω2 : Type}
     (c1 : contract F Ω1) (c2 : contract F Ω2)
     (equ : contract_equ c1 c2) (ω1 : Ω1)
   : Ω2 :=
@@ -130,7 +130,7 @@ Definition contract_iso_lr {F : effect} {Ω1 Ω2 : Type}
   | @mk_contract_equ _ _ _ _ _ f _ _ _ _ _ _ => f ω1
   end.
 
-Definition contract_iso_rl {F : effect} {Ω1 Ω2 : Type}
+Definition contract_iso_rl {F : eff} {Ω1 Ω2 : Type}
     (c1 : contract F Ω1) (c2 : contract F Ω2)
     (equ : contract_equ c1 c2) (ω2 : Ω2)
   : Ω1 :=
@@ -141,7 +141,7 @@ Definition contract_iso_rl {F : effect} {Ω1 Ω2 : Type}
 Arguments contract_iso_lr {F Ω1 Ω2 c1 c2} (equ ω1).
 Arguments contract_iso_rl {F Ω1 Ω2 c1 c2} (equ ω2).
 
-Lemma contract_equ_refl {F : effect} {Ω : Type} (c : contract F Ω)
+Lemma contract_equ_refl {F : eff} {Ω : Type} (c : contract F Ω)
   : contract_equ c c.
 
 Proof.
@@ -151,7 +151,7 @@ Proof.
   + now intros ω α p x.
 Defined.
 
-Lemma contract_equ_sym {F : effect} {Ω1 Ω2 : Type}
+Lemma contract_equ_sym {F : eff} {Ω1 Ω2 : Type}
     (c1 : contract F Ω1) (c2 : contract F Ω2)
    (equ : contract_equ c1 c2)
   : contract_equ c2 c1.
@@ -179,7 +179,7 @@ Proof.
     now rewrite equ.
 Defined.
 
-Lemma contract_equ_trans {F : effect} {Ω1 Ω2 Ω3 : Type}
+Lemma contract_equ_trans {F : eff} {Ω1 Ω2 Ω3 : Type}
     (c1 : contract F Ω1) (c2 : contract F Ω2)
     (c3 : contract F Ω3)
     (is_equ12 : contract_equ c1 c2)
@@ -211,32 +211,32 @@ Defined.
 
 (** * Composing Contracts *)
 
-(** As we compose effects and operational semantics, we can easily compose
+(** As we compose effs and operational semantics, we can easily compose
     contracts together, by means of the [contractprod] operator. Given [F] and [E]
-    two effects, if we can reason about [F] and [E] independently (e.g., the
+    two effs, if we can reason about [F] and [E] independently (e.g., the
     caller obligations of [E] do not vary when we use [F]), then we can compose
     [ci : contract F ΩF] and [cj : contract E ΩE], such that [contractprod ci cj] in a
     contract for [F + E]. *)
 
-Definition gen_witness_update {Fx F : effect} `{F -<? Fx}
+Definition gen_witness_update {Fx F : eff} `{F -<? Fx}
     {Ω α : Type} (c : contract F Ω)
     (ω :  Ω) (e : Fx α) (x : α)
   : Ω :=
   if prj e is Some e then witness_update c ω e x else ω.
 
-Definition gen_caller_obligation {Fx F : effect} `{F -<? Fx}
+Definition gen_caller_obligation {Fx F : eff} `{F -<? Fx}
     {Ω α : Type} (c : contract F Ω)
     (ω :  Ω) (e : Fx α)
   : Prop :=
   if prj e is Some e then caller_obligation c ω e else True.
 
-Definition gen_callee_obligation {Fx F : effect} `{F -<? Fx}
+Definition gen_callee_obligation {Fx F : eff} `{F -<? Fx}
     {Ω α : Type} (c : contract F Ω)
     (ω :  Ω) (e : Fx α) (x : α)
   : Prop :=
   if prj e is Some e then callee_obligation c ω e x else True.
 
-Definition contractprod {Fx F E : effect} `{F -< Fx, E -< Fx}
+Definition contractprod {Fx F E : eff} `{F -< Fx, E -< Fx}
     {ΩF ΩE : Type}
     (ci : contract F ΩF) (cj : contract E ΩE)
   : contract Fx (ΩF * ΩE) :=
@@ -255,7 +255,7 @@ Infix "*" := contractprod : contract_scope.
 
 (* FIXME: Should be [StrictProvide2 Fx F E] *)
 
-Definition sharedcontractprod {Fx F E : effect} `{F -< Fx, E -< Fx}
+Definition sharedcontractprod {Fx F E : eff} `{F -< Fx, E -< Fx}
     {Ω : Type} (ci : contract F Ω) (cj : contract E Ω)
   : contract Fx Ω :=
   {|
@@ -279,12 +279,12 @@ Infix "^" := sharedcontractprod  : contract_scope.
 
 (** * Contract By Example *)
 
-(** Finally, and as an example, we define a contract for the effect
+(** Finally, and as an example, we define a contract for the eff
     [STORE s] we discuss in [FreerDPS.Freer].  As a reminder, the
-    effect is defined as follows:
+    eff is defined as follows:
 
 <<
-Inductive STORE (s : Type) : effect :=
+Inductive STORE (s : Type) : eff :=
 | Get : STORE s s
 | Put (x : s) : STORE s unit.
 >>
@@ -323,7 +323,7 @@ Definition store_specs (s : Type) : contract (STORE s) s :=
   |}.
 
 (** Now, as we briefly mentionned, this contract allows for reasoning about an
-    impure computation which uses the [STORE s] effect, assuming the mutable,
+    impure computation which uses the [STORE s] eff, assuming the mutable,
     global variable has been initialized.  We can define another contract that
     does not rely on such assumption, and on the contrary, requires an impure
     computation to initialize the variable prior to using it.
@@ -334,5 +334,5 @@ Definition store_specs (s : Type) : contract (STORE s) s :=
 
     This is one of the key benefits of the FreeSpec approach: because the
     contracts are defined independently from impure computations and
-    effects, we can actually define several contracts to consider
+    effs, we can actually define several contracts to consider
     different set of hypotheses. *)

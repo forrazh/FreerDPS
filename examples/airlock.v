@@ -4,12 +4,12 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
-From HB Require Import structures.
 From mathcomp Require Import all_boot classical_sets boolp.
 From monae Require Import hierarchy.
 (* WARNING: Move this import to its MathComp counterpart. *)
 From Stdlib Require Import Arith.
 From FreerDPS Require Import all_freerdps.
+From HB Require Import structures.
 
 (* DOORS == TODO *)
 
@@ -18,14 +18,14 @@ Module Export DoorsControllerM.
 
 Inductive door : Type := left | right.
 
-HB.instance Definition _ := gen_eqMixin door.
+(* HB.instance Definition _ := gen_eqMixin door. *)
 
-Inductive DOORS : effect :=
+Inductive DOORS : eff :=
 | IsOpen : door -> DOORS bool
 | Toggle : door -> DOORS unit.
 
 Section doors_s.
-Context {Fx : effect} `{DOORS -< Fx} {M : freerMonad Fx}.
+Context {Fx : eff} `{DOORS -< Fx} {M : freerMonad Fx}.
 
 Definition is_open (d : door) : M bool := ptrigger $ IsOpen d.
 Definition toggle (d : door) : M unit := ptrigger $ Toggle d.
@@ -35,12 +35,12 @@ Definition close_door (d : door) : M unit :=
   is_open d >>= (when ^~ (toggle d)).
 End doors_s.
 
-Inductive CONTROLLER : effect :=
+Inductive CONTROLLER : eff :=
 | Tick : CONTROLLER unit
 | TriggerOpen (d : door) : CONTROLLER unit.
 
 Section controller_s.
-Context {Fx : effect} `{CONTROLLER -< Fx} {M : freerMonad Fx}.
+Context {Fx : eff} `{CONTROLLER -< Fx} {M : freerMonad Fx}.
 Definition tick : M unit := ptrigger Tick.
 Definition trigger_open (d : door) : M unit := ptrigger $ TriggerOpen d.
 End controller_s.
@@ -54,7 +54,7 @@ Definition co (d : door) : door :=
 Lemma co_leftE : co left = right.
 Proof. by []. Qed.
 
-Definition controller {Fx : effect} `{DOORS -< Fx, (STORE nat) -< Fx}
+Definition controller {Fx : eff} `{DOORS -< Fx, (STORE nat) -< Fx}
     {M : freerMonad Fx} : component (M:=M) CONTROLLER Fx :=
   fun _ op =>
     match op with
@@ -163,7 +163,7 @@ Qed.
 Definition doors_safe (ω : Ω) := ~~ sel left ω \/ ~~ sel right ω.
 
 Section RespectfulAndRunLemmas.
-Context {Fx : effect} `{DOORS -< Fx} {M : freerMonad Fx}.
+Context {Fx : eff} `{DOORS -< Fx} {M : freerMonad Fx}.
 Implicit Type d : door.
 
 Local Notation "c ||> p" :=
@@ -177,7 +177,7 @@ rewrite /close_door -subTset=> hω _; apply: th_pre_bindA.
   by rewrite to_hoare_ptrigger_preE; exact: req_is_open.
 case=> ?;
   rewrite to_hoare_when_preE // to_hoare_ptrigger_postE
-    => -[ /[swap] ]=>/doors_o_callee_is_openE ? -> .
+    => -[/[swap]]=>/doors_o_callee_is_openE ? -> .
 by rewrite to_hoare_ptrigger_preE; exact: req_toggle.
 Qed.
 
@@ -242,7 +242,7 @@ End RespectfulAndRunLemmas.
 
 (* From now on, proofs will use the inductive version. *)
 Section InvariantRunLemmas.
-Context {Fx : effect} `{DOORS -< Fx} {M : inductiveFreerMonad Fx}.
+Context {Fx : eff} `{DOORS -< Fx} {M : inductiveFreerMonad Fx}.
 
 (** /!\ WARNING: This lemma is the only one needing `f_ind`  because we
   * require to "execute" the freer program in order to denote it and see
@@ -265,16 +265,19 @@ Proof. by move: hpre hpost safe; exact: doors_run_preserves_safe. Qed.
 End InvariantRunLemmas.
 
 (** ** Main Theorem *)
-Section controller_s.
-Context {Fx : effect} `{StrictProvide2 Fx DOORS (STORE nat)}
+(* Section controller_s.
+Context {Fx : eff} `{DOORS ;; STORE nat -<< Fx}
   {M : inductiveFreerMonad Fx}.
+
+  Check th_trig_dist_preI.
 
 Lemma controller_pre {α : Type} (op : CONTROLLER α) (ω : Ω)
   : pre (doors_c |> controller (M:=M) α op) ω.
 Proof.
 case: op=> [|d].
 - (* Tick *) apply: th_pre_bindA.
-  + exact: to_hoare_distinguished_trigger_preI.
+  Check th_trig_dist_preI.
+  + exact: th_trig_dist_preI.
   + move=> cpt? /to_hoare_distinguished_trigger_postE ->.
     rewrite to_hoare_when_preE;
       case: (15 <? cpt)%nat=> //=;
@@ -282,12 +285,12 @@ case: op=> [|d].
     * by apply: th_pre_bindA=>[|*];
         rewrite close_door_respectful.
     * by move=>*;
-        exact: to_hoare_distinguished_trigger_preI.
+        exact: th_trig_dist_preI.
 - (* Trigger Open *) apply: th_pre_bindA=>[|*].
   + apply: th_pre_bindA.
     * by rewrite close_door_respectful.
     * by move=>?? Hclose; exact/open_door_respectful/close_door_run/Hclose.
-  + exact: to_hoare_distinguished_trigger_preI.
+  + exact: th_trig_dist_preI.
 Qed.
 
 Theorem controller_correct
@@ -299,4 +302,4 @@ have Hpre := controller_pre op ω; move: Hpre Hpost.
 exact: respectful_run_inv.
 Qed.
 
-End controller_s.
+End controller_s. *)
