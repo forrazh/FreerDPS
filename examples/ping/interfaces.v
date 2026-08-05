@@ -9,15 +9,14 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Local Open Scope monae_scope.
+Local Open Scope contract_scope.
+Close Scope nat_scope.
 
 (** * Specifying the Ping-Pong Protocol *)
 
 Module Export PingPongM.
-
 (** ** Messages *)
-
 Inductive Msg := ping | pong.
-
 (** ** Client *)
 
 Inductive client_api : effect :=
@@ -57,22 +56,44 @@ Module NetworkChannelMod.
 Definition packets := seq Msg.
 
 Record N := mk_chan {
-  tx : packets;
-  rx : packets;
+  serverQ : packets;
+  clientQ : packets;
 }.
 
-Definition send_over_network (message : Msg) (network : N) :=
-  {| tx := message :: tx network; rx := rx network |}.
+Definition enqueue (message : Msg) (queue : packets) :=
+  rcons queue message.
 
-Definition consume_received (network : N) :=
-  match rx network with
-  | [::] => {| tx := tx network; rx := [::] |}
-  | _ :: remaining => {| tx := tx network; rx := remaining |}
+Definition send_to_server (message : Msg) (network : N) :=
+  {| serverQ := enqueue message (serverQ network);
+     clientQ := clientQ network |}.
+
+Definition send_to_client (message : Msg) (network : N) :=
+  {| serverQ := serverQ network;
+     clientQ := enqueue message (clientQ network) |}.
+
+Definition receive_from_server (network : N) :=
+  match clientQ network with
+  | [::] => network
+  | _ :: remaining =>
+      {| serverQ := serverQ network;
+         clientQ := remaining |}
   end.
 
-Lemma consuming_has_no_effect_on_tx network :
-  tx (consume_received network) = tx network.
-Proof. by rewrite /consume_received; case : (rx network). Qed.
+Definition receive_from_client (network : N) :=
+  match serverQ network with
+  | [::] => network
+  | _ :: remaining =>
+      {| serverQ := remaining;
+         clientQ := clientQ network |}
+  end.
+
+Lemma server_does_not_consume_its_send network :
+  serverQ (receive_from_server network) = serverQ network.
+Proof. by rewrite /receive_from_server; case: (clientQ network). Qed.
+
+Lemma client_does_not_consume_its_send network :
+  clientQ (receive_from_client network) = clientQ network.
+Proof. by rewrite /receive_from_client; case: (serverQ network). Qed.
 
 End NetworkChannelMod.
 
@@ -87,14 +108,14 @@ Definition c_step (network : N) :
     forall X, client_api X -> X -> N :=
   fun X operation result =>
     match operation with
-    | SEND message => send_over_network message network
-    | WAIT => consume_received network
+    | SEND message => send_to_server message network
+    | WAIT => receive_from_server network
     end.
 
 Inductive c_o_caller (network : N) :
     forall X, client_api X -> Prop :=
 | O_WAIT (remaining : packets)
-    (pong_available : rx network = pong :: remaining) :
+    (pong_available : clientQ network = pong :: remaining) :
     c_o_caller network WAIT
 | O_SEND (message : Msg) : c_o_caller network (SEND message).
 
@@ -103,7 +124,7 @@ Inductive c_o_callee (network : N) :
 | SEND_O (message : Msg) (result : unit) :
     c_o_callee network (SEND message) result
 | WAIT_O (remaining : packets)
-    (received_pong : rx network = pong :: remaining) :
+    (received_pong : clientQ network = pong :: remaining) :
     c_o_callee network WAIT pong.
 
 Definition c_contract : contract client_api N :=
@@ -117,14 +138,13 @@ Local Notation "c ||> p" := (to_hoare (M:=M) c p)
 
 Lemma c_respect
     (network : N) (remaining : packets)
-    (pong_available : rx network = pong :: remaining) :
+    (pong_available : clientQ network = pong :: remaining) :
   pre (c_contract ||> C) network.
 Proof.
-apply: th_pre_bindA=>*; rewrite to_hoare_trigger_preE /=.
-- constructor.
-admit.
-(* Equational bind reasoning; proj_inj for [SEND] and [WAIT]. *)
-Admitted.
+apply: th_pre_bindA=>[|? ω']; rewrite to_hoare_trigger_preE ?to_hoare_trigger_postE.
+- exact: O_SEND.
+by move=>[-> _]; exact/O_WAIT/pong_available.
+Qed.
 
 Lemma c_run
     (initial_network final_network : N) (message : Msg)
@@ -150,8 +170,8 @@ Definition s_step (network : N) :
     forall X, server_api X -> X -> N :=
   fun X operation result =>
     match operation with
-    | RPLY message => send_over_network message network
-    | RECV => consume_received network
+    | RPLY message => send_to_client message network
+    | RECV => receive_from_client network
     end.
 
 Inductive s_o_caller (network : N) :
@@ -193,56 +213,108 @@ Lemma s_p_run_grows
     (initial_network final_network : N) (result : unit)
     (run : post (s_contract ||> S_p)
       initial_network result final_network) :
-  tx final_network = pong :: tx initial_network.
+  clientQ final_network = rcons (clientQ initial_network) pong.
 Proof.
 move: run; rewrite th_post_bindA=>[ [? [? [ ]]] ].
 do 2 (rewrite to_hoare_trigger_postE /= => [ [?] ];
   inversion 1; ssubst).
-by rewrite /= consuming_has_no_effect_on_tx.
+by rewrite /send_to_client client_does_not_consume_its_send.
 Qed.
 
 Lemma s_run
     (initial_network final_network : N) (result : unit) fuel
     (run : post (s_contract ||> S_ fuel)
       initial_network result final_network) :
-  tx final_network =
-    nseq (S fuel) pong ++ tx initial_network.
+  clientQ final_network =
+    clientQ initial_network ++ nseq (fuel.+1) pong.
 Proof.
 move: fuel initial_network final_network run;
   elim=> [|n ih] initial_network ?;
   rewrite th_post_bindA=> -[ [] [net [H_s +]] ].
-- by rewrite to_hoare_skip_postE /==> -[? <-]; exact: s_p_run_grows H_s.
-move=> H_loop; rewrite (ih _ _ H_loop) (s_p_run_grows H_s).
-by elim n => //= [? ->] //.
+- by rewrite to_hoare_skip_postE cats1 /==> -[? <-]; exact: s_p_run_grows H_s.
+by move=> H_loop; rewrite (ih _ _ H_loop) (s_p_run_grows H_s)
+  2!ssr_ext.nseq_S cat_rcons.
 Qed.
 
 Lemma s_run_size
     (initial_network final_network : N) (result : unit) fuel
     (run : post (s_contract ||> S_ fuel)
       initial_network result final_network) :
-  size (tx final_network) =
-    size (tx initial_network) + fuel + 1.
+  size (clientQ final_network) =
+    size (clientQ initial_network) + fuel.+1.
 Proof.
-by rewrite (s_run run) size_cat size_nseq addSn addnC addn1.
+by rewrite (s_run run) size_cat size_nseq.
 Qed.
 
 End server_respectful_and_run_lemmas.
-
 End scm.
 
 Import ccm scm.
 
-(** * Protocol Description *)
 
-(**
-
-<<
+(** * Protocol Description :
        +---+  == send ping ==>  +---+  == deliver ping ==>  +---+
        | C |                    | N |                        | S |
        +---+  <== get pong ==   +---+  <== reply pong =====  +---+
->>
-
 *)
+Module ProtocolM.
+Section proto_s.
+
+Inductive proto_api : effect := one_round : proto_api Msg.
+
+Context {ProtoF : effect}
+`{StrictProvide2 ProtoF server_api client_api}
+(* `{client_api -< ProtoF, server_api -< ProtoF} *)
+  {M : freerMonad ProtoF}.
+Definition c := c_contract -^- s_contract.
+
+Local Notation "c ||> p" := (to_hoare (M:=M) c p) (at level 90).
+
+(* Definition proto {outputF : effect} : component outputF ProtoF. *)
+
+Definition protocol : component (M:=M) proto_api ProtoF := fun _ op => match op with
+| one_round => send >> recv >> reply >> wait
+end.
+
+Definition protocol_inv (net : N) := serverQ net = [::] /\ clientQ net = [::].
+
+Lemma protocol_respect (net : N) :
+  protocol_inv net -> pre (c ||> protocol one_round) net.
+Proof.
+move=>inv
+; rewrite /protocol /send /recv /reply /wait
+.
+Search (pre _ _).
+apply: th_pre_bindA=> [|??].
+- apply: th_pre_bindA=> [|?? Hpost].
+  + apply: th_pre_bindA=> [|?? Hpost].
+    * rewrite /c. apply: to_hoare_distinguished_request_preI.
+      (* mo ee/to_hoare_distinguished_request_postE. *)
+    * admit.
+    * admit.
+  + admit.
+- admit.
+Admitted.
+
+Lemma protocol_run_inv (n n' : N) (result : Msg) :
+  protocol_inv n -> post (c |> protocol one_round) n result n' ->
+  result = pong /\ protocol_inv n'.
+Admitted.
+
+(**********************************************
+  * TODO: Unadmit the two above lemmas when   *
+  * we have a better api for shared contract. *
+  *********************************************)
+
+Lemma proto_correct : correct_component protocol (no_contract proto_api) c (fun=> protocol_inv).
+Proof.
+move=>[] n inv ? [] []; split=>[|m n' Hpost] /=.
+  exact: protocol_respect.
+by split=>//; move: (protocol_run_inv inv Hpost)=>[_];exact.
+Qed.
+
+End proto_s.
+End ProtocolM.
 
 (** * Probability of Success *)
 
