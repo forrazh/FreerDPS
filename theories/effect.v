@@ -4,9 +4,26 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
+(******************************************************************************)
+(* Definition of effects *)
+(*                                                                            *)
+(* effect := Type -> Type *)
+(* MayProvide, -<? == TODO *)
+(* prj == TODO *)
+(* Provide, -< == TODO *)
+(* inj == TODO (see Kiselyov) *)
+(* Distinguish == *)
+(*                                                                            *)
+(* Examples of effect: *)
+(* eempty == empty effect *)
+(* STORE s == example of effect *)
+(* FlipEff == effect for a probabilistic boolean choice *)
+(*                                                                            *)
+(* References: Kiselyov, FreeSpec *)
+(******************************************************************************)
+
 From mathcomp Require Import ssreflect ssrfun.
 From monae Require Import hierarchy.
-From Stdlib Require Import Program.
 
 Local Open Scope monae_scope.
 
@@ -22,56 +39,20 @@ Declare Scope effect_scope.
 Bind Scope effect_scope with effect.
 
 (** Given [F : effect], a term of type [F α] identifies a primitive of [F]
-    expected to produce a result of type [α].
-
-    The simpler effect is the empty effect, which provides no primitives
-    whatsoever. *)
-
-Inductive eempty : effect := .
-
-(** Another example of general-purpose effect we can define is the [STORE s]
-    effect, where [s] is a type for a state, and [STORE s] allows for
-    manipulating a global, mutable variable of type [s] within an impure
-    computation. *)
-
-Inductive STORE (s : Type) : effect :=
-| Get : STORE s s
-| Put (x : s) : STORE s unit.
-
-Arguments Get {s}.
-Arguments Put [s] (x).
-
-(** According to the definition of [STORE s], an impure computation can use two
-    primitives. The term [Get : STORE s s] describes a primitive expected to
-    produce a result of type [s], that is the current value of the mutable
-    variable.  Terms of the form [Put x : STORE s unit] describe a primitive
-    which does not produce any meaningful result, but is expected to update the
-    current value of the mutable variable.
-
-    The use of the word “expected” to describe the primitive of [STORE s] is
-    voluntary.  The definition of an effect does not attach any particular
-    semantics to the primitives it describes.  This will come later, and in
-    fact, one effect may have many legitimate semantics.
-
-    Impure computations are likely to use more than one effect, but the
-    [freer] monad takes only one argument.  We introduce [eplus] (denoted by
-    [<+>] or [⊕]) to compose effects together.  An impure computation
-    parameterized by [F ⊕ E] can therefore leverage the primitives of both [F]
-    and [E]. *)
+    expected to produce a result of type [α]. *)
 
 (** * Polymorphic Effect Composites *)
 Class MayProvide (Fx F : effect) : Type :=
-  { proj: Fx ~~> option \o F (* retraction *)
-  }.
-Arguments proj {_ _ _ _} _.
+  { prj: Fx ~~> option \o F}.
+Arguments prj {_ _ _ _} _.
 
 Notation "F -<? Fx" := (MayProvide Fx F)
   (at level 92, left associativity) : type_scope.
 
 Class Provide (Fx F : effect) : Type :=
   { may_prov :: F -<? Fx ;
-    inj : F ~~> Fx (* section *);
-    injK_Some {A} : forall e : F A, may_prov.(proj) (inj _ e) = Some e }.
+    inj : F ~~> Fx ;
+    injK_Some {A} : forall e : F A, may_prov.(prj) (inj _ e) = Some e }.
 Arguments inj {_ _ _ _} _.
 
 Notation "F -< Fx" := (Provide Fx F)
@@ -83,7 +64,7 @@ Notation "F -< Fx" := (Provide Fx F)
     instances are found. *)
 
 Instance default_MayProvide (F E : effect) : (E -<? F) |1000 :=
-  { proj := fun _ _ => None }.
+  { prj := fun _ _ => None }.
 
 (** It is expected that, for an effect composite [Fx] which provides [F] and
     may provide [E], [inj] and [proj] do not mix up [F] and [E]
@@ -93,18 +74,28 @@ Instance default_MayProvide (F E : effect) : (E -<? F) |1000 :=
 
 Class Distinguish (Fx F E : effect) `{Hp: F -< Fx, Hmp : E -<? Fx} : Prop :=
   {
-    injK_None : forall {A} (e: F A), Hmp.(proj) (Hp.(inj) e) = None
+    injK_None : forall {A} (e: F A), Hmp.(prj) (Hp.(inj) e) = None
   }.
-(* @proj Fx E H1 A (@inj Fx F H H0 A e) *)
-(* F -< Fx
-Subev -< Ev *)
+
+Class StrictProvide2 (Fx F1 F2 : effect)
+  `{p1: F1 -< Fx} `{p2: F2 -< Fx}
+  `{! Distinguish Fx F1 F2} `{! Distinguish Fx F2 F1}
+  : Type
+.
+
+(*****************************************************************************
+  * Sadly, this can't be used to declare StrictProvide right now because     *
+  * for an unknown reason, this notation does not create the instances for   *
+  * prov/dist by itself.                                                     *
+  * TODO: Investigate why.                                                   *
+  ****************************************************************************)
+Notation "F1 ;; F2 -<< Fx" := (StrictProvide2 Fx F1 F2) (at level 50, no associativity): type_scope.
 
 (** * Composing Effects *)
 
 (** We provide the [eplus] operator to compose effects together. That is,
     [eplus] can be used to build _concrete_ (as opposed to polymorphic)
     effect composite. *)
-
 
 Inductive eplus (F E : effect) (α : Type) :=
 | in_left (e : F α) : eplus F E α
@@ -141,16 +132,15 @@ with_state true (with_state false get)
     will return false (that is, the variable in the inner store). *)
 
 Instance refl_MayProvide (F : effect) : F -<? F :=
-  { proj := fun _ e => Some e
-  }.
+  { prj := fun _ e => Some e }.
 
 Program Instance refl_Provide (F : effect) : F -< F :=
-  { inj := fun (a : Type) (e : F a) => e
-  }.
+  { inj := fun (a : Type) (e : F a) => e }.
+Next Obligation. by move=> */=. Qed.
 
 Instance eplus_left_MayProvide (Fx F E : effect) `{F -<? Fx}
   : F -<? (Fx + E) :=
-  { proj := fun A e => if e is in_left e then proj e else None
+  { prj := fun A e => if e is in_left e then prj e else None
                 (* match e with *)
                 (* | in_left e => proj e *)
                 (* | _ => None *)
@@ -161,24 +151,16 @@ Program Instance eplus_left_Provide (Fx F E : effect) `{F -< Fx}
   : F -< (Fx + E) :=
   { inj := fun (a : Type) (e : F a) => in_left (inj e)
   }.
-
-Next Obligation. by rewrite injK_Some. Qed.
+Next Obligation. by move=> */=; rewrite injK_Some. Qed.
 
 Instance eplus_right_MayProvide (F Ex E : effect) `{E -<? Ex}
   : E -<? (F + Ex) :=
-  { proj := fun _ e =>
-                match e with
-                | in_right e => proj e
-                | _ => None
-                end
-  }.
+  { prj := fun _ e => if e is in_right e then prj e else None }.
 
 Program Instance eplus_right_Provide (F Ex E : effect) `{E -< Ex}
   : E -< (F + Ex) :=
-  { inj := fun _ e => in_right (inj e)
-  }.
-
-Next Obligation. by rewrite injK_Some. Qed.
+  { inj := fun _ e => in_right (inj e) }.
+Next Obligation. by move=> */=; rewrite injK_Some. Qed.
 
 (** By default, Coq's inference algorithm for type classe instances inference is
     a depth-first search. This is not without consequence in our case. For
@@ -232,10 +214,9 @@ Program Instance eplus_left_distinguish_left_Distinguish (Fx Ex F E : effect)
   : @Distinguish (Fx + Ex) F E
                  (eplus_left_Provide Fx F Ex)
                  (eplus_left_MayProvide Fx E Ex).
-
-Next Obligation.
-  apply: injK_None.
-Defined.
+Next Obligation. by move=> */=. Qed.
+Next Obligation. by move=> */=; exact: injK_None. Defined.
+Next Obligation. by move=> */=. Defined.
 
 Program Instance eplus_right_distinguish_right_Distinguish (Fx Ex F E : effect)
    `{P1 : F -< Ex} `{M2 : E -<? Ex}
@@ -243,7 +224,39 @@ Program Instance eplus_right_distinguish_right_Distinguish (Fx Ex F E : effect)
   : @Distinguish (Fx + Ex) F E
                  (eplus_right_Provide Fx Ex F)
                  (eplus_right_MayProvide Fx Ex E).
+Next Obligation. by move=> */=. Qed.
+Next Obligation. by move=> */=; exact: injK_None. Defined.
+Next Obligation. by move=> */=. Qed.
+Next Obligation. by move=> */=. Qed.
 
-Next Obligation.
-  apply: injK_None.
-Defined.
+Inductive eempty : effect := .
+
+(** Another example of general-purpose effect we can define is the [STORE s]
+    effect, where [s] is a type for a state, and [STORE s] allows for
+    manipulating a global, mutable variable of type [s] within an impure
+    computation. *)
+
+Inductive STORE (s : Type) : effect :=
+| Get : STORE s s
+| Put (x : s) : STORE s unit.
+
+Arguments Get {s}.
+Arguments Put [s] (x).
+
+(** According to the definition of [STORE s], an impure computation can use two
+    primitives. The term [Get : STORE s s] describes a primitive expected to
+    produce a result of type [s], that is the current value of the mutable
+    variable.  Terms of the form [Put x : STORE s unit] describe a primitive
+    which does not produce any meaningful result, but is expected to update the
+    current value of the mutable variable.
+
+    The use of the word “expected” to describe the primitive of [STORE s] is
+    voluntary.  The definition of an effect does not attach any particular
+    semantics to the primitives it describes.  This will come later, and in
+    fact, one effect may have many legitimate semantics.
+
+    Impure computations are likely to use more than one effect, but the
+    [freer] monad takes only one argument.  We introduce [eplus] (denoted by
+    [<+>] or [⊕]) to compose effects together.  An impure computation
+    parameterized by [F ⊕ E] can therefore leverage the primitives of both [F]
+    and [E]. *)

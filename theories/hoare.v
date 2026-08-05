@@ -7,7 +7,7 @@
 From HB Require Import structures.
 From mathcomp Require Import ssreflect ssrfun boolp classical_sets.
 From monae Require Import hierarchy.
-From FreerDPS Require Import Init Effect Freer Contract mathcomp_extra.
+From FreerDPS Require Import mathcomp_extra init effect freer contract.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -204,35 +204,34 @@ Definition hoare_of_contract {Fx F : effect} `{F -<? Fx}
 
 (** ** Contract Views *)
 
-Section contract_effect_views.
+Section contract_eff_views.
 Context {Fx F : effect} `{F -<? Fx}
     (Ω : Type) (c : contract F Ω) {A : Type}.
 
-Lemma hoc_effect_preE (operation : Fx A) (witness : Ω) :
+Lemma hoc_eff_preE (operation : Fx A) (witness : Ω) :
   pre (hoare_of_contract c operation) witness <->
-  match proj operation with
-  | Some effect_operation =>
-      caller_obligation c witness effect_operation
-  | None => True
-  end.
+  if prj operation is Some eff_operation then
+    caller_obligation c witness eff_operation
+  else
+    True.
 Proof. by []. Qed.
 
-Lemma hoc_effect_postE
+Lemma hoc_eff_postE
     (operation : Fx A) (witness : Ω) (result : A) (witness' : Ω) :
   post (hoare_of_contract c operation) witness result witness' <->
-  match proj operation with
-  | Some effect_operation =>
-      witness' = witness_update c witness effect_operation result /\
-      callee_obligation c witness effect_operation result
+  match prj operation with
+  | Some eff_operation =>
+      witness' = witness_update c witness eff_operation result /\
+      callee_obligation c witness eff_operation result
   | None => witness' = witness
   end.
 Proof.
 rewrite /= /gen_witness_update /gen_callee_obligation.
-case: (proj operation)=> //=.
+case: prj => //=.
 by split=> [[-> _] | ->].
 Qed.
 
-End contract_effect_views.
+End contract_eff_views.
 Section contract_operation_views.
 Context {Fx F : effect} `{F -< Fx}
     (Ω : Type) (c : contract F Ω) {A : Type}.
@@ -240,7 +239,7 @@ Context {Fx F : effect} `{F -< Fx}
 Lemma hoc_pre_condE (witness : Ω) (operation : F A) :
   pre (hoare_of_contract (Fx:=Fx) c (inj operation)) witness <->
   caller_obligation c witness operation.
-Proof. by rewrite hoc_effect_preE injK_Some. Qed.
+Proof. by rewrite hoc_eff_preE injK_Some. Qed.
 
 Lemma hoc_post_condE
     (witness : Ω) (operation : F A) (result : A) (witness' : Ω) :
@@ -248,7 +247,7 @@ Lemma hoc_post_condE
     witness result witness' <->
   witness' = witness_update c witness operation result /\
   callee_obligation c witness operation result.
-Proof. by rewrite hoc_effect_postE injK_Some. Qed.
+Proof. by rewrite hoc_eff_postE injK_Some. Qed.
 
 End contract_operation_views.
 
@@ -272,29 +271,25 @@ Section GenericToHoareSection.
 Context {Fx F : effect} `{F -<? Fx} {M : freerMonad Fx}
     (Ω : Type) (c : contract F Ω).
 
-Lemma to_hoare_requestE (a : Type) (op : Fx a) :
-  to_hoare (M:=M) c (request a op) = hoare_of_contract c op.
-Proof. exact: denote_request. Qed.
+Lemma to_hoare_triggerE (a : Type) (op : Fx a) :
+  to_hoare (M:=M) c (trigger a op) = hoare_of_contract c op.
+Proof. exact: denote_trigger. Qed.
 
-Lemma to_hoare_request_preE (a : Type) (op : Fx a) (ω : Ω) :
-  pre (to_hoare (M:=M) c (request a op)) ω <->
-  match proj op with
-  | Some effect_operation =>
-      caller_obligation c ω effect_operation
-  | None => True
-  end.
-Proof. by rewrite to_hoare_requestE hoc_effect_preE. Qed.
+Lemma to_hoare_trigger_preE (a : Type) (op : Fx a) (ω : Ω) :
+  pre (to_hoare (M:=M) c (trigger a op)) ω <->
+  if prj op is Some eff_op then  caller_obligation c ω eff_op else True.
+Proof. by rewrite to_hoare_triggerE hoc_eff_preE. Qed.
 
-Lemma to_hoare_request_postE
+Lemma to_hoare_trigger_postE
     (a : Type) (op : Fx a) (ω : Ω) (x : a) (ω' : Ω) :
-  post (to_hoare (M:=M) c (request a op)) ω x ω' <->
-  match proj op with
-  | Some effect_operation =>
-      ω' = witness_update c ω effect_operation x /\
-      callee_obligation c ω effect_operation x
+  post (to_hoare (M:=M) c (trigger a op)) ω x ω' <->
+  match prj op with
+  | Some eff_operation =>
+      ω' = witness_update c ω eff_operation x /\
+      callee_obligation c ω eff_operation x
   | None => ω' = ω
   end.
-Proof. by rewrite to_hoare_requestE hoc_effect_postE. Qed.
+Proof. by rewrite to_hoare_triggerE hoc_eff_postE. Qed.
 
 Lemma to_hoare_skip_preI (ω : Ω) :
   pre (c |> (skip : M unit)) ω.
@@ -372,18 +367,17 @@ Section contract_trigger_helpers.
 Context {Fx F : effect} `{F -< Fx} {M : freerMonad Fx}
     (Ω : Type) (c : contract F Ω) {A : Type}.
 
-Lemma to_hoare_trigger_preE (op : F A) (ω : Ω) :
-  pre (to_hoare (M:=M) c (trigger op)) ω <->
+Lemma to_hoare_ptrigger_preE (op : F A) (ω : Ω) :
+  pre (to_hoare (M:=M) c (ptrigger op)) ω <->
   caller_obligation c ω op.
-Proof. by rewrite to_hoare_requestE hoc_pre_condE. Qed.
+Proof. by rewrite to_hoare_triggerE hoc_pre_condE. Qed.
 
-Lemma to_hoare_trigger_postE
-    (op : F A) (ω : Ω) (a : A) (ω' : Ω) :
-  post (to_hoare (M:=M) c (trigger op))
+Lemma to_hoare_ptrigger_postE (op : F A) (ω : Ω) (a : A) (ω' : Ω) :
+  post (to_hoare (M:=M) c (ptrigger op))
     ω a ω' <->
   ω' = witness_update c ω op a /\
   callee_obligation c ω op a.
-Proof. by rewrite to_hoare_requestE hoc_post_condE. Qed.
+Proof. by rewrite to_hoare_triggerE hoc_post_condE. Qed.
 
 End contract_trigger_helpers.
 
@@ -399,20 +393,18 @@ Context {Fx F G : effect}
 Local Notation "c ||> p" := (to_hoare (M:=M) c p)
   (at level 50, no associativity).
 
-Lemma to_hoare_distinguished_request_preI
-     (ω : Ω) :
-  pre (c ||> trigger op) ω.
+Lemma to_hoare_distinguished_trigger_preI (ω : Ω) :
+  pre (c ||> ptrigger op) ω.
 Proof.
-by rewrite to_hoare_requestE /hoare_of_contract /gen_caller_obligation
+by rewrite to_hoare_triggerE /hoare_of_contract /gen_caller_obligation
   (@injK_None Fx G F).
 Qed.
 
-Lemma to_hoare_distinguished_request_postE
-  (ω : Ω) (x : A) (ω' : Ω) :
-  post (c ||> trigger op) ω x ω' <->
+Lemma to_hoare_distinguished_trigger_postE (ω : Ω) (x : A) (ω' : Ω) :
+  post (c ||> ptrigger op) ω x ω' <->
   ω' = ω.
 Proof.
-by rewrite to_hoare_requestE /=
+by rewrite to_hoare_triggerE /=
   /gen_witness_update /gen_callee_obligation
   (@injK_None Fx G F);
    split=> [[-> _] | ->].

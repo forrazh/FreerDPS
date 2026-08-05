@@ -1,14 +1,16 @@
 -Q theories FreerDPS
+-Q examples FreerDPS
 
 -arg -w -arg -projection-no-head-constant
 
-./theories/Component.v
-./theories/Contract.v
-./theories/Core.v
+./theories/init.v
+./theories/effect.v
+./theories/freer.v
+./theories/component.v
+./theories/contract.v
 ./theories/mathcomp_extra.v
-./theories/Hoare.v
-./theories/Freer.v
-./theories/Init.v
-./theories/Effect.v
-./theories/Typeclasses.v
+./theories/hoare.v
+./theories/all_freerdps.v
+
 ./examples/airlock.v
+./examples/lossy_round_trip.v

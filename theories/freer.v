@@ -3,18 +3,31 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. *)
 
 (* Copyright (C) 2018–2020 ANSSI *)
-
-From HB Require Import structures.
-From mathcomp Require Import ssreflect ssrfun boolp.
-From mathcomp Require functions.
+Local Close Scope nat_scope.
+From mathcomp Require Import all_boot.
+From mathcomp Require Import boolp.
 From monae Require Import hierarchy.
-From FreerDPS Require Import Init Effect.
+From FreerDPS Require Import init effect.
+From HB Require Import structures.
 
-Local Open Scope monae_scope.
+(* isMonadFreer == interface of the Freer monad *)
+(* trigger == TODO *)
+(* ptrigger == TODO *)
+(* Module FreerFlipDenote == denotation for the freerMonad of the Flip effect *)
+
+Reserved Notation "x <|| p ||> y"
+  (at level 40, left associativity, y at next level).
+Reserved Notation "a === b" (at level 70).
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
+
+Local Open Scope ring_scope.
+
+Declare Scope freer_flip_scope.
+
+Local Open Scope monae_scope.
 
 (** * Definition *)
 
@@ -87,19 +100,19 @@ End freer.
 End FreerMonadModel.
 
 HB.mixin Record isMonadFreer (F : effect) (M : Type -> Type) of Monad M := {
-  request : F ~~> M ;
+  trigger : F ~~> M ;
   denote (N : monad) (l : F ~~> N) : M ~~> N ;
   denote_ret : forall (N : monad) (l : F ~~> N) X (x : X),
     denote N l X (Ret x) = Ret x ;
   denote_bind : forall (N : monad) (l : F ~~> N) X Y m (f : X -> M Y),
     denote N l Y (m >>= f) = denote N l X m >>= (denote N l Y \o f) ;
-  denote_request : forall (N : monad) (l : F ~~> N) X (op : F X),
-    denote N l X (request X op) = l X op ;
+  denote_trigger : forall (N : monad) (l : F ~~> N) X (op : F X),
+    denote N l X (trigger X op) = l X op ;
   denote_unique : forall (N : monad) (l : F ~~> N) (denote' : M ~~> N),
       (forall X (x : X), denote' X (ret X x) = Ret x) ->
       (forall X Y (m : M X) (f : X -> M Y), denote' Y (m >>= f) =
          denote' X m >>= (denote' Y \o f)) ->
-      (forall X (op : F X), denote' X (request X op) = l X op) ->
+      (forall X (op : F X), denote' X (trigger X op) = l X op) ->
     forall X (m : M X), denote' X m = denote N l X m
 }.
 
@@ -116,7 +129,7 @@ Import FreerMonadModel.
 
 Notation acto := (@freer F).
 
-Definition request_effect : F ~~> acto := fun α op =>
+Definition trigger_eff : F ~~> acto := fun α op =>
   impure (inj op) (@pure _ _).
 
 Definition dnt (M : monad) (l : F ~~> M) : acto ~~> M :=
@@ -126,16 +139,16 @@ Definition dnt (M : monad) (l : F ~~> M) : acto ~~> M :=
     | impure Y op f => l _ op >>= fun x => aux a (f x)
     end.
 
-Let dnt_ret (cm : monad) (dnt_effect : F ~~> cm) X (x : X) :
-  dnt dnt_effect (ret X x) = @hierarchy.ret cm X x.
+Let dnt_ret (cm : monad) (dnt_eff : F ~~> cm) X (x : X) :
+  dnt dnt_eff (ret X x) = @hierarchy.ret cm X x.
 Proof. by []. Qed.
 
-Let dnt_bind : forall (cm : monad) (dnt_effect : F ~~> cm) X Y m
+Let dnt_bind : forall (cm : monad) (dnt_eff : F ~~> cm) X Y m
     (f : X -> acto Y),
-  dnt dnt_effect (m >>= f) =
-  dnt dnt_effect m >>= (fun x => dnt dnt_effect (f x)).
+  dnt dnt_eff (m >>= f) =
+  dnt dnt_eff m >>= (fun x => dnt dnt_eff (f x)).
 Proof.
-    move=>cm dnt_effect X Y m f.
+    move=>cm dnt_eff X Y m f.
     elim:m=>[x | Z fz k]/=.
     - by rewrite !bindretf.
     rewrite bindA=>H.
@@ -143,25 +156,25 @@ Proof.
     exact/boolp.funext/H.
 Qed.
 
-Let dnt_trigger (cm : monad) (dnt_effect : F ~~> cm) X (op : F X) :
-  dnt dnt_effect (request_effect op) = dnt_effect X op.
-Proof. by rewrite /dnt /request_effect/= bindmret. Qed.
+Let dnt_trigger (cm : monad) (dnt_eff : F ~~> cm) X (op : F X) :
+  dnt dnt_eff (trigger_eff op) = dnt_eff X op.
+Proof. by rewrite /dnt /trigger_eff/= bindmret. Qed.
 
-Let dnt_unique : forall (cm : monad) (dnt_effect : F ~~> cm)
+Let dnt_unique : forall (cm : monad) (dnt_eff : F ~~> cm)
     (dnt' : acto ~~> cm),
   (forall X (x : X), dnt' X (ret X x) = @hierarchy.ret cm X x) ->
   (forall X Y (m : acto X) (f : X -> acto Y),
     dnt' Y (m >>= f) = dnt' X m >>= (fun x => dnt' Y (f x))) ->
   (forall X (op : F X),
-    dnt' X (request_effect op) = dnt_effect X op) ->
-  forall X (m : acto X), dnt' X m = dnt dnt_effect m.
+    dnt' X (trigger_eff op) = dnt_eff X op) ->
+  forall X (m : acto X), dnt' X m = dnt dnt_eff m.
 Proof.
-    move=>cm dnt_effect dnt' dret' dbind' dtrigger' X m.
+    move=>cm dnt_eff dnt' dret' dbind' dtrigger' X m.
     rewrite/dnt.
     elim:m=>[x| Y fy k Hy]/=.
     - exact/dret'.
     under [in RHS]eq_bind do rewrite -Hy.
-    by rewrite -dtrigger'-dbind'/request_effect.
+    by rewrite -dtrigger'-dbind'/trigger_eff.
 Qed.
 
 #[export]
@@ -178,7 +191,7 @@ HB.mixin Record isMonadFreerInductive
     (forall (A : UU0) (x : A), P A (Ret x)) ->
     (forall (A B : UU0) (op : F A) (k : A -> M B),
       (forall x : A, P B (k x)) ->
-      P B (request A op >>= k)) ->
+      P B (trigger A op >>= k)) ->
     forall (A : UU0) (p : M A), P A p
 }.
 
@@ -199,7 +212,7 @@ Let freer_induction : forall (P : forall A : UU0, acto A -> Prop),
   (forall (A : UU0) (x : A), P A (Ret x)) ->
   (forall (A B : UU0) (op : F A) (k : A -> acto B),
     (forall x : A, P B (k x)) ->
-    P B (request A op >>= k)) ->
+    P B (trigger A op >>= k)) ->
   forall (A : UU0) (p : acto A), P A p.
 Proof.
 by move=> P + + A p; elim: p=> //= ??? ih ? H';apply/H'=>?; exact: ih.
@@ -213,15 +226,15 @@ End FreerInductionModel.
 HB.export FreerInductionModel.
 
 Lemma denote_if : forall (F : effect) (M : freerMonad F) (cm : monad)
-   (dnt_effect : F ~~> cm) X (m m' : M X) b,
-  denote cm dnt_effect X (if b then m else m') =
-  if b then (denote cm dnt_effect X m) else (denote cm dnt_effect X m').
+   (dnt_eff : F ~~> cm) X (m m' : M X) b,
+  denote cm dnt_eff X (if b then m else m') =
+  if b then (denote cm dnt_eff X m) else (denote cm dnt_eff X m').
 Proof. by move=> ? ? ? ? ? ? ?; case. Qed.
 
-Lemma denote_when_request (Fx : effect) (M : freerMonad Fx) (cm : monad)
+Lemma denote_when_trigger (Fx : effect) (M : freerMonad Fx) (cm : monad)
     (l : Fx ~~> cm) (A X : Type) (guard : A -> bool) (op : Fx X) :
   denote cm l unit \o
-      (fun x => when (guard x) (request X op : M X)) =
+      (fun x => when (guard x) (trigger X op : M X)) =
     fun x =>
       if guard x then
         l X op >>= (denote cm l unit \o fun=> (skip : M unit))
@@ -229,7 +242,7 @@ Lemma denote_when_request (Fx : effect) (M : freerMonad Fx) (cm : monad)
 Proof.
 by apply/funext=> x; rewrite functions.compE denote_if;
   case: (guard x)=> //=;
-  rewrite denote_bind denote_request.
+  rewrite denote_bind denote_trigger.
 Qed.
 
 Lemma denote_ind {Fx : effect} {M : inductiveFreerMonad Fx}
@@ -247,24 +260,22 @@ move=> ?? P? Hb *;
 apply: (f_ind (fun X => P X \o (denote _ _ X))) => *;
   rewrite functions.compE.
 - by rewrite denote_ret.
-- by rewrite denote_bind denote_request; exact: Hb.
+- by rewrite denote_bind denote_trigger; exact: Hb.
 Qed.
 
-Module FreerFuns.
-Definition trigger {Fx F : effect} `{F -< Fx}
-    {M : freerMonad Fx} : F ~~> M :=
-  fun a op => request a (inj op).
+(* NB: trigger (TODO: to be renamed trigger) has type
+   forall {F : effect} {M : freerMonad F}, F ~~> M
+*)
 
-Arguments trigger {_ _ _ _ _} _.
+Definition ptrigger {Fx F : effect} `{F -< Fx} {M : freerMonad Fx} : F ~~> M :=
+  fun a op => trigger a (inj op).
+Arguments ptrigger {_ _ _ _ _} _.
 
-Definition iget {S} {Fx : effect} `{(STORE S) -< Fx}
-    {M : freerMonad Fx} : M S :=
-  trigger Get.
+Definition iget {S} {Fx : effect} `{STORE S -< Fx} {M : freerMonad Fx}
+    : M S :=
+  ptrigger Get.
 
-Definition iput {S} {Fx : effect} `{(STORE S) -< Fx}
-    {M : freerMonad Fx}
-    (s : S) : M unit :=
-  trigger (Put s).
-End FreerFuns.
+Definition iput {S} {Fx : effect} `{STORE S -< Fx} {M : freerMonad Fx} (s : S)
+    : M unit :=
+  ptrigger (Put s).
 
-HB.export FreerFuns.
