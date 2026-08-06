@@ -73,9 +73,7 @@ Instance default_MayProvide (F E : effect) : (E -<? F) |1000 :=
     and [E] are two different effects. *)
 
 Class Distinguish (Fx F E : effect) `{Hp: F -< Fx, Hmp : E -<? Fx} : Prop :=
-  {
-    injK_None : forall {A} (e: F A), Hmp.(prj) (Hp.(inj) e) = None
-  }.
+  { injK_None : forall {A} (e: F A), Hmp.(prj) (Hp.(inj) e) = None }.
 
 Class StrictProvide2 (Fx F1 F2 : effect)
   `{p1: F1 -< Fx} `{p2: F2 -< Fx}
@@ -83,12 +81,12 @@ Class StrictProvide2 (Fx F1 F2 : effect)
   : Type
 .
 
-(*****************************************************************************
-  * Sadly, this can't be used to declare StrictProvide right now because     *
-  * for an unknown reason, this notation does not create the instances for   *
-  * prov/dist by itself.                                                     *
-  * TODO: Investigate why.                                                   *
-  ****************************************************************************)
+(******************************************************************************
+  * Sadly, this can't be used to declare StrictProvide right now because      *
+  * for an unknown reason, this notation does not create the instances for    *
+  * prov/dist by itself.                                                      *
+  * TODO: Investigate why.                                                    *
+  *****************************************************************************)
 Notation "F1 ;; F2 -<< Fx" := (StrictProvide2 Fx F1 F2) (at level 50, no associativity): type_scope.
 
 (** * Composing Effects *)
@@ -260,3 +258,5 @@ Arguments Put [s] (x).
     [<+>] or [⊕]) to compose effects together.  An impure computation
     parameterized by [F ⊕ E] can therefore leverage the primitives of both [F]
     and [E]. *)
+
+

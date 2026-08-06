@@ -8,6 +8,7 @@ From FreerDPS Require Export
   init
   effect
   freer
+  free_choice
   component
   contract
   hoare

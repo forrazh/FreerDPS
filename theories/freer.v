@@ -4,35 +4,29 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 Local Close Scope nat_scope.
-From mathcomp Require Import all_boot.
-From mathcomp Require Import boolp.
+From mathcomp Require Import all_boot all_order.
+From mathcomp Require Import boolp functions.
 From monae Require Import hierarchy.
 From FreerDPS Require Import init effect.
 From HB Require Import structures.
+
+Require Import Morphisms.
 
 (* isMonadFreer == interface of the Freer monad *)
 (* trigger == TODO *)
 (* ptrigger == TODO *)
 (* Module FreerFlipDenote == denotation for the freerMonad of the Flip effect *)
 
-Reserved Notation "x <|| p ||> y"
-  (at level 40, left associativity, y at next level).
-Reserved Notation "a === b" (at level 70).
-
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
-
-Local Open Scope ring_scope.
-
-Declare Scope freer_flip_scope.
 
 Local Open Scope monae_scope.
 
 (** * Definition *)
 
 (** The [freer] monad is an inductive datatype with two parameters: the
-    effect [F] to be used, and the type [α] of the result of the computation.
+    effect [F] to be used, and the type [A] of the result of the computation.
     The fact that [freer] is inductive rather than co-inductive means it is not
     possible to describe infinite computations.  This also means it is possible
     to interpret impure computations within Coq, providing an operational
@@ -43,15 +37,15 @@ Local Open Scope monae_scope.
 (* model of the freer monad *)
 Module FreerMonadModel.
 Section freer.
-Inductive freer (F : effect) (α : Type) : Type :=
-| pure (x : α) : freer F α
-| impure {β} (op : F β) (f : β -> freer F α) : freer F α.
+Inductive freer (F : effect) (A : Type) : Type :=
+| pure (x : A) : freer F A
+| impure {B} (op : F B) (f : B -> freer F A) : freer F A.
 
-Arguments pure [F α] (x).
-Arguments impure [F α β] (op f).
+Arguments pure [F A] (x).
+Arguments impure [F A B] (op f).
 
-Fixpoint freer_bind (F : effect) {α β} (p : freer F α) (f : α -> freer F β)
-    : freer F β :=
+Fixpoint freer_bind (F : effect) {A B} (p : freer F A) (f : A -> freer F B)
+    : freer F B :=
   match p with
   | pure x => f x
   | impure Y op g => impure op (fun x => freer_bind (g x) f)
@@ -98,6 +92,7 @@ HB.instance Definition _ := @isMonad_ret_bind.Build acto ret bind
 
 End freer.
 End FreerMonadModel.
+HB.export FreerMonadModel.
 
 HB.mixin Record isMonadFreer (F : effect) (M : Type -> Type) of Monad M := {
   trigger : F ~~> M ;
@@ -129,7 +124,7 @@ Import FreerMonadModel.
 
 Notation acto := (@freer F).
 
-Definition trigger_eff : F ~~> acto := fun α op =>
+Definition trigger_effect : F ~~> acto := fun A op =>
   impure (inj op) (@pure _ _).
 
 Definition dnt (M : monad) (l : F ~~> M) : acto ~~> M :=
@@ -139,16 +134,16 @@ Definition dnt (M : monad) (l : F ~~> M) : acto ~~> M :=
     | impure Y op f => l _ op >>= fun x => aux a (f x)
     end.
 
-Let dnt_ret (cm : monad) (dnt_eff : F ~~> cm) X (x : X) :
-  dnt dnt_eff (ret X x) = @hierarchy.ret cm X x.
+Let dnt_ret (cm : monad) (dnt_effect : F ~~> cm) X (x : X) :
+  dnt dnt_effect (ret X x) = @hierarchy.ret cm X x.
 Proof. by []. Qed.
 
-Let dnt_bind : forall (cm : monad) (dnt_eff : F ~~> cm) X Y m
+Let dnt_bind : forall (cm : monad) (dnt_effect : F ~~> cm) X Y m
     (f : X -> acto Y),
-  dnt dnt_eff (m >>= f) =
-  dnt dnt_eff m >>= (fun x => dnt dnt_eff (f x)).
+  dnt dnt_effect (m >>= f) =
+  dnt dnt_effect m >>= (fun x => dnt dnt_effect (f x)).
 Proof.
-    move=>cm dnt_eff X Y m f.
+    move=>cm dnt_effect X Y m f.
     elim:m=>[x | Z fz k]/=.
     - by rewrite !bindretf.
     rewrite bindA=>H.
@@ -156,25 +151,25 @@ Proof.
     exact/boolp.funext/H.
 Qed.
 
-Let dnt_trigger (cm : monad) (dnt_eff : F ~~> cm) X (op : F X) :
-  dnt dnt_eff (trigger_eff op) = dnt_eff X op.
-Proof. by rewrite /dnt /trigger_eff/= bindmret. Qed.
+Let dnt_trigger (cm : monad) (dnt_effect : F ~~> cm) X (op : F X) :
+  dnt dnt_effect (trigger_effect op) = dnt_effect X op.
+Proof. by rewrite /dnt /trigger_effect/= bindmret. Qed.
 
-Let dnt_unique : forall (cm : monad) (dnt_eff : F ~~> cm)
+Let dnt_unique : forall (cm : monad) (dnt_effect : F ~~> cm)
     (dnt' : acto ~~> cm),
   (forall X (x : X), dnt' X (ret X x) = @hierarchy.ret cm X x) ->
   (forall X Y (m : acto X) (f : X -> acto Y),
     dnt' Y (m >>= f) = dnt' X m >>= (fun x => dnt' Y (f x))) ->
   (forall X (op : F X),
-    dnt' X (trigger_eff op) = dnt_eff X op) ->
-  forall X (m : acto X), dnt' X m = dnt dnt_eff m.
+    dnt' X (trigger_effect op) = dnt_effect X op) ->
+  forall X (m : acto X), dnt' X m = dnt dnt_effect m.
 Proof.
-    move=>cm dnt_eff dnt' dret' dbind' dtrigger' X m.
+    move=>cm dnt_effect dnt' dret' dbind' dtrigger' X m.
     rewrite/dnt.
     elim:m=>[x| Y fy k Hy]/=.
     - exact/dret'.
     under [in RHS]eq_bind do rewrite -Hy.
-    by rewrite -dtrigger'-dbind'/trigger_eff.
+    by rewrite -dtrigger'-dbind'/trigger_effect.
 Qed.
 
 #[export]
@@ -184,6 +179,7 @@ HB.instance Definition _ := isMonadFreer.Build F acto
 End freer.
 End Freer.
 HB.export Freer.
+
 
 HB.mixin Record isMonadFreerInductive
     (F : effect) (M : UU0 -> UU0) of MonadFreer F M := {
@@ -226,9 +222,9 @@ End FreerInductionModel.
 HB.export FreerInductionModel.
 
 Lemma denote_if : forall (F : effect) (M : freerMonad F) (cm : monad)
-   (dnt_eff : F ~~> cm) X (m m' : M X) b,
-  denote cm dnt_eff X (if b then m else m') =
-  if b then (denote cm dnt_eff X m) else (denote cm dnt_eff X m').
+   (dnt_effect : F ~~> cm) X (m m' : M X) b,
+  denote cm dnt_effect X (if b then m else m') =
+  if b then (denote cm dnt_effect X m) else (denote cm dnt_effect X m').
 Proof. by move=> ? ? ? ? ? ? ?; case. Qed.
 
 Lemma denote_when_trigger (Fx : effect) (M : freerMonad Fx) (cm : monad)
@@ -240,7 +236,7 @@ Lemma denote_when_trigger (Fx : effect) (M : freerMonad Fx) (cm : monad)
         l X op >>= (denote cm l unit \o fun=> (skip : M unit))
       else denote cm l unit (skip : M unit).
 Proof.
-by apply/funext=> x; rewrite functions.compE denote_if;
+by apply/funext=> x; rewrite compE denote_if;
   case: (guard x)=> //=;
   rewrite denote_bind denote_trigger.
 Qed.
@@ -258,7 +254,7 @@ Lemma denote_ind {Fx : effect} {M : inductiveFreerMonad Fx}
 Proof.
 move=> ?? P? Hb *;
 apply: (f_ind (fun X => P X \o (denote _ _ X))) => *;
-  rewrite functions.compE.
+  rewrite compE.
 - by rewrite denote_ret.
 - by rewrite denote_bind denote_trigger; exact: Hb.
 Qed.
@@ -279,3 +275,73 @@ Definition iput {S} {Fx : effect} `{STORE S -< Fx} {M : freerMonad Fx} (s : S)
     : M unit :=
   ptrigger (Put s).
 
+#[short(type=eqFreerMonad)]
+HB.structure Definition MonadFreerEqReas (F : effect) :=
+  {M of hasWBisim M & isMonadFreer F M &
+        isMonad M & isFunctor M}.
+
+
+Module FMEq.
+Section fm_eq_s.
+
+Import FreerMonadModel.
+Variable F : effect.
+Notation acto := (@freer F).
+(* Context . *)
+
+(* Variable law : acto A -> acto A -> Prop. *)
+
+Inductive freer_eq [A : UU0] : acto A -> acto A-> Prop  :=
+| pure_eq (x : acto A) : x === x
+| impure_eq [B: UU0] (e : F B) (f g : B -> acto A)
+    (equ : forall x, (f x) === (g x))
+  : (impure e f) === (impure e g)
+(* | custom_eq (m m' : acto A) : law m m' -> m === m' *)
+where "a === b" := (freer_eq a b).
+
+Lemma rel_refl [A : UU0] (x : acto A) :
+  x === x.
+Proof. by elim: x; constructor. Qed.
+
+Lemma rel_sym [A : UU0] (x y : acto A) :
+  x === y -> y === x.
+Proof. by elim; constructor. Qed.
+
+Lemma rel_trans [A : UU0] (x y z : acto A) :
+  x === y ->
+  y === z ->
+  x === z.
+Proof.
+move: x z; elim: y=>[a|B op f ih] x z;
+  inversion 1; subst;
+  inversion 1; ssubst;
+  constructor=>//.
+by move=> b; move: ih=>/(_ b); apply.
+Qed.
+
+Add Parametric Relation A : (acto A) (@freer_eq A)
+  reflexivity proved by (@rel_refl A)
+  symmetry proved by (@rel_sym A)
+  transitivity proved by (@rel_trans A)
+  as wBisims_rel.
+Hint Extern 0 (freer_eq _ _) => setoid_reflexivity.
+
+Lemma eq_bindmwB [A B : UU0] (f : A -> acto B) (d1 d2 : acto A) :
+  d1 === d2 -> (d1 >>= f) === (d2 >>= f).
+Proof. by elim=>// ?????;  exact: impure_eq. Qed.
+
+Lemma eq_bindfwB
+    (A B : Type) (f g : A -> acto B) (d : acto A) :
+  (forall a, (f a) === (g a)) ->
+  (d >>= f) === (d >>= g).
+Proof.
+by elim: d=> /=[x /(_ x)|??? /[swap] H /(_ _ H)] //;
+  exact: impure_eq.
+Qed.
+
+HB.about hasWBisim.Build.
+
+HB.instance Definition _ := hasWBisim.Build acto rel_refl rel_sym rel_trans eq_bindmwB eq_bindfwB.
+
+End fm_eq_s.
+End FMEq.
