@@ -1,0 +1,195 @@
+(* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. *)
+
+(* Copyright (C) 2024–2027 Univ-Lille *)
+
+(******************************************************************************)
+(* Probabilistic effect *)
+(*                                                                            *)
+(* This file features everything that is related to working with a            *)
+(* probabilistic effect in FreerDPS.                                          *)
+(*                                                                            *)
+(* FlipEff == effect for a probabilistic boolean choice *)
+(*                                                                            *)
+(* References:  *)
+(******************************************************************************)
+
+From HB Require Import structures.
+From mathcomp Require Import all_boot all_order all_algebra interval_inference.
+From mathcomp Require Import boolp functions reals.
+From infotheo Require Import realType_ext.
+From monae Require Import preamble hierarchy proba_lib.
+From FreerDPS Require Import init effect freer.
+
+Import Order.TTheory Order.Syntax GRing.Theory Num.Theory.
+
+Declare Scope freer_flip_scope.
+Local Open Scope monae_scope.
+Local Open Scope ring_scope.
+
+Reserved Notation "x <|| p ||> y"
+  (at level 40, left associativity, y at next level).
+Reserved Notation "a === b" (at level 70).
+
+Inductive FlipEff {R : realType} : effect :=
+  flip_e (p : {prob R}) : FlipEff bool.
+
+Module FreerFlipDenote.
+Section freer_flip.
+Context {R : realType} {M : freerMonad (@FlipEff R)} {pM : probMonad R}.
+Implicit Type p q r s : {prob R}.
+
+Definition flip p : M bool := ptrigger $ flip_e p.
+
+Definition denote_flip_effect : FlipEff ~~> pM :=
+  fun X fx => let: flip_e p := fx in bcoin p.
+
+Lemma denote_flip_effect_inj_pE p : denote_flip_effect _ (flip_e p) = bcoin p.
+Proof. by []. Qed.
+
+Lemma denote_flipE p :
+  denote (s := M) pM denote_flip_effect bool (flip p) = bcoin p.
+Proof. exact: denote_trigger. Qed.
+
+Definition freer_choice p {X} (a b : M X) :=
+  flip p >>= (fun b0 => if b0 then a else b).
+
+Notation "x <|| p ||> y" := (@freer_choice p _ x y).
+(* TODO: use this notation *)
+
+Lemma denote_freer_choiceE (X : UU0) p (a b : M X) :
+  denote (s := M) pM denote_flip_effect X (a <|| p ||> b) =
+    denote (s := M) pM denote_flip_effect bool (flip p) >>=
+      (fun b0 => denote (s := M) pM denote_flip_effect X (if b0 then a else b)).
+Proof.
+by rewrite denote_bind; under eq_bind do rewrite compE denote_if.
+Qed.
+
+Lemma denote_choiceA_leftE (T : UU0) p q (a b c : M T) :
+  denote (s := M) pM denote_flip_effect bool (flip p) >>=
+    ((denote (s := M) pM denote_flip_effect T) \o
+      (fun b0 => if b0 then a else b <|| q ||> c)) =
+  denote (s := M) pM denote_flip_effect bool (flip p) >>=
+    (fun b0 =>
+      if b0 then denote (s := M) pM denote_flip_effect T a
+      else denote (s := M) pM denote_flip_effect bool (flip q) >>=
+        (fun b1 => denote (s := M) pM denote_flip_effect T (if b1 then b else c))).
+Proof.
+by under eq_bind do rewrite compE denote_if denote_freer_choiceE.
+Qed.
+
+Local Open Scope reals_ext_scope.
+
+Lemma denote_choiceA_rightE (T : UU0) p q (a b c : M T) :
+  denote (s := M) pM denote_flip_effect bool (flip [s_of p, q]) >>=
+    ((denote (s := M) pM denote_flip_effect T) \o
+      (fun b0 => if b0 then a <|| [r_of p, q] ||> b else c)) =
+  denote (s := M) pM denote_flip_effect bool (flip [s_of p, q]) >>=
+    (fun b0 =>
+      if b0 then
+        denote (s := M) pM denote_flip_effect bool
+          (flip [r_of p, q]) >>=
+            (fun b1 => denote (s := M) pM denote_flip_effect T (if b1 then a else b))
+      else
+        denote (s := M) pM denote_flip_effect T c).
+Proof.
+by under eq_bind do rewrite compE denote_if denote_freer_choiceE.
+Qed.
+
+Lemma denote_choice_bindDlE (A B : UU0) p (a b : M A)
+  (f : A -> M B) :
+  denote pM denote_flip_effect B (a <|| p ||> b >>= f) =
+    denote pM denote_flip_effect B ((a >>= f) <|| p ||> (b >>= f)).
+Proof.
+rewrite denote_bind denote_freer_choiceE [in RHS]denote_freer_choiceE.
+rewrite -compE bindA; congr bind.
+by apply/funext => -[]; rewrite denote_bind.
+Qed.
+
+End freer_flip.
+Notation "x <|| p ||> y" := (@freer_choice _ _ p _ x y).
+End FreerFlipDenote.
+
+Module FreerFlipChoiceRel.
+Section freerflipchoicerel.
+Context {R : realType} {M : freerMonad (@FlipEff R)} {pM : probMonad R}.
+Implicit Type p q r s : {prob R}.
+
+Import FreerFlipDenote.
+
+Local Open Scope reals_ext_scope.
+
+(* 5th step : Choice equiv laws *)
+Inductive choice_rel : forall `[X : UU0] (m1 m2 : M X), Prop :=
+| rchoice1 : forall (A : UU0) (a b : M A),
+    (a <|| 1%:i01 ||> b) === a
+| rchoiceC : forall (A : UU0) p (a b : M A),
+    a <|| p ||> b === b <|| p%:num.~%:i01 ||> a
+| rchoicemm : forall (A : UU0) p (a : M A),
+    a <|| p ||> a === a
+    (* quasi associativity *)
+| rchoiceA : forall (T : UU0) p q r s (a b c : M T),
+    a <|| p ||> (b <|| q ||> c) ===
+    (a <|| [r_of p, q] ||> b) <|| [s_of p, q] ||> c
+  (* (flipf p >>= (fun x : bool => if x then a else flipf q >>= (fun x0 : bool => if x0 then b else c))) *)
+  (* (flipf [s_of p, q] >>= (fun x : bool => if x then flipf [r_of p, q] >>= (fun x0 : bool => if x0 then a else b) else c))  *)
+| equiv_bind_congr : forall (A B :UU0) (a b : M A) (f g : A -> M B),
+  (* a === b -> (forall x, (f x) === (g x)) -> (a >>= f) === (b >>= g) *)
+  a === b -> (forall x, f x === g x) ->
+  (a >>= f) === (b >>= g)
+| equiv_refl : forall (A : UU0) (m : M A), m === m
+| equiv_sym : forall (A : UU0) (m n : M A), m === n -> n === m
+| equiv_trans : forall (A : UU0) (m n o : M A), m === n -> n === o -> m === o
+| rchoice_bindDl : forall (A B : UU0) p (a b : M A) (f : A -> M B),
+    (a <|| p ||> b) >>= f === (a >>= f) <|| p ||> (b >>= f)
+where "a === b" := (@choice_rel _ a b).
+
+Lemma rchoice_bindDl_trans (A B : UU0) (p : {prob R}) (a b : M A)
+    (f : A -> M B) (c : M B) :
+    ((a >>= f) <|| p ||> (b >>= f)) === c ->
+    ((a <|| p ||> b) >>= f) === c.
+Proof. exact/equiv_trans/rchoice_bindDl. Qed.
+
+Lemma rchoice_bindDl_choice_congr (A B : UU0) (p : {prob R}) (a b : M A)
+    (f : A -> M B) (a' b' : M B) :
+  (a >>= f) === a' ->
+  (b >>= f) === b' ->
+  ((a <|| p ||> b) >>= f) === (a' <|| p ||> b').
+Proof.
+move=>??; apply/rchoice_bindDl_trans/equiv_bind_congr.
+  exact: equiv_refl.
+by case.
+Qed.
+
+Lemma equiv_bind_congr_trans (A B : UU0) (a b : M A) (f g : A -> M B)
+    (c : M B) :
+  a === b ->
+  (forall x, (f x) === (g x)) ->
+  (b >>= g) === c ->
+  (a >>= f) === c.
+Proof.
+by move=> ? ?; exact/equiv_trans/equiv_bind_congr.
+Qed.
+
+(* 6th step : Equiv correct *)
+Lemma equiv_correct (X : UU0) (m1 m2 : M X) : @choice_rel X m1 m2 ->
+  denote pM denote_flip_effect X m1 = denote pM denote_flip_effect X m2.
+Proof.
+elim => [*|*|*|*|*|*|????->|?????->?->|*] //=;
+  last first; rewrite ?denote_bind.
+- rewrite bindA; congr bind.
+  by apply/funext;
+    case; rewrite !compE denote_bind.
+- by congr bind; [| apply/funext].
+all: rewrite ?denote_choiceA_leftE ?denote_choiceA_rightE ?denote_trigger
+  !denote_flip_effect_inj_pE !choice_bindDl !bindretf.
+- exact: choiceA.
+- exact: choicemm.
+- exact: choiceC.
+- exact: choice1.
+Qed.
+
+End freerflipchoicerel.
+Notation "a === b" := (@choice_rel _ _ _ a b).
+End FreerFlipChoiceRel.

@@ -2,10 +2,13 @@
 -Q examples FreerDPS
 
 -arg -w -arg -projection-no-head-constant
+-arg -w -arg -notation-overridden
+-arg -w -arg -ambiguous-paths
 
 ./theories/init.v
 ./theories/effect.v
 ./theories/freer.v
+./theories/free_choice.v
 ./theories/component.v
 ./theories/contract.v
 ./theories/mathcomp_extra.v
