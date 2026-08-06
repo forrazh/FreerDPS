@@ -10,6 +10,8 @@ From monae Require Import hierarchy.
 From FreerDPS Require Import init effect.
 From HB Require Import structures.
 
+Require Import Morphisms.
+
 (* isMonadFreer == interface of the Freer monad *)
 (* trigger == TODO *)
 (* ptrigger == TODO *)
@@ -24,7 +26,7 @@ Local Open Scope monae_scope.
 (** * Definition *)
 
 (** The [freer] monad is an inductive datatype with two parameters: the
-    effect [F] to be used, and the type [α] of the result of the computation.
+    effect [F] to be used, and the type [A] of the result of the computation.
     The fact that [freer] is inductive rather than co-inductive means it is not
     possible to describe infinite computations.  This also means it is possible
     to interpret impure computations within Coq, providing an operational
@@ -35,15 +37,15 @@ Local Open Scope monae_scope.
 (* model of the freer monad *)
 Module FreerMonadModel.
 Section freer.
-Inductive freer (F : effect) (α : Type) : Type :=
-| pure (x : α) : freer F α
-| impure {β} (op : F β) (f : β -> freer F α) : freer F α.
+Inductive freer (F : effect) (A : Type) : Type :=
+| pure (x : A) : freer F A
+| impure {B} (op : F B) (f : B -> freer F A) : freer F A.
 
-Arguments pure [F α] (x).
-Arguments impure [F α β] (op f).
+Arguments pure [F A] (x).
+Arguments impure [F A B] (op f).
 
-Fixpoint freer_bind (F : effect) {α β} (p : freer F α) (f : α -> freer F β)
-    : freer F β :=
+Fixpoint freer_bind (F : effect) {A B} (p : freer F A) (f : A -> freer F B)
+    : freer F B :=
   match p with
   | pure x => f x
   | impure Y op g => impure op (fun x => freer_bind (g x) f)
@@ -90,6 +92,7 @@ HB.instance Definition _ := @isMonad_ret_bind.Build acto ret bind
 
 End freer.
 End FreerMonadModel.
+HB.export FreerMonadModel.
 
 HB.mixin Record isMonadFreer (F : effect) (M : Type -> Type) of Monad M := {
   trigger : F ~~> M ;
@@ -121,7 +124,7 @@ Import FreerMonadModel.
 
 Notation acto := (@freer F).
 
-Definition trigger_effect : F ~~> acto := fun α op =>
+Definition trigger_effect : F ~~> acto := fun A op =>
   impure (inj op) (@pure _ _).
 
 Definition dnt (M : monad) (l : F ~~> M) : acto ~~> M :=
@@ -176,6 +179,7 @@ HB.instance Definition _ := isMonadFreer.Build F acto
 End freer.
 End Freer.
 HB.export Freer.
+
 
 HB.mixin Record isMonadFreerInductive
     (F : effect) (M : UU0 -> UU0) of MonadFreer F M := {
@@ -271,4 +275,73 @@ Definition iput {S} {Fx : effect} `{STORE S -< Fx} {M : freerMonad Fx} (s : S)
     : M unit :=
   ptrigger (Put s).
 
+#[short(type=eqFreerMonad)]
+HB.structure Definition MonadFreerEqReas (F : effect) :=
+  {M of hasWBisim M & isMonadFreer F M &
+        isMonad M & isFunctor M}.
 
+
+Module FMEq.
+Section fm_eq_s.
+
+Import FreerMonadModel.
+Variable F : effect.
+Notation acto := (@freer F).
+(* Context . *)
+
+(* Variable law : acto A -> acto A -> Prop. *)
+
+Inductive freer_eq [A : UU0] : acto A -> acto A-> Prop  :=
+| pure_eq (x : acto A) : x === x
+| impure_eq [B: UU0] (e : F B) (f g : B -> acto A)
+    (equ : forall x, (f x) === (g x))
+  : (impure e f) === (impure e g)
+(* | custom_eq (m m' : acto A) : law m m' -> m === m' *)
+where "a === b" := (freer_eq a b).
+
+Lemma rel_refl [A : UU0] (x : acto A) :
+  x === x.
+Proof. by elim: x; constructor. Qed.
+
+Lemma rel_sym [A : UU0] (x y : acto A) :
+  x === y -> y === x.
+Proof. by elim; constructor. Qed.
+
+Lemma rel_trans [A : UU0] (x y z : acto A) :
+  x === y ->
+  y === z ->
+  x === z.
+Proof.
+move: x z; elim: y=>[a|B op f ih] x z;
+  inversion 1; subst;
+  inversion 1; ssubst;
+  constructor=>//.
+by move=> b; move: ih=>/(_ b); apply.
+Qed.
+
+Add Parametric Relation A : (acto A) (@freer_eq A)
+  reflexivity proved by (@rel_refl A)
+  symmetry proved by (@rel_sym A)
+  transitivity proved by (@rel_trans A)
+  as wBisims_rel.
+Hint Extern 0 (freer_eq _ _) => setoid_reflexivity.
+
+Lemma eq_bindmwB [A B : UU0] (f : A -> acto B) (d1 d2 : acto A) :
+  d1 === d2 -> (d1 >>= f) === (d2 >>= f).
+Proof. by elim=>// ?????;  exact: impure_eq. Qed.
+
+Lemma eq_bindfwB
+    (A B : Type) (f g : A -> acto B) (d : acto A) :
+  (forall a, (f a) === (g a)) ->
+  (d >>= f) === (d >>= g).
+Proof.
+by elim: d=> /=[x /(_ x)|??? /[swap] H /(_ _ H)] //;
+  exact: impure_eq.
+Qed.
+
+HB.about hasWBisim.Build.
+
+HB.instance Definition _ := hasWBisim.Build acto rel_refl rel_sym rel_trans eq_bindmwB eq_bindfwB.
+
+End fm_eq_s.
+End FMEq.
