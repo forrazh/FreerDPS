@@ -1,10 +1,10 @@
-(* Monae version poc *)
+(* Monae version poc
 From mathcomp Require Import ssreflect ssrbool eqtype interval_inference ssrnum
   ssralg.
 From mathcomp Require Import reals sequences.
 From infotheo Require Import realType_ext.
 From monae Require Import preamble hierarchy monad_lib proba_lib proba_model.
-From FreerDPS Require Import freer_lossy_round_trip.
+From FreerDPS Require Import common_ping.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -18,66 +18,6 @@ Local Open Scope ring_scope.
 Local Open Scope reals_ext_scope.
 
 Import GRing.Theory.
-
-Section syntactic_sugar_for_probabilities.
-Context {R : realType}.
-
-  (* q^2 *)
-Definition round_trip_success_probability (p : {prob R}) : {prob R} :=
-  (* let psucc := loss%:num.~%:i01 in *)
-  [p_of p, p].
-
-Lemma round_trip_success_probabilityE p :
-  round_trip_success_probability p = [p_of p, p].
-Proof. by []. Qed.
-
-Definition retry_step_probability (psucc retry : {prob R}) : {prob R} :=
-  [s_of (round_trip_success_probability psucc), retry].
-
-(* q ^ n *)
-Fixpoint retry_success_probability (loss : {prob R}) n : {prob R} :=
-  match n with
-  | O => round_trip_success_probability loss
-  | S n' =>
-      retry_step_probability loss (retry_success_probability loss n')
-  end.
-
-Lemma retry_success_probabilityE psucc n :
-  retry_success_probability psucc n =
-    match n with
-    | O => round_trip_success_probability psucc
-    | S n' => retry_step_probability psucc (retry_success_probability psucc n')
-    end.
-Proof. by case: n. Qed.
-
-Lemma retry_step_probabilityE psucc retry :
-  retry_step_probability psucc retry =
-    [s_of (round_trip_success_probability psucc), retry].
-Proof. by []. Qed.
-
-Lemma retry_success_probability_stepE psucc n :
-  retry_success_probability psucc (S n) =
-    [s_of [p_of psucc, psucc], retry_success_probability psucc n].
-Proof.
-  by rewrite retry_success_probabilityE retry_step_probabilityE
-     round_trip_success_probabilityE.
-Qed.
-
-Fact retry0 : forall n, retry_success_probability (widen_itv 0%:itv) n = 0%:i01.
-Proof.
-  elim=> [|n IH].
-  - by rewrite retry_success_probabilityE round_trip_success_probabilityE p_of_0s.
-  by rewrite retry_success_probability_stepE p_of_0s s_of_0q IH.
-Qed.
-
-Fact retry1 : forall n, retry_success_probability (widen_itv 1%:itv) n = 1%:i01.
-Proof.
-case=> [|n].
-- by rewrite retry_success_probabilityE round_trip_success_probabilityE p_of_1s.
-by rewrite retry_success_probability_stepE p_of_1s s_of_1q.
-Qed.
-
-End syntactic_sugar_for_probabilities.
 
 Section about_probMonad.
 Context {R : realType} {M : probMonad R}.
@@ -223,7 +163,15 @@ Fixpoint ping_pong_retry (psucc : {prob R}) (fuel : nat) : M outcome :=
     rewrite !choice_bindDl !bindretf server_replyE !prob_transmitE.
     by rewrite !choice_bindDl !bindretf.
   Qed.
-
+  Lemma ping_pong_retry_success_stepE p fuel :
+    ping_pong_retry_success p (S fuel) =
+      (Ret true <| p |> ping_pong_retry_success p fuel) <| p |>
+      ping_pong_retry_success p fuel.
+  Proof.
+    rewrite ping_pong_retry_successE success_ofE ping_pong_retry_stepE.
+    rewrite !choice_bindDl !bindretf success_eventE.
+    by rewrite -!success_ofE -!ping_pong_retry_successE.
+  Qed.
 
 
   Lemma prob_exchangeE p :
@@ -354,4 +302,4 @@ Qed.
     by rewrite choiceA (s_of_pqK p1) (r_of_pqK p1 d0).
   Qed.
 
-End lossy_round_trip_sec.
+End lossy_round_trip_sec. *)

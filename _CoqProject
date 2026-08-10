@@ -16,5 +16,6 @@
 ./theories/all_freerdps.v
 
 ./examples/airlock.v
-./examples/lossy_round_trip.v
+./examples/common_ping.v
+./examples/nlrt.v
 ./examples/freer_lossy_round_trip.v

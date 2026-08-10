@@ -2,10 +2,7 @@ From mathcomp Require Import all_boot all_order all_algebra interval_inference.
 From mathcomp Require Import boolp reals.
 From infotheo Require Import realType_ext.
 From monae Require Import preamble hierarchy.
-From FreerDPS Require Import Init effect freer free_choice.
-From HB Require Import structures.
-
-Import Order.TTheory Order.Syntax GRing.Theory Num.Theory.
+From FreerDPS Require Import Init effect freer free_choice common_ping.
 
 Local Open Scope nat_scope.
 Local Open Scope monae_scope.
@@ -14,114 +11,117 @@ Local Open Scope reals_ext_scope.
 Local Open Scope ring_scope.
 Local Open Scope freer_flip_scope.
 
-Inductive msg := Ping | Pong.
-
-Inductive outcome := GotPong | LostPing | LostPong.
-
 Section lossy_round_trip.
-Context {R : realType} {M : choiceEqFreerMonad R}.
-
-(* freerMonad (@FlipEff R)}. *)
-
 Import FreerFlipDenote.
-(* Import FreerFlipChoiceRel. *)
+Context {R : realType} {M : choiceEqFreerMonad R}.
+Implicit Types (m : msg) (psucc : {prob R}).
 
-(* HB.about M. *)
-
-Implicit Type (m : msg) (psucc : {prob R}).
-
-Definition freer_transmit psucc m : M (option msg) :=
+Definition transmit psucc m : M (option msg) :=
   Ret (Some m) <|| psucc ||> Ret None.
 
-Lemma freer_transmit1 m : freer_transmit 1%:i01 m ≈ Ret (Some m).
+Lemma transmit1 m : transmit 1%:i01 m ≈ Ret (Some m).
 Proof. exact: freer_choice1. Qed.
 
-Definition client_send psucc : M (option msg) := freer_transmit psucc Ping.
-
-Definition server_reply psucc (incoming : option msg) : M (option msg) :=
-  if incoming is Some Ping then
-    freer_transmit psucc Pong
-  else
-    Ret None.
-
-Definition client_receive (incoming : option msg) : M outcome :=
-  if incoming is Some Pong then
-    Ret GotPong
-  else
-    Ret LostPong.
-
-Definition ping_pong psucc : M outcome :=
-  client_send psucc >>= fun to_server =>
-    if to_server is Some Ping then
-      server_reply psucc to_server >>= client_receive
-    else
-      Ret LostPing.
-
-Lemma ping_pong1 : ping_pong 1%:i01 ≈ Ret GotPong.
+Lemma ping_pong1 : ping_pong (transmit:=transmit) 1%:i01 ≈ Ret GotPong.
 Proof.
 rewrite /ping_pong /client_send /server_reply /client_receive.
-by rewrite freer_transmit1 bindretf freer_transmit1 bindretf.
+by rewrite transmit1 bindretf transmit1 bindretf.
 Qed.
 
-Fixpoint ping_pongs psucc (fuel : nat) : M outcome :=
-  if fuel is fuel'.+1 then
-    ping_pong psucc >>= fun result =>
-                          if result is GotPong then
-                            Ret GotPong
-                          else
-                            ping_pongs psucc fuel'
-  else
-    ping_pong psucc.
-
-Lemma ping_pongs1 fuel : ping_pongs 1%:i01 fuel ≈ Ret GotPong.
+Lemma ping_pongs1 fuel : ping_pongs (transmit:=transmit) 1%:i01 fuel ≈ Ret GotPong.
 Proof.
-case: fuel => [|fuel].
-  exact: ping_pong1.
-rewrite /ping_pongs /ping_pong /client_send /server_reply /client_receive.
-by rewrite freer_transmit1 bindretf freer_transmit1 bindretf bindretf.
+by elim : fuel => [|n IH];
+    rewrite ping_pongsE ping_pong1 ?bindretf.
 Qed.
-
-Lemma ping_pongsSE psucc fuel :
-  ping_pongs psucc fuel.+1 ≈
-  ping_pong psucc >>= fun oc =>
-    if oc is GotPong then
-      Ret GotPong
-    else
-      ping_pongs psucc fuel.
-Proof. by []. Qed.
-
-Definition freer_exchange psucc lostping lostpong : M outcome :=
-  (Ret GotPong <|| psucc ||> lostpong) <|| psucc ||> lostping.
-
-Definition freer_exchange_once psucc : M outcome :=
-  freer_exchange psucc (Ret LostPing) (Ret LostPong).
-
-Fixpoint freer_exchanges psucc fuel : M outcome :=
-  if fuel is fuel'.+1 then
-    freer_exchange psucc (freer_exchanges psucc fuel') (freer_exchanges psucc fuel')
-  else
-    freer_exchange_once psucc.
-
-Lemma freer_exchangesSE psucc fuel :
-  freer_exchanges psucc fuel.+1 ≈
-  freer_exchange psucc (freer_exchanges psucc fuel) (freer_exchanges psucc fuel).
-Proof. by []. Qed.
 
 Lemma ping_pong_distribution psucc :
-  ping_pong psucc ≈ freer_exchange_once psucc.
+  ping_pong (transmit:=transmit) psucc ≈ exchange_once (choose:=freer_choice) psucc.
 Proof.
-rewrite /ping_pongs /ping_pong /client_send /server_reply /client_receive.
-rewrite /freer_exchange_once /freer_exchange.
+rewrite /ping_pongs /ping_pong.
 by repeat rewrite freer_choice_bindDl !bindretf.
 Qed.
 
-Lemma ping_pongs_freer_exchanges psucc fuel :
-  ping_pongs psucc fuel ≈ freer_exchanges psucc fuel.
+Lemma ping_pongs_exchanges psucc fuel :
+  ping_pongs (transmit:=transmit) psucc fuel ≈ exchanges (choose:=freer_choice) psucc fuel.
 Proof.
 elim: fuel => [|fuel IH].
   exact: ping_pong_distribution.
-rewrite ping_pongsSE ping_pong_distribution freer_exchangesSE.
-by rewrite /freer_exchange_once /freer_exchange !freer_choice_bindDl !bindretf IH.
+rewrite ping_pongsSE ping_pong_distribution exchangesSE.
+by rewrite !freer_choice_bindDl !bindretf IH.
 Qed.
+
+Lemma freer_choice0 (A : UU0) (a b : M A) :
+  a <|| 0%:i01 ||> b ≈ b.
+Proof.
+have cplt0 : ((0%:i01 : {prob R})%:num.~%:i01) = 1%:i01.
+  by exact/val_inj/GRing.subr0.
+by rewrite freer_choiceC cplt0 freer_choice1.
+Qed.
+
+Lemma freer_flip_choice psucc :
+  @wBisim M _ (Ret true <|| psucc ||> Ret false) (flip psucc).
+Proof.
+rewrite /freer_choice -[X in _ ≈ X]bindmret.
+by apply: bindfwB=> -[].
+Qed.
+
+Lemma ping_pong_success_probability psucc :
+  ping_pong_success (transmit:=transmit) (psucc%:num.~%:i01) ≈
+    flip (p_ex_once (psucc%:num.~%:i01)).
+Proof.
+  rewrite ping_pong_successE success_ofE ping_pong_distribution.
+  rewrite /exchange_once /exchange p_ex_onceE.
+  rewrite !freer_choice_bindDl !bindretf !success_eventE -freer_flip_choice.
+
+  set d := psucc%:num.~%:i01.
+  have [->/=|d0] := eqVneq d 0%:i01.
+  - by rewrite p_of_0s !freer_choice0.
+  have [->/=|d1] := eqVneq d 1%:i01.
+  - by rewrite p_of_1s !freer_choice1.
+  have p1 : [p_of d, d] != 1%:i01.
+    by rewrite p_of_rs1 (negbTE d1) andbF.
+  (* Give RHS the same form as LHS *)
+  rewrite -[X in _ ≈ _ <|| _ ||> X]
+    (freer_choicemm _ [q_of d, d] (Ret false)).
+  by rewrite freer_choiceA (s_of_pqK p1) (r_of_pqK p1 d0).
+Qed.
+
+
+Lemma ping_pongs_success_stepE psucc fuel :
+  ping_pongs_success (transmit:=transmit) psucc (fuel.+1) ≈
+    (Ret true <|| psucc ||> ping_pongs_success (transmit:=transmit) psucc fuel) <|| psucc ||>
+    ping_pongs_success (transmit:=transmit) psucc fuel.
+Proof.
+  rewrite ping_pongs_successE success_ofE !ping_pongsE /ping_pong.
+  rewrite /client_send /server_reply /client_receive /transmit.
+  repeat rewrite !freer_choice_bindDl !bindretf.
+  (* rewrite bindmret. *)
+  (* rewrite  !bindretf. *)
+  (* by rewrite success_eventE. *)
+Admitted.
+
+Theorem ping_pong_retry_success_probability psucc (fuel : nat) :
+    ping_pongs_success (transmit:=transmit) (psucc%:num.~%:i01) fuel ≈
+      flip (p_exs (psucc%:num.~%:i01) fuel).
+  Proof.
+    elim : fuel => [|n].
+    - exact: ping_pong_success_probability.
+rewrite ping_pongs_success_stepE !p_exsE p_exE p_ex_onceE=> ->.
+    set d := psucc%:num.~%:i01.
+
+
+    have [->/=|d0] := eqVneq d 0%:i01.
+    - by rewrite -!freer_flip_choice p_of_0s s_of_0q freer_choice0.
+    have [->/=|d1] := eqVneq d 1%:i01.
+    - by rewrite -!freer_flip_choice p_of_1s s_of_1q !freer_choice1.
+
+    rewrite -p_exsE.
+    have p1 : [p_of d, d] != 1%:i01 by rewrite p_of_rs1 (negbTE d1) andbF.
+
+  (* rewrite -[X in _ ≈ _ <|| _ ||> (flip (p_exs d n))] *)
+    (* (freer_choicemm _ [q_of d, d] (Ret false)). *)
+    (* rewrite -[flip (p_exs d n) in RHS](choicemm [q_of d, d]). *)
+    (* by rewrite freer_choiceA (s_of_pqK p1) (r_of_pqK p1 d0). *)
+  Admitted.
 
 End lossy_round_trip.

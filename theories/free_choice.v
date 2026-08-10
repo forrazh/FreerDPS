@@ -170,17 +170,17 @@ Context {R : realType}.
 Notation M := (freer (@FlipEff R)).
 
 Inductive choice_rel :
-    forall X, freer (@FlipEff R) X -> freer (@FlipEff R) X -> Prop :=
-| rchoice1 : forall (A : UU0) (a b : M A),
+    forall [X : UU0], freer (@FlipEff R) X -> freer (@FlipEff R) X -> Prop :=
+| rchoice1 : forall [A : UU0] (a b : M A),
     (a <|| 1%:i01 ||> b) ≊ a
-| rchoiceC : forall (A : UU0) p (a b : M A),
+| rchoiceC : forall [A : UU0] p (a b : M A),
     (a <|| p ||> b) ≊ (b <|| p%:num.~%:i01 ||> a)
-| rchoicemm : forall (A : UU0) p (a : M A),
+| rchoicemm : forall [A : UU0] p (a : M A),
     (a <|| p ||> a) ≊ a
-| rchoiceA : forall (A : UU0) p q (a b c : M A),
+| rchoiceA : forall [A : UU0] p q (a b c : M A),
     (a <|| p ||> (b <|| q ||> c)) ≊
       ((a <|| [r_of p, q] ||> b) <|| [s_of p, q] ||> c)
-| rchoice_bindDl : forall (A B : UU0) p (a b : M A)
+| rchoice_bindDl : forall [A B : UU0] p (a b : M A)
     (f : A -> M B),
     ((a <|| p ||> b) >>= f) ≊
       ((a >>= f) <|| p ||> (b >>= f))
