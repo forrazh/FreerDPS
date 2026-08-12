@@ -55,8 +55,6 @@ Proof. by []. Qed.
 Lemma denote_flip_effect_inj_pE p : denote_flip_effect _ (inj $ flip_e p) = bcoin p.
 Proof. by []. Qed.
 
-Search inj.
-
 Lemma denote_flipE p :
   denote (s := M) pM denote_flip_effect bool (flip p) = bcoin p.
 Proof. exact: denote_trigger. Qed.
@@ -121,8 +119,6 @@ Notation "x <|| p ||> y" := (@freer_choice _ _ p _ x y).
 End FreerFlipDenote.
 
 Import FreerFlipDenote.
-
-HB.about MonadFreerEqReas.
 
 HB.mixin Record isMonadFreerChoiceEqReas
     (R : realType) (M : UU0 -> UU0) of MonadFreerEqReas (@FlipEff R) M := {

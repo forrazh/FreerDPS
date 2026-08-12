@@ -275,9 +275,9 @@ Definition iput {S} {Fx : effect} `{STORE S -< Fx} {M : freerMonad Fx} (s : S)
     : M unit :=
   ptrigger (Put s).
 
-Definition Law (F : effect) {M : freerMonad F} := forall A, M A -> M A -> Prop.
+Definition FreerLawRelation (F : effect) {M : freerMonad F} := forall A, M A -> M A -> Prop.
 
-Definition law_sound [F : effect] [M : freerMonad F] (law : Law) (N : monad) (h : F ~~> N) :=
+Definition law_sound [F : effect] [M : freerMonad F] (law : FreerLawRelation) (N : monad) (h : F ~~> N) :=
   forall A (m n : M A),
     law A m n ->
     denote N h A m = denote N h A n.
@@ -288,7 +288,7 @@ Section fm_eq_s.
 Import FreerMonadModel.
 Variable F : effect.
 Notation acto := (@freer F).
-Variable law : @Law F acto.
+Variable law : @FreerLawRelation F acto.
 
 Inductive freer_eq [A : UU0] : acto A -> acto A -> Prop  :=
 | law_eq (m n : acto A) : (forall N h, @law_sound F acto law N h -> denote N h A m = denote N h A n) -> m === n
@@ -332,7 +332,7 @@ Add Parametric Relation {A : UU0} : (acto A) (@freer_eq A)
   symmetry proved by (@rel_sym A)
   transitivity proved by (@rel_trans A)
   as wBisims_rel.
-Hint Extern 0 (freer_eq _ _) => setoid_reflexivity.
+Hint Extern 0 (freer_eq _ _) => setoid_reflexivity : core.
 
 Lemma eq_bindmwB [A B : UU0] (f : A -> acto B) (d1 d2 : acto A) :
   d1 === d2 -> (d1 >>= f) === (d2 >>= f).
@@ -364,8 +364,7 @@ End FMwBi.
 HB.export FMwBi.
 
 HB.mixin Record isMonadFreerEqReas (F : effect) (M : UU0 -> UU0) of MonadFreer F M & hasWBisim M := {
-  (* feq_eq  : forall A (x y : M A), x ≈ y <-> x = y; *)
-  law : Law;
+  law : FreerLawRelation;
   law_can_bisim : forall A (x y : M A), law A x y -> x ≈ y ;
   bisim_denotes : forall A cm h (x y : M A), law_sound law h -> x ≈ y -> denote cm h A x = denote cm h A y ;
 }.
@@ -402,7 +401,7 @@ Section fm_sec.
 Import FreerMonadModel.
 Variable F : effect.
 Notation acto := (@freer F).
-Variable law : @Law F acto.
+Variable law : @FreerLawRelation F acto.
 
 Notation "a === b" := (@freer_eq F law _ a b).
 
