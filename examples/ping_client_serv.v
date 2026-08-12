@@ -1,8 +1,6 @@
 From monae Require Import preamble hierarchy.
 From mathcomp Require Import all_boot.
-From FreerDPS Require Import Core.
-
-Import FreerFuns.
+From FreerDPS Require Import all_freerdps ping_common.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -16,31 +14,30 @@ Close Scope nat_scope.
 
 Module Export PingPongM.
 (** ** Messages *)
-Inductive Msg := ping | pong.
 (** ** Client *)
 
 Inductive client_api : effect :=
-| SEND : Msg -> client_api unit
-| WAIT : client_api Msg.
+| SEND : msg -> client_api unit
+| WAIT : client_api msg.
 
 Section client_program.
 Context {Fx : effect} `{client_api -< Fx} {M : freerMonad Fx}.
-Definition send : M unit := trigger $ SEND ping.
-Definition wait : M Msg := trigger WAIT.
-Definition C : M Msg :=
+Definition send : M unit := ptrigger $ SEND Ping.
+Definition wait : M msg := ptrigger WAIT.
+Definition C : M msg :=
   send >>= fun=> wait.
 End client_program.
 
 (** ** Server *)
 
 Inductive server_api : effect :=
-| RPLY : Msg -> server_api unit
-| RECV : server_api Msg.
+| RPLY : msg -> server_api unit
+| RECV : server_api msg.
 
 Section server_program.
 Context {Fx : effect} `{server_api -< Fx} {M : freerMonad Fx}.
-Definition reply : M unit := trigger $ RPLY pong.
-Definition recv : M Msg := trigger RECV.
+Definition reply : M unit := ptrigger $ RPLY Pong.
+Definition recv : M msg := ptrigger RECV.
 Definition S_p : M unit := recv >> reply.
 Fixpoint loop {X : Type} (fuel : nat) (program : M X) : M unit :=
   match fuel with
@@ -53,21 +50,21 @@ End PingPongM.
 
 Module NetworkChannelMod.
 
-Definition packets := seq Msg.
+Definition packets := seq msg.
 
 Record N := mk_chan {
   serverQ : packets;
   clientQ : packets;
 }.
 
-Definition enqueue (message : Msg) (queue : packets) :=
+Definition enqueue (message : msg) (queue : packets) :=
   rcons queue message.
 
-Definition send_to_server (message : Msg) (network : N) :=
+Definition send_to_server (message : msg) (network : N) :=
   {| serverQ := enqueue message (serverQ network);
      clientQ := clientQ network |}.
 
-Definition send_to_client (message : Msg) (network : N) :=
+Definition send_to_client (message : msg) (network : N) :=
   {| serverQ := serverQ network;
      clientQ := enqueue message (clientQ network) |}.
 
@@ -115,17 +112,17 @@ Definition c_step (network : N) :
 Inductive c_o_caller (network : N) :
     forall X, client_api X -> Prop :=
 | O_WAIT (remaining : packets)
-    (pong_available : clientQ network = pong :: remaining) :
+    (Pong_available : clientQ network = Pong :: remaining) :
     c_o_caller network WAIT
-| O_SEND (message : Msg) : c_o_caller network (SEND message).
+| O_SEND (message : msg) : c_o_caller network (SEND message).
 
 Inductive c_o_callee (network : N) :
     forall X, client_api X -> X -> Prop :=
-| SEND_O (message : Msg) (result : unit) :
+| SEND_O (message : msg) (result : unit) :
     c_o_callee network (SEND message) result
 | WAIT_O (remaining : packets)
-    (received_pong : clientQ network = pong :: remaining) :
-    c_o_callee network WAIT pong.
+    (received_Pong : clientQ network = Pong :: remaining) :
+    c_o_callee network WAIT Pong.
 
 Definition c_contract : contract client_api N :=
   make_contract c_step c_o_caller c_o_callee.
@@ -138,23 +135,23 @@ Local Notation "c ||> p" := (to_hoare (M:=M) c p)
 
 Lemma c_respect
     (network : N) (remaining : packets)
-    (pong_available : clientQ network = pong :: remaining) :
+    (Pong_available : clientQ network = Pong :: remaining) :
   pre (c_contract ||> C) network.
 Proof.
-apply: th_pre_bindA=>[|? ω']; rewrite to_hoare_trigger_preE ?to_hoare_trigger_postE.
+apply: th_pre_bindA=>[|? ω']; rewrite to_hoare_ptrigger_preE ?to_hoare_ptrigger_postE.
 - exact: O_SEND.
-by move=>[-> _]; exact/O_WAIT/pong_available.
+by move=>[-> _]; exact/O_WAIT/Pong_available.
 Qed.
 
 Lemma c_run
-    (initial_network final_network : N) (message : Msg)
+    (initial_network final_network : N) (message : msg)
     (run : post (c_contract ||> C)
       initial_network message final_network) :
-  message = pong.
+  message = Pong.
 Proof.
 by move: run;
   rewrite th_post_bindA=>-[?[n []]];
-  do 2 (rewrite to_hoare_trigger_postE /= => [ [?] ];
+  do 2 (rewrite to_hoare_ptrigger_postE /= => [ [?] ];
     inversion 1; ssubst).
 Qed.
 
@@ -177,12 +174,12 @@ Definition s_step (network : N) :
 Inductive s_o_caller (network : N) :
     forall X, server_api X -> Prop :=
 | O_RECV : s_o_caller network RECV
-| O_RPLY (message : Msg) : s_o_caller network (RPLY message).
+| O_RPLY (message : msg) : s_o_caller network (RPLY message).
 
 Inductive s_o_callee (network : N) :
     forall X, server_api X -> X -> Prop :=
-| RECV_O (message : Msg) : s_o_callee network RECV ping
-| RPLY_O (result : unit) (message : Msg) :
+| RECV_O (message : msg) : s_o_callee network RECV Ping
+| RPLY_O (result : unit) (message : msg) :
     s_o_callee network (RPLY message) result.
 
 Definition s_contract : contract server_api N :=
@@ -196,7 +193,7 @@ Local Notation "c ||> p" := (to_hoare (M:=M) c p)
 Lemma s_p_respect (network : N) :
   pre (s_contract ||> S_p) network.
 Proof.
-by apply: th_pre_bindA=>*; rewrite to_hoare_trigger_preE /=; constructor.
+by apply: th_pre_bindA=>*; rewrite to_hoare_ptrigger_preE /=; constructor.
 Qed.
 
 Lemma s_respect (network : N) fuel :
@@ -213,10 +210,10 @@ Lemma s_p_run_grows
     (initial_network final_network : N) (result : unit)
     (run : post (s_contract ||> S_p)
       initial_network result final_network) :
-  clientQ final_network = rcons (clientQ initial_network) pong.
+  clientQ final_network = rcons (clientQ initial_network) Pong.
 Proof.
 move: run; rewrite th_post_bindA=>[ [? [? [ ]]] ].
-do 2 (rewrite to_hoare_trigger_postE /= => [ [?] ];
+do 2 (rewrite to_hoare_ptrigger_postE /= => [ [?] ];
   inversion 1; ssubst).
 by rewrite /send_to_client client_does_not_consume_its_send.
 Qed.
@@ -226,7 +223,7 @@ Lemma s_run
     (run : post (s_contract ||> S_ fuel)
       initial_network result final_network) :
   clientQ final_network =
-    clientQ initial_network ++ nseq (fuel.+1) pong.
+    clientQ initial_network ++ nseq (fuel.+1) Pong.
 Proof.
 move: fuel initial_network final_network run;
   elim=> [|n ih] initial_network ?;
@@ -253,17 +250,17 @@ Import ccm scm.
 
 
 (** * Protocol Description :
-       +---+  == send ping ==>  +---+  == deliver ping ==>  +---+
+       +---+  == send Ping ==>  +---+  == deliver Ping ==>  +---+
        | C |                    | N |                        | S |
-       +---+  <== get pong ==   +---+  <== reply pong =====  +---+
+       +---+  <== get Pong ==   +---+  <== reply Pong =====  +---+
 *)
 Module ProtocolM.
 Section proto_s.
 
-Inductive proto_api : effect := one_round : proto_api Msg.
+Inductive proto_api : effect := one_round : proto_api msg.
 
 Context {ProtoF : effect}
-`{StrictProvide2 ProtoF server_api client_api}
+`{StrictProvide2 ProtoF client_api server_api}
 (* `{client_api -< ProtoF, server_api -< ProtoF} *)
   {M : freerMonad ProtoF}.
 Definition c := c_contract -^- s_contract.
@@ -281,32 +278,38 @@ Definition protocol_inv (net : N) := serverQ net = [::] /\ clientQ net = [::].
 Lemma protocol_respect (net : N) :
   protocol_inv net -> pre (c ||> protocol one_round) net.
 Proof.
-move=>inv
-; rewrite /protocol /send /recv /reply /wait
-.
-Search (pre _ _).
+move=> [_ client_empty]; rewrite /protocol !bindA.
 apply: th_pre_bindA=> [|??].
-- apply: th_pre_bindA=> [|?? Hpost].
-  + apply: th_pre_bindA=> [|?? Hpost].
-    * rewrite /c. apply: to_hoare_distinguished_request_preI.
-      (* mo ee/to_hoare_distinguished_request_postE. *)
-    * admit.
-    * admit.
-  + admit.
-- admit.
-Admitted.
+  exact/to_hoare_shared_contract_left_trigger_preI/O_SEND.
+move/to_hoare_shared_contract_left_trigger_postE=> [-> _].
+apply: th_pre_bindA=> [|??].
+  exact/to_hoare_shared_contract_right_trigger_preI/O_RECV.
+move/to_hoare_shared_contract_right_trigger_postE=> [-> _].
+apply: th_pre_bindA=> [|??].
+  exact/to_hoare_shared_contract_right_trigger_preI/O_RPLY.
+move/to_hoare_shared_contract_right_trigger_postE=> [-> _].
+by apply/to_hoare_shared_contract_left_trigger_preI/O_WAIT;
+   rewrite /= /send_to_client client_does_not_consume_its_send client_empty.
+Qed.
 
-Lemma protocol_run_inv (n n' : N) (result : Msg) :
+Lemma protocol_run_inv (n n' : N) (result : msg) :
   protocol_inv n -> post (c |> protocol one_round) n result n' ->
-  result = pong /\ protocol_inv n'.
-Admitted.
+  result = Pong /\ protocol_inv n'.
+Proof.
+move=> [server_empty client_empty].
+rewrite /protocol !bindA th_post_bindA=> -[send_result [n1 []]].
+move/to_hoare_shared_contract_left_trigger_postE=> [-> _].
+rewrite th_post_bindA.
+move=> [received [n2 [ ]]]=>/to_hoare_shared_contract_right_trigger_postE=> -[-> ].
+rewrite th_post_bindA=> _ [reply_result [n3 [ ]]].
+by move/to_hoare_shared_contract_right_trigger_postE=> [-> _];
+  move/to_hoare_shared_contract_left_trigger_postE=> [-> ] /=;
+  inversion 1; ssubst; rewrite /send_to_server server_empty client_empty.
+Qed.
 
-(**********************************************
-  * TODO: Unadmit the two above lemmas when   *
-  * we have a better api for shared contract. *
-  *********************************************)
-
-Lemma proto_correct : correct_component protocol (no_contract proto_api) c (fun=> protocol_inv).
+Lemma proto_correct :
+  correct_component protocol (no_contract proto_api) c
+    (fun=> protocol_inv).
 Proof.
 move=>[] n inv ? [] []; split=>[|m n' Hpost] /=.
   exact: protocol_respect.
@@ -318,12 +321,18 @@ End ProtocolM.
 
 (** * Probability of Success *)
 
+(******************************************************************************)
+(* TODO: Rewrite the above using FlipEff instead of `proto_api`, normally the *)
+(*       proofs should be quite straightforward (reusing ping_freer_prob.v at *)
+(*      most points).                                                         *)
+(******************************************************************************)
+
 (**
 A network transmission succeeds with probability [1 - p]. Packet losses are
 independent. For one round trip:
 
 <<
-P(pong received) = P(ping delivered) * P(pong delivered)
+P(Pong received) = P(Ping delivered) * P(Pong delivered)
                  = (1 - p) * (1 - p)
                  = (1 - p)^2.
 >>
