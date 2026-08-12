@@ -10,9 +10,27 @@ Local Open Scope proba_scope.
 Local Open Scope reals_ext_scope.
 Local Open Scope ring_scope.
 Local Open Scope freer_flip_scope.
+Import FreerFlipDenote.
+
+
+Section about_freer_flip_monad.
+Context {R : realType} {M : choiceEqFreerMonad R}.
+Fact freer_flip_choice (p : {prob R}) :
+  (Ret true <|| p ||> Ret false : M _)  ≈  (flip p).
+Proof.
+rewrite /freer_choice -[X in _ ≈ X]bindmret.
+by apply: bindfwB=> -[].
+Qed.
+
+Fact flip_or_true (p q : {prob R}) :
+  (Ret true <|| p ||> flip q  : M _) ≈ (flip [s_of p, q]).
+Proof.
+    by rewrite -2!freer_flip_choice freer_choiceA freer_choicemm.
+Qed.
+
+End about_freer_flip_monad.
 
 Section lossy_round_trip.
-Import FreerFlipDenote.
 Context {R : realType} {M : choiceEqFreerMonad R}.
 Implicit Types (m : msg) (psucc : {prob R}).
 
@@ -56,13 +74,6 @@ Proof.
 have cplt0 : ((0%:i01 : {prob R})%:num.~%:i01) = 1%:i01.
   by exact/val_inj/GRing.subr0.
 by rewrite freer_choiceC cplt0 freer_choice1.
-Qed.
-
-Lemma freer_flip_choice psucc :
-  @wBisim M _ (Ret true <|| psucc ||> Ret false) (flip psucc).
-Proof.
-rewrite /freer_choice -[X in _ ≈ X]bindmret.
-by apply: bindfwB=> -[].
 Qed.
 
 Lemma ping_pong_success_probability psucc :
@@ -110,9 +121,6 @@ have [->/=|d0] := eqVneq d 0%:i01.
 have [->/=|d1] := eqVneq d 1%:i01.
   by rewrite -!freer_flip_choice p_of_1s s_of_1q !freer_choice1.
 rewrite -p_exsE.
-have flip_or_true (p q : {prob R}) :
-    @wBisim M bool (Ret true <|| p ||> flip q) (flip [s_of p, q])
-    by rewrite -2!freer_flip_choice freer_choiceA freer_choicemm.
 rewrite -(flip_or_true [p_of d, d] (p_exs d n)).
 have p1 : [p_of d, d] != 1%:i01.
   by rewrite p_of_rs1 (negbTE d1) andbF.

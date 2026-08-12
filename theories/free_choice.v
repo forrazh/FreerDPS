@@ -125,20 +125,19 @@ Import FreerFlipDenote.
 HB.about MonadFreerEqReas.
 
 HB.mixin Record isMonadFreerChoiceEqReas
-    (R : realType) (M : UU0 -> UU0)
-    of MonadFreerEqReas (@FlipEff R) M := {
+    (R : realType) (M : UU0 -> UU0) of MonadFreerEqReas (@FlipEff R) M := {
   freer_choice1 : forall (A : UU0) (a b : M A),
-    @wBisim M A (a <|| 1%:i01 ||> b) a;
+    (a <|| 1%:i01 : {prob R} ||> b) ≈ a;
   freer_choiceC : forall (A : UU0) p (a b : M A),
-    @wBisim M A (a <|| p ||> b) (b <|| p%:num.~%:i01 ||> a);
+    (a <|| p ||> b) ≈ (b <|| p%:num.~%:i01 ||> a);
   freer_choicemm : forall (A : UU0) p (a : M A),
-    @wBisim M A (a <|| p ||> a) a;
+    (a <|| p ||> a) ≈ a;
   freer_choiceA : forall (A : UU0) p q (a b c : M A),
-    @wBisim M A (a <|| p ||> (b <|| q ||> c))
+    (a <|| p ||> (b <|| q ||> c)) ≈
       ((a <|| [r_of p, q] ||> b) <|| [s_of p, q] ||> c);
   freer_choice_bindDl : forall (A B : UU0) p (a b : M A)
       (f : A -> M B),
-    @wBisim M B ((a <|| p ||> b) >>= f)
+    ((a <|| p ||> b) >>= f) ≈
       ((a >>= f) <|| p ||> (b >>= f))
 }.
 
@@ -163,7 +162,7 @@ Qed.
 
 End setoid_choiceEqFreerMonad.
 
-Module RelM.
+Module RelModel.
 Section rel_s.
 
 Context {R : realType}.
@@ -258,4 +257,4 @@ Qed. *)
 
 End rel_s.
 (* Notation "a === b" := (@choice_rel _ _ a b). *)
-End RelM.
+End RelModel.
