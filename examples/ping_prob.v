@@ -2,7 +2,7 @@ From mathcomp Require Import all_boot all_order all_algebra interval_inference.
 From mathcomp Require Import boolp reals.
 From infotheo Require Import realType_ext.
 From monae Require Import preamble hierarchy proba_lib.
-From FreerDPS Require Import common_ping.
+From FreerDPS Require Import ping_common.
 
 Local Open Scope nat_scope.
 Local Open Scope monae_scope.
