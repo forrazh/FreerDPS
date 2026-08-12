@@ -92,13 +92,10 @@ Lemma ping_pongs_success_stepE psucc fuel :
     (Ret true <|| psucc ||> ping_pongs_success (transmit:=transmit) psucc fuel) <|| psucc ||>
     ping_pongs_success (transmit:=transmit) psucc fuel.
 Proof.
-  rewrite ping_pongs_successE success_ofE !ping_pongsE /ping_pong.
-  rewrite /client_send /server_reply /client_receive /transmit.
-  repeat rewrite !freer_choice_bindDl !bindretf.
-  (* rewrite bindmret. *)
-  (* rewrite  !bindretf. *)
-  (* by rewrite success_eventE. *)
-Admitted.
+  rewrite ping_pongs_successE success_ofE ping_pongsE /ping_pong.
+  rewrite !freer_choice_bindDl !bindretf 2!bindA !freer_choice_bindDl !bindretf.
+  by rewrite success_eventE.
+Qed.
 
 Theorem ping_pong_retry_success_probability psucc (fuel : nat) :
     ping_pongs_success (transmit:=transmit) (psucc%:num.~%:i01) fuel ≈
