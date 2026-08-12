@@ -98,27 +98,27 @@ Proof.
 Qed.
 
 Theorem ping_pong_retry_success_probability psucc (fuel : nat) :
-    ping_pongs_success (transmit:=transmit) (psucc%:num.~%:i01) fuel ≈
-      flip (p_exs (psucc%:num.~%:i01) fuel).
-  Proof.
-    elim : fuel => [|n].
-    - exact: ping_pong_success_probability.
+  ping_pongs_success (transmit:=transmit) (psucc%:num.~%:i01) fuel ≈
+    flip (p_exs (psucc%:num.~%:i01) fuel).
+Proof.
+elim: fuel => [|n].
+  exact: ping_pong_success_probability.
 rewrite ping_pongs_success_stepE !p_exsE p_exE p_ex_onceE=> ->.
-    set d := psucc%:num.~%:i01.
-
-
-    have [->/=|d0] := eqVneq d 0%:i01.
-    - by rewrite -!freer_flip_choice p_of_0s s_of_0q freer_choice0.
-    have [->/=|d1] := eqVneq d 1%:i01.
-    - by rewrite -!freer_flip_choice p_of_1s s_of_1q !freer_choice1.
-
-    rewrite -p_exsE.
-    have p1 : [p_of d, d] != 1%:i01 by rewrite p_of_rs1 (negbTE d1) andbF.
-
-  (* rewrite -[X in _ ≈ _ <|| _ ||> (flip (p_exs d n))] *)
-    (* (freer_choicemm _ [q_of d, d] (Ret false)). *)
-    (* rewrite -[flip (p_exs d n) in RHS](choicemm [q_of d, d]). *)
-    (* by rewrite freer_choiceA (s_of_pqK p1) (r_of_pqK p1 d0). *)
-  Admitted.
+set d := psucc%:num.~%:i01.
+have [->/=|d0] := eqVneq d 0%:i01.
+  by rewrite -!freer_flip_choice p_of_0s s_of_0q freer_choice0.
+have [->/=|d1] := eqVneq d 1%:i01.
+  by rewrite -!freer_flip_choice p_of_1s s_of_1q !freer_choice1.
+rewrite -p_exsE.
+have flip_or_true (p q : {prob R}) :
+    @wBisim M bool (Ret true <|| p ||> flip q) (flip [s_of p, q])
+    by rewrite -2!freer_flip_choice freer_choiceA freer_choicemm.
+rewrite -(flip_or_true [p_of d, d] (p_exs d n)).
+have p1 : [p_of d, d] != 1%:i01.
+  by rewrite p_of_rs1 (negbTE d1) andbF.
+rewrite -[X in _ ≈ _ <|| _ ||> X]
+  (freer_choicemm _ [q_of d, d] (flip (p_exs d n))).
+by rewrite freer_choiceA (s_of_pqK p1) (r_of_pqK p1 d0).
+Qed.
 
 End lossy_round_trip.
