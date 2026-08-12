@@ -354,13 +354,10 @@ apply: funext=>a.
 exact: (freer_eq_sound Hlaw (Hfg a)).
 Qed.
 
-HB.about hasWBisim.Build.
-
 #[export]
 HB.instance Definition _ := hasWBisim.Build acto rel_refl rel_sym rel_trans eq_bindmwB eq_bindfwB.
 
 End fm_eq_s.
-Check freer_eq.
 Arguments freer_eq {_ _ _} a b.
 Notation "a === b" := (freer_eq a b).
 End FMwBi.
