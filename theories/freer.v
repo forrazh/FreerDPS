@@ -37,7 +37,7 @@ Local Open Scope monae_scope.
 (* model of the freer monad *)
 Module FreerMonadModel.
 Section freer.
-Inductive freer (F : effect) (A : Type) : Type :=
+Inductive freer (F : effect) (A : Type) :=
 | pure (x : A) : freer F A
 | impure {B} (op : F B) (f : B -> freer F A) : freer F A.
 
@@ -258,10 +258,6 @@ apply: (f_ind (fun X => P X \o (denote _ _ X))) => *;
 - by rewrite denote_ret.
 - by rewrite denote_bind denote_trigger; exact: Hb.
 Qed.
-
-(* NB: trigger (TODO: to be renamed trigger) has type
-   forall {F : effect} {M : freerMonad F}, F ~~> M
-*)
 
 Definition ptrigger {Fx F : effect} `{F -< Fx} {M : freerMonad Fx} : F ~~> M :=
   fun a op => trigger a (inj op).

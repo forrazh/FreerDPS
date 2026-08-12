@@ -43,7 +43,6 @@ Inductive FlipEff {R : realType} : effect :=
 Module FreerFlipDenote.
 Section freer_flip.
 Context {R : realType} {M : freerMonad (@FlipEff R)} {pM : probMonad R}.
-(* Context {Fx: effect} {R : realType} `{@FlipEff R -< Fx} {M : freerMonad Fx} {pM : probMonad R}. *)
 Implicit Type p q r s : {prob R}.
 
 Definition flip p : M bool := ptrigger $ flip_e p.
