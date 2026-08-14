@@ -18,13 +18,13 @@ Module Export PingPongM.
 
 Inductive client_api : effect :=
 | SEND : msg -> client_api unit
-| WAIT : client_api msg.
+| WAIT : client_api (option msg).
 
 Section client_program.
 Context {Fx : effect} `{client_api -< Fx} {M : freerMonad Fx}.
 Definition send : M unit := ptrigger $ SEND Ping.
-Definition wait : M msg := ptrigger WAIT.
-Definition C : M msg :=
+Definition wait : M (option msg) := ptrigger WAIT.
+Definition C : M (option msg) :=
   send >>= fun=> wait.
 End client_program.
 
@@ -32,13 +32,13 @@ End client_program.
 
 Inductive server_api : effect :=
 | RPLY : msg -> server_api unit
-| RECV : server_api msg.
+| RECV : server_api (option msg).
 
 Section server_program.
 Context {Fx : effect} `{server_api -< Fx} {M : freerMonad Fx}.
 Definition reply : M unit := ptrigger $ RPLY Pong.
-Definition recv : M msg := ptrigger RECV.
-Definition S_p : M unit := recv >> reply.
+Definition recv : M (option msg) := ptrigger RECV.
+Definition S_p : M unit := recv >>= fun inc=> if inc is (Some Ping) then reply else skip.
 Fixpoint loop {X : Type} (fuel : nat) (program : M X) : M unit :=
   match fuel with
   | 0%nat => program >> skip
@@ -122,7 +122,10 @@ Inductive c_o_callee (network : N) :
     c_o_callee network (SEND message) result
 | WAIT_O (remaining : packets)
     (received_Pong : clientQ network = Pong :: remaining) :
-    c_o_callee network WAIT Pong.
+    c_o_callee network WAIT (Some Pong)
+| WAIT_NOTHING_O (remaining : packets)
+    (received_Pong : clientQ network = Pong :: remaining) :
+    c_o_callee network WAIT None.
 
 Definition c_contract : contract client_api N :=
   make_contract c_step c_o_caller c_o_callee.
@@ -144,15 +147,15 @@ by move=>[-> _]; exact/O_WAIT/Pong_available.
 Qed.
 
 Lemma c_run
-    (initial_network final_network : N) (message : msg)
+    (initial_network final_network : N) (message : option msg)
     (run : post (c_contract ||> C)
       initial_network message final_network) :
-  message = Pong.
+  message = Some Pong \/ message = None.
 Proof.
 by move: run;
   rewrite th_post_bindA=>-[?[n []]];
   do 2 (rewrite to_hoare_ptrigger_postE /= => [ [?] ];
-    inversion 1; ssubst).
+    inversion 1; ssubst); [left | right].
 Qed.
 
 End client_respectful_and_run_lemmas.
@@ -178,7 +181,8 @@ Inductive s_o_caller (network : N) :
 
 Inductive s_o_callee (network : N) :
     forall X, server_api X -> X -> Prop :=
-| RECV_O (message : msg) : s_o_callee network RECV Ping
+| RECV_O (message : msg) : s_o_callee network RECV (Some Ping)
+| RECV_NOTHING_O (message : msg) : s_o_callee network RECV None
 | RPLY_O (result : unit) (message : msg) :
     s_o_callee network (RPLY message) result.
 
@@ -193,7 +197,9 @@ Local Notation "c ||> p" := (to_hoare (M:=M) c p)
 Lemma s_p_respect (network : N) :
   pre (s_contract ||> S_p) network.
 Proof.
-by apply: th_pre_bindA=>*; rewrite to_hoare_ptrigger_preE /=; constructor.
+by apply: th_pre_bindA=>[| [[]|]*];
+  rewrite ?to_hoare_ptrigger_preE; try constructor;
+  exact: to_hoare_ret_preI.
 Qed.
 
 Lemma s_respect (network : N) fuel :
@@ -202,7 +208,7 @@ Proof.
 move: fuel network;
   elim=> [|n ih] ?;
     (apply: th_pre_bindA=>*; [exact: s_p_respect| ]).
-- exact: to_hoare_skip_preI.
+- exact: to_hoare_ret_preI.
 - exact: ih.
 Qed.
 
@@ -210,37 +216,45 @@ Lemma s_p_run_grows
     (initial_network final_network : N) (result : unit)
     (run : post (s_contract ||> S_p)
       initial_network result final_network) :
-  clientQ final_network = rcons (clientQ initial_network) Pong.
+  clientQ final_network = clientQ initial_network \/ clientQ final_network = rcons (clientQ initial_network) Pong.
 Proof.
 move: run; rewrite th_post_bindA=>[ [? [? [ ]]] ].
-do 2 (rewrite to_hoare_ptrigger_postE /= => [ [?] ];
-  inversion 1; ssubst).
-by rewrite /send_to_client client_does_not_consume_its_send.
+
+by rewrite to_hoare_ptrigger_postE /= => [ [?] ]; inversion 1; ssubst;
+  rewrite ?to_hoare_ptrigger_postE ?to_hoare_ret_postE /= => [ [?] ];
+  inversion 1; ssubst; [right | left];
+  rewrite /send_to_client client_does_not_consume_its_send.
+Qed.
+
+Lemma s_p_run_growth
+    (initial_network final_network : N) (result : unit)
+    (run : post (s_contract ||> S_p)
+      initial_network result final_network) :
+  exists delivered,
+    delivered <= 1 /\
+    size (clientQ final_network) =
+      size (clientQ initial_network) + delivered.
+Proof.
+have [-> | ->] := s_p_run_grows run.
+- by exists 0%nat; split=>//; rewrite addn0.
+- by exists 1%nat; split=> //; rewrite size_rcons addn1.
 Qed.
 
 Lemma s_run
     (initial_network final_network : N) (result : unit) fuel
     (run : post (s_contract ||> S_ fuel)
       initial_network result final_network) :
-  clientQ final_network =
-    clientQ initial_network ++ nseq (fuel.+1) Pong.
+  size (clientQ final_network) <= size (clientQ initial_network) + (fuel.+1).
+  (* size (clientQ final_network) <= size (clientQ initial_network ++ nseq (fuel.+1) Pong). *)
 Proof.
 move: fuel initial_network final_network run;
   elim=> [|n ih] initial_network ?;
-  rewrite th_post_bindA=> -[ [] [net [H_s +]] ].
-- by rewrite to_hoare_skip_postE cats1 /==> -[? <-]; exact: s_p_run_grows H_s.
-by move=> H_loop; rewrite (ih _ _ H_loop) (s_p_run_grows H_s)
-  2!ssr_ext.nseq_S cat_rcons.
-Qed.
-
-Lemma s_run_size
-    (initial_network final_network : N) (result : unit) fuel
-    (run : post (s_contract ||> S_ fuel)
-      initial_network result final_network) :
-  size (clientQ final_network) =
-    size (clientQ initial_network) + fuel.+1.
-Proof.
-by rewrite (s_run run) size_cat size_nseq.
+  rewrite th_post_bindA=> -[ [] [net [Ha ]] ];
+  have [x [Hx Hg]] := s_p_run_growth Ha.
+(* - by rewrite to_hoare_ret_postE cats1 /==> -[? <-]; rewrite Hy size_rcons. *)
+- by rewrite to_hoare_ret_postE /==> -[? <-]; rewrite Hg leq_add.
+by move=> H_loop; have ih' := (ih _ _ H_loop); apply: (leq_trans ih');
+  rewrite Hg !addnS addnAC -addn2 ltn_add2l; exact: Hx.
 Qed.
 
 End server_respectful_and_run_lemmas.
@@ -257,54 +271,75 @@ Import ccm scm.
 Module ProtocolM.
 Section proto_s.
 
-Inductive proto_api : effect := one_round : proto_api msg.
+Inductive proto_api : effect := one_round : proto_api outcome.
 
-Context {ProtoF : effect}
-`{StrictProvide2 ProtoF client_api server_api}
+Context {ProtoF : effect} `{StrictProvide2 ProtoF client_api server_api}
 (* `{client_api -< ProtoF, server_api -< ProtoF} *)
   {M : freerMonad ProtoF}.
-Definition c := c_contract -^- s_contract.
+Definition c : contract ProtoF N := c_contract -^- s_contract.
 
 Local Notation "c ||> p" := (to_hoare (M:=M) c p) (at level 90).
 
 (* Definition proto {outputF : effect} : component outputF ProtoF. *)
 
-Definition protocol : component (M:=M) proto_api ProtoF := fun _ op => match op with
-| one_round => send >> recv >> reply >> wait
-end.
+Definition protocol : component (M:=M) proto_api ProtoF :=
+  fun _ op =>
+    match op with
+    | one_round =>
+        send >> recv  >>= fun incoming =>
+          match incoming with
+          | Some Ping =>  reply >> wait >>= fun incoming =>
+            match incoming with
+            | Some Pong => Ret GotPong
+            | _ => Ret LostPong
+            end
+          | _ => Ret LostPing
+          end
+    end.
 
 Definition protocol_inv (net : N) := serverQ net = [::] /\ clientQ net = [::].
 
 Lemma protocol_respect (net : N) :
   protocol_inv net -> pre (c ||> protocol one_round) net.
 Proof.
-move=> [_ client_empty]; rewrite /protocol !bindA.
-apply: th_pre_bindA=> [|??].
-  exact/to_hoare_shared_contract_left_trigger_preI/O_SEND.
-move/to_hoare_shared_contract_left_trigger_postE=> [-> _].
-apply: th_pre_bindA=> [|??].
-  exact/to_hoare_shared_contract_right_trigger_preI/O_RECV.
-move/to_hoare_shared_contract_right_trigger_postE=> [-> _].
-apply: th_pre_bindA=> [|??].
-  exact/to_hoare_shared_contract_right_trigger_preI/O_RPLY.
-move/to_hoare_shared_contract_right_trigger_postE=> [-> _].
-by apply/to_hoare_shared_contract_left_trigger_preI/O_WAIT;
-   rewrite /= /send_to_client client_does_not_consume_its_send client_empty.
+move=>[s_empty c_empty].
+rewrite /protocol /c !bindA.
+apply/th_pre_bindA=>[|??]; [
+  by apply/to_hoare_shared_contract_left_trigger_preI; constructor
+  | move/to_hoare_shared_contract_left_trigger_postE=>[-> _] /= ].
+
+apply/th_pre_bindA=>[|r?]; [
+  by apply/to_hoare_shared_contract_right_trigger_preI; constructor
+  | move/to_hoare_shared_contract_right_trigger_postE=>[-> _] /=].
+case : r => [[]|]; last by exact: to_hoare_ret_preI.
+
+apply/th_pre_bindA=>[|??]; [
+  by apply/to_hoare_shared_contract_right_trigger_preI; constructor
+  | move/to_hoare_shared_contract_right_trigger_postE=>[-> _] /=].
+
+apply/th_pre_bindA=>[|r?].
+- by apply/to_hoare_shared_contract_left_trigger_preI; apply: O_WAIT;
+    rewrite /send_to_client client_does_not_consume_its_send c_empty.
+- by move/to_hoare_shared_contract_left_trigger_postE=>[-> _];
+    case : r => [[]|];
+      exact: to_hoare_ret_preI.
+exact: to_hoare_ret_preI.
+
 Qed.
 
-Lemma protocol_run_inv (n n' : N) (result : msg) :
+Lemma protocol_run_inv (n n' : N) (result : outcome) :
   protocol_inv n -> post (c |> protocol one_round) n result n' ->
-  result = Pong /\ protocol_inv n'.
+   protocol_inv n'.
 Proof.
 move=> [server_empty client_empty].
-rewrite /protocol !bindA th_post_bindA=> -[send_result [n1 []]].
-move/to_hoare_shared_contract_left_trigger_postE=> [-> _].
-rewrite th_post_bindA.
-move=> [received [n2 [ ]]]=>/to_hoare_shared_contract_right_trigger_postE=> -[-> ].
-rewrite th_post_bindA=> _ [reply_result [n3 [ ]]].
-by move/to_hoare_shared_contract_right_trigger_postE=> [-> _];
-  move/to_hoare_shared_contract_left_trigger_postE=> [-> ] /=;
-  inversion 1; ssubst; rewrite /send_to_server server_empty client_empty.
+rewrite /protocol !bindA /c.
+move/th_post_bindA=>[? [? [/to_hoare_shared_contract_left_trigger_postE [-> ] /=]]]; inversion 1; ssubst.
+move/th_post_bindA=>[? [? [/to_hoare_shared_contract_right_trigger_postE [-> ] /=]]]; inversion 1; ssubst.
+move/th_post_bindA=>[? [? [/to_hoare_shared_contract_right_trigger_postE [-> ] /=]]]; inversion 1; ssubst.
+move/th_post_bindA=>[? [? [/to_hoare_shared_contract_left_trigger_postE [-> ] /=]]]; inversion 1; ssubst.
+all: by rewrite to_hoare_ret_postE=> -[_ <-];
+  rewrite /send_to_client /receive_from_client /receive_from_server /send_to_server
+   ?client_does_not_consume_its_send client_empty server_empty /=.
 Qed.
 
 Lemma proto_correct :
@@ -313,7 +348,7 @@ Lemma proto_correct :
 Proof.
 move=>[] n inv ? [] []; split=>[|m n' Hpost] /=.
   exact: protocol_respect.
-by split=>//; move: (protocol_run_inv inv Hpost)=>[_];exact.
+by split=>//; move: (protocol_run_inv inv Hpost).
 Qed.
 
 End proto_s.

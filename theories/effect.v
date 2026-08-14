@@ -89,6 +89,13 @@ Class StrictProvide2 (Fx F1 F2 : effect)
   *****************************************************************************)
 Notation "F1 ;; F2 -<< Fx" := (StrictProvide2 Fx F1 F2) (at level 50, no associativity): type_scope.
 
+#[global] Hint Mode MayProvide + + : typeclass_instances.
+#[global] Hint Mode Provide + + : typeclass_instances.
+#[global] Hint Mode Distinguish + + + - - :
+  typeclass_instances.
+#[global] Hint Mode StrictProvide2 + + + - - - - :
+  typeclass_instances.
+
 (** * Composing Effects *)
 
 (** We provide the [eplus] operator to compose effects together. That is,
