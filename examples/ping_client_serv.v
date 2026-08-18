@@ -38,7 +38,8 @@ Section server_program.
 Context {Fx : effect} `{server_api -< Fx} {M : freerMonad Fx}.
 Definition reply : M unit := ptrigger $ RPLY Pong.
 Definition recv : M (option msg) := ptrigger RECV.
-Definition S_p : M unit := recv >>= fun inc=> if inc is (Some Ping) then reply else skip.
+Definition S_p : M unit :=
+  recv >>= fun inc=> if inc is Some Ping then reply else skip.
 Fixpoint loop {X : Type} (fuel : nat) (program : M X) : M unit :=
   match fuel with
   | 0%nat => program >> skip
@@ -109,23 +110,23 @@ Definition c_step (network : N) :
     | WAIT => receive_from_server network
     end.
 
-Inductive c_o_caller (network : N) :
-    forall X, client_api X -> Prop :=
-| O_WAIT (remaining : packets)
-    (Pong_available : clientQ network = Pong :: remaining) :
-    c_o_caller network WAIT
-| O_SEND (message : msg) : c_o_caller network (SEND message).
+Definition c_o_caller (network : N) : forall X, client_api X -> Prop :=
+  fun X op =>
+    match op with
+    | SEND _ => True
+    | WAIT => exists remaining, clientQ network = Pong :: remaining
+    end.
 
-Inductive c_o_callee (network : N) :
+Definition c_o_callee (network : N) :
     forall X, client_api X -> X -> Prop :=
-| SEND_O (message : msg) (result : unit) :
-    c_o_callee network (SEND message) result
-| WAIT_O (remaining : packets)
-    (received_Pong : clientQ network = Pong :: remaining) :
-    c_o_callee network WAIT (Some Pong)
-| WAIT_NOTHING_O (remaining : packets)
-    (received_Pong : clientQ network = Pong :: remaining) :
-    c_o_callee network WAIT None.
+  fun X op =>
+    match op in client_api X return X -> Prop with
+    | SEND _ => fun _ => True
+    | WAIT => fun result =>
+        exists remaining,
+          clientQ network = Pong :: remaining /\
+          (result = Some Pong \/ result = None)
+    end.
 
 Definition c_contract : contract client_api N :=
   make_contract c_step c_o_caller c_o_callee.
@@ -141,9 +142,10 @@ Lemma c_respect
     (Pong_available : clientQ network = Pong :: remaining) :
   pre (c_contract ||> C) network.
 Proof.
-apply: th_pre_bindA=>[|? ω']; rewrite to_hoare_ptrigger_preE ?to_hoare_ptrigger_postE.
-- exact: O_SEND.
-by move=>[-> _]; exact/O_WAIT/Pong_available.
+apply: th_pre_bindA=>[|? ω'];
+  rewrite to_hoare_ptrigger_preE ?to_hoare_ptrigger_postE.
+- by [].
+by move=>[-> _]; exists remaining.
 Qed.
 
 Lemma c_run
@@ -152,10 +154,10 @@ Lemma c_run
       initial_network message final_network) :
   message = Some Pong \/ message = None.
 Proof.
-by move: run;
-  rewrite th_post_bindA=>-[?[n []]];
-  do 2 (rewrite to_hoare_ptrigger_postE /= => [ [?] ];
-    inversion 1; ssubst); [left | right].
+move: run; rewrite th_post_bindA=> -[[] [network []]].
+rewrite to_hoare_ptrigger_postE /= => -[-> _].
+rewrite to_hoare_ptrigger_postE /= => -[_].
+by move=> [? [_ result]].
 Qed.
 
 End client_respectful_and_run_lemmas.
@@ -174,17 +176,16 @@ Definition s_step (network : N) :
     | RECV => receive_from_client network
     end.
 
-Inductive s_o_caller (network : N) :
-    forall X, server_api X -> Prop :=
-| O_RECV : s_o_caller network RECV
-| O_RPLY (message : msg) : s_o_caller network (RPLY message).
+Definition s_o_caller (network : N) : forall X, server_api X -> Prop :=
+  fun X op => True.
 
-Inductive s_o_callee (network : N) :
+Definition s_o_callee (network : N) :
     forall X, server_api X -> X -> Prop :=
-| RECV_O (message : msg) : s_o_callee network RECV (Some Ping)
-| RECV_NOTHING_O (message : msg) : s_o_callee network RECV None
-| RPLY_O (result : unit) (message : msg) :
-    s_o_callee network (RPLY message) result.
+  fun X op =>
+    match op in server_api X return X -> Prop with
+    | RECV => fun result => result = Some Ping \/ result = None
+    | RPLY _ => fun _ => True
+    end.
 
 Definition s_contract : contract server_api N :=
   make_contract s_step s_o_caller s_o_callee.
@@ -198,7 +199,7 @@ Lemma s_p_respect (network : N) :
   pre (s_contract ||> S_p) network.
 Proof.
 by apply: th_pre_bindA=>[| [[]|]*];
-  rewrite ?to_hoare_ptrigger_preE; try constructor;
+  rewrite ?to_hoare_ptrigger_preE //;
   exact: to_hoare_ret_preI.
 Qed.
 
@@ -219,11 +220,14 @@ Lemma s_p_run_grows
 clientQ final_network = clientQ initial_network
   \/ clientQ final_network = rcons (clientQ initial_network) Pong.
 Proof.
-move: run; rewrite th_post_bindA=>[ [? [? [ ]]] ].
-by rewrite to_hoare_ptrigger_postE /= => [ [?] ]; inversion 1; ssubst;
-  rewrite ?to_hoare_ptrigger_postE ?to_hoare_ret_postE /= => [ [?] ];
-  inversion 1; ssubst; [right | left];
-  rewrite /send_to_client client_does_not_consume_its_send.
+move: run; rewrite th_post_bindA.
+move=> [incoming [network
+  [/to_hoare_ptrigger_postE [-> incoming_ok] suffix]]].
+move: suffix; case: incoming_ok=> -> /=.
+- rewrite to_hoare_ptrigger_postE /= => -[-> _]; right.
+  by rewrite /send_to_client client_does_not_consume_its_send.
+- rewrite to_hoare_ret_postE /= => -[_ <-]; left.
+  by rewrite client_does_not_consume_its_send.
 Qed.
 
 Lemma s_p_run_growth
@@ -245,7 +249,8 @@ Lemma s_run
     (run : post (s_contract ||> S_ fuel)
       initial_network result final_network) :
   size (clientQ final_network) <= size (clientQ initial_network) + (fuel.+1).
-  (* size (clientQ final_network) <= size (clientQ initial_network ++ nseq (fuel.+1) Pong). *)
+  (* size (clientQ final_network) <=
+     size (clientQ initial_network ++ nseq (fuel.+1) Pong). *)
 Proof.
 move: fuel initial_network final_network run;
   elim=> [|n ih] initial_network ?;
@@ -305,21 +310,21 @@ Proof.
 move=>[s_empty c_empty].
 rewrite /protocol /c !bindA.
 apply/th_pre_bindA=>[|??]; [
-  by apply/to_hoare_shared_contract_left_trigger_preI; constructor
+  by apply/to_hoare_shared_contract_left_trigger_preI
   | move/to_hoare_shared_contract_left_trigger_postE=>[-> _] /= ].
 
 apply/th_pre_bindA=>[|r?]; [
-  by apply/to_hoare_shared_contract_right_trigger_preI; constructor
+  by apply/to_hoare_shared_contract_right_trigger_preI
   | move/to_hoare_shared_contract_right_trigger_postE=>[-> _] /=].
 case : r => [[]|]; last by exact: to_hoare_ret_preI.
 
 apply/th_pre_bindA=>[|??]; [
-  by apply/to_hoare_shared_contract_right_trigger_preI; constructor
+  by apply/to_hoare_shared_contract_right_trigger_preI
   | move/to_hoare_shared_contract_right_trigger_postE=>[-> _] /=].
 
 apply/th_pre_bindA=>[|r?].
-- by apply/to_hoare_shared_contract_left_trigger_preI; apply: O_WAIT;
-    rewrite /send_to_client client_does_not_consume_its_send c_empty.
+- apply/to_hoare_shared_contract_left_trigger_preI; exists [::].
+  by rewrite /send_to_client client_does_not_consume_its_send c_empty.
 - by move/to_hoare_shared_contract_left_trigger_postE=>[-> _];
     case : r => [[]|];
       exact: to_hoare_ret_preI.
@@ -333,13 +338,21 @@ Lemma protocol_run_inv (n n' : N) (result : outcome) :
 Proof.
 move=> [server_empty client_empty].
 rewrite /protocol !bindA /c.
-move/th_post_bindA=>[? [? [/to_hoare_shared_contract_left_trigger_postE [-> ] /=]]]; inversion 1; ssubst.
-move/th_post_bindA=>[? [? [/to_hoare_shared_contract_right_trigger_postE [-> ] /=]]]; inversion 1; ssubst.
-move/th_post_bindA=>[? [? [/to_hoare_shared_contract_right_trigger_postE [-> ] /=]]]; inversion 1; ssubst.
-move/th_post_bindA=>[? [? [/to_hoare_shared_contract_left_trigger_postE [-> ] /=]]]; inversion 1; ssubst.
+move/th_post_bindA=>[[] [?
+  [/to_hoare_shared_contract_left_trigger_postE [-> _] /=]]].
+move/th_post_bindA=>[incoming [?
+  [/to_hoare_shared_contract_right_trigger_postE [-> incoming_ok] /=]]].
+case: incoming_ok=> ->.
+move/th_post_bindA=>[[] [?
+  [/to_hoare_shared_contract_right_trigger_postE [-> _] /=]]].
+move/th_post_bindA=>[wait_result [?
+  [/to_hoare_shared_contract_left_trigger_postE
+    [-> [? [_ incoming_ok]]] /=]]].
+case: incoming_ok=> ->.
 all: by rewrite to_hoare_ret_postE=> -[_ <-];
-  rewrite /send_to_client /receive_from_client /receive_from_server /send_to_server
-   client_empty server_empty ?client_does_not_consume_its_send /=.
+  rewrite /send_to_client /receive_from_client
+    /receive_from_server /send_to_server client_empty server_empty
+    ?client_does_not_consume_its_send /=.
 Qed.
 
 Lemma proto_correct :

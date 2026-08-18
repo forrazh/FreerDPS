@@ -32,17 +32,17 @@ Definition lossy_step q :
     | TRANSMIT _ m => may_append q
     end result.
 
-Inductive lossy_o_caller q :
+Definition lossy_o_caller q :
     forall X, lossy_channel_api R X -> Prop :=
-| O_TRANSMIT psucc m :
-    lossy_o_caller q _ (@TRANSMIT R psucc m).
+  fun X op => True.
 
-Inductive lossy_o_callee q :
+Definition lossy_o_callee q :
     forall X, lossy_channel_api R X -> X -> Prop :=
-| TRANSMIT_SUCCESS psucc m :
-    lossy_o_callee q _ (@TRANSMIT R psucc m) (Some m)
-| TRANSMIT_FAILURE psucc m :
-    lossy_o_callee q _ (@TRANSMIT R psucc m) None.
+  fun X op =>
+    match op in lossy_channel_api _ X return X -> Prop with
+    | TRANSMIT _ message => fun result =>
+        result = Some message \/ result = None
+    end.
 
 Definition lossy_contract : contract (lossy_channel_api R) (seq msg) :=
   make_contract lossy_step lossy_o_caller lossy_o_callee.
@@ -56,7 +56,7 @@ Local Notation "c ||> p" := (to_hoare (M:=M) c p)
 
 Lemma transmit_respect psucc m (q : seq msg) :
   pre (lossy_contract ||> transmit psucc m) q.
-Proof. by rewrite to_hoare_ptrigger_preE; exact: O_TRANSMIT. Qed.
+Proof. by rewrite to_hoare_ptrigger_preE. Qed.
 
 Definition channel_growth q q' : Prop := ((size q) <= size q')%nat.
 
@@ -64,8 +64,10 @@ Definition channel_growth q q' : Prop := ((size q) <= size q')%nat.
 Lemma transmit_run psucc m q r q' :
   post (lossy_contract ||> transmit psucc m) q r q' -> channel_growth q q'.
 Proof.
-by  move/to_hoare_ptrigger_postE=>/= [-> ]; inversion 1; ssubst;
-  rewrite /channel_growth // size_rcons.
+move/to_hoare_ptrigger_postE=> /= [->].
+case=> ->.
+- by rewrite /channel_growth size_rcons.
+- by rewrite /channel_growth.
 Qed.
 
 End lossy_contract.
@@ -89,7 +91,8 @@ Definition lossy_channel :
     | TRANSMIT psucc m => transmitter psucc m
     end.
 
-Lemma to_hoare_ptrigger_bind_postE {F' F} {Ω} `{F -< F'} {M' : freerMonad F'} {c : contract F Ω}
+Lemma to_hoare_ptrigger_bind_postE {F' F} {Ω} `{F -< F'}
+    {M' : freerMonad F'} {c : contract F Ω}
     {A B : Type} (op : F A) (f : A -> M' B)
     (ω : Ω) (y : B) (ω' : Ω) :
   post (to_hoare c (ptrigger op >>= f)) ω y ω' <->
@@ -118,23 +121,22 @@ move=> q_abstract q_concrete growth X [psucc m] caller; split.
   move=> [] q_flip /to_hoare_distinguished_trigger_postE ->;
     last by exact: to_hoare_ret_preI.
   apply: th_pre_bindA=> [| current q_get _].
-  + by rewrite to_hoare_ptrigger_preE; constructor.
+  + by rewrite to_hoare_ptrigger_preE.
   + apply: th_pre_bindA=> [| [] q_put _].
-    * by rewrite to_hoare_ptrigger_preE; constructor.
+    * by rewrite to_hoare_ptrigger_preE.
     * exact: to_hoare_ret_preI.
 - move=> result q_concrete'.
-  rewrite th_post_bindA=> -[success [q_flip [ ]]] /to_hoare_distinguished_trigger_postE=> ->.
+  rewrite th_post_bindA=> -[success [q_flip [ ]]].
+  move/to_hoare_distinguished_trigger_postE=> ->.
   case: success=> /=.
   + rewrite th_post_bindA=> -[current [q_get [+ +]]].
-    rewrite to_hoare_ptrigger_postE=> -[-> ].
-    inversion 1; ssubst.
+    rewrite to_hoare_ptrigger_postE /= => -[-> <-].
     rewrite th_post_bindA=> -[u [q_put [+ +]]].
     rewrite to_hoare_ptrigger_postE=> -[-> _] /to_hoare_ret_postE=> -[<- <-].
-    split; first by exact: TRANSMIT_SUCCESS.
+    split; first by left.
     rewrite /channel_growth !size_rcons.
     exact: growth.
-  + by move/to_hoare_ret_postE=> [<- <-];
-      split=> //; exact: TRANSMIT_FAILURE.
+  + by move/to_hoare_ret_postE=> [<- <-]; split=> //; right.
 Qed.
 
 End lossy_channel.
