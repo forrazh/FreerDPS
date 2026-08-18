@@ -119,32 +119,32 @@ Definition step (ω : Ω) (a : Type) (op : DOORS a) (_ : a) : Ω :=
   if op is Toggle d then tog d ω else ω.
 
 (** *** Requirements / Precondition *)
-Inductive doors_o_caller : Ω -> forall (a : Type), set $ DOORS a :=
-(** - Given the door [d] of o system [ω], it is always possible to ask for the
-      state of [d]. *)
-| req_is_open (d : door) (ω : Ω)
-  : doors_o_caller ω bool (IsOpen d)
-(** - Given the door [d] of o system [ω], if [d] is closed, then the second door
-      [co d] has to be closed too for a trigger to toggle [d] to be valid. *)
-| req_toggle (d : door) (ω : Ω) (H : sel (co d) ω -> sel d ω)
-  : doors_o_caller ω unit (Toggle d).
+Definition doors_o_caller (ω : Ω) : forall a, DOORS a -> Prop :=
+  fun a op =>
+    match op with
+    (** Given the door [d] of a system [ω], it is always possible to ask for
+        the state of [d]. *)
+    | IsOpen _ => True
+    (** If [d] is closed, the second door [co d] has to be closed too for a
+        trigger toggling [d] to be valid. *)
+    | Toggle d => sel (co d) ω -> sel d ω
+    end.
 
 (** *** Promises / PostCondition *)
-Inductive doors_o_callee : Ω -> forall (a : Type), DOORS a -> a -> Prop :=
-(** - When a system in a state [ω] reports the state of the door [d], it shall
-      reflect the true state of [d]. *)
-| doors_o_callee_is_open (d : door) (ω : Ω) (x : bool) (equ : sel d ω = x)
-  : doors_o_callee ω bool (IsOpen d) x
-(** - There is no particular requirement on the result [x] of a trigger for
-      [ω] to close the door [d]. *)
-| doors_o_callee_toggle (d : door) (ω : Ω) (x : unit)
-  : doors_o_callee ω unit (Toggle d) x.
+Definition doors_o_callee (ω : Ω) : forall a, DOORS a -> a -> Prop :=
+  fun a op =>
+    match op in DOORS a return a -> Prop with
+    (** The reported state of [d] shall reflect its true state. *)
+    | IsOpen d => fun opened => sel d ω = opened
+    (** A toggle operation has no meaningful result. *)
+    | Toggle _ => fun _ => True
+    end.
 
 Lemma doors_o_callee_is_openE
     {ω : Ω} {d : door} {opened : bool} :
   doors_o_callee ω bool (IsOpen d) opened ->
   sel d ω = opened.
-Proof. by inversion 1;ssubst. Qed.
+Proof. by []. Qed.
 
 (* doors_c => {{door_caller}} p%step {{door_callee}} *)
 Definition doors_c : contract DOORS Ω :=
@@ -174,23 +174,22 @@ Local Notation "c ||> p" :=
 Lemma close_door_respectful d : pre (doors_c ||> close_door d) = [set: _].
 Proof.
 rewrite /close_door -subTset=> hω _; apply: th_pre_bindA.
-  by rewrite to_hoare_ptrigger_preE; exact: req_is_open.
+  by rewrite to_hoare_ptrigger_preE.
 case=> ?;
   rewrite to_hoare_when_preE // to_hoare_ptrigger_postE
     => -[ /[swap] ]=>/doors_o_callee_is_openE ? -> .
-by rewrite to_hoare_ptrigger_preE; exact: req_toggle.
+by rewrite to_hoare_ptrigger_preE.
 Qed.
 
 Lemma open_door_respectful (ω : Ω) d (safe : ~~ sel (co d) ω) :
   pre (doors_c ||> open_door d) ω.
 Proof.
 rewrite /open_door; apply: th_pre_bindA.
-  by rewrite to_hoare_ptrigger_preE; exact: req_is_open.
+  by rewrite to_hoare_ptrigger_preE.
 case=> ?;
   rewrite to_hoare_when_preE // to_hoare_ptrigger_postE
     => -[ /[swap] ]=>/doors_o_callee_is_openE ? ->.
-rewrite /= to_hoare_ptrigger_preE;
-  apply: req_toggle=>//.
+rewrite /= to_hoare_ptrigger_preE.
 by move: safe=> /[swap] ->.
 Qed.
 
@@ -225,8 +224,7 @@ apply: (one_door_safe_all_doors_safe _ d).
 move: safe=> /one_door_safe_all_doors_safe /(_ d).
 case=> [d_closed | ?]; right; rewrite tog_equ_2 //.
 apply/negP=> co_open; move/negP: d_closed=> d_closed.
-by inversion caller as [|?? Hsafe]; subst;
-  move: co_open Hsafe d_closed=> -> ->.
+by move: caller=> /(_ co_open) d_open; exact: d_closed d_open.
 Qed.
 
 Lemma doors_handler_preserves_safe {a : Type} (op : Fx a) :
