@@ -6,6 +6,7 @@
 
 (** * Utils Functions *)
 From monae Require Import hierarchy.
+From mathcomp Require Import boolp.
 
 Global Close Scope nat_scope.
 Global Open Scope monae_scope.
@@ -17,12 +18,11 @@ Notation "f $ x" := (f x) (at level 60, right associativity, only parsing).
 (** * Tactics *)
 
 (* WARNING: Move this import to its MathComp counterpart. *)
-From Stdlib Require Import Eqdep.
 
 Ltac ssubst :=
   lazymatch goal with
 | [ H : existT _ _ _ = existT _ _ _ |- _ ]
-  => apply Eqdep.EqdepTheory.inj_pair2 in H; ssubst
+  => apply existT_inj2 in H; ssubst
 | [ |- _] => subst
 end.
 
