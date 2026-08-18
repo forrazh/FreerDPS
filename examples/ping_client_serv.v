@@ -213,13 +213,13 @@ move: fuel network;
 Qed.
 
 Lemma s_p_run_grows
-    (initial_network final_network : N) (result : unit)
-    (run : post (s_contract ||> S_p)
-      initial_network result final_network) :
-  clientQ final_network = clientQ initial_network \/ clientQ final_network = rcons (clientQ initial_network) Pong.
+  (initial_network final_network : N) (result : unit)
+  (run : post (s_contract ||> S_p)
+    initial_network result final_network) :
+clientQ final_network = clientQ initial_network
+  \/ clientQ final_network = rcons (clientQ initial_network) Pong.
 Proof.
 move: run; rewrite th_post_bindA=>[ [? [? [ ]]] ].
-
 by rewrite to_hoare_ptrigger_postE /= => [ [?] ]; inversion 1; ssubst;
   rewrite ?to_hoare_ptrigger_postE ?to_hoare_ret_postE /= => [ [?] ];
   inversion 1; ssubst; [right | left];
@@ -339,7 +339,7 @@ move/th_post_bindA=>[? [? [/to_hoare_shared_contract_right_trigger_postE [-> ] /
 move/th_post_bindA=>[? [? [/to_hoare_shared_contract_left_trigger_postE [-> ] /=]]]; inversion 1; ssubst.
 all: by rewrite to_hoare_ret_postE=> -[_ <-];
   rewrite /send_to_client /receive_from_client /receive_from_server /send_to_server
-   ?client_does_not_consume_its_send client_empty server_empty /=.
+   client_empty server_empty ?client_does_not_consume_its_send /=.
 Qed.
 
 Lemma proto_correct :
