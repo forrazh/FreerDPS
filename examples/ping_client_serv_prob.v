@@ -91,52 +91,51 @@ Definition lossy_channel :
     | TRANSMIT psucc m => transmitter psucc m
     end.
 
-Lemma to_hoare_ptrigger_bind_postE {F' F} {Ω} `{F -< F'}
-    {M' : freerMonad F'} {c : contract F Ω}
-    {A B : Type} (op : F A) (f : A -> M' B)
-    (ω : Ω) (y : B) (ω' : Ω) :
-  post (to_hoare c (ptrigger op >>= f)) ω y ω' <->
-  exists x,
-    callee_obligation c ω op x /\
-    post (to_hoare c (f x))
-      (witness_update c ω op x) y ω'.
+Lemma channel_pre psucc m q :
+  pre ((store_specs (seq msg)) |> (lossy_channel _ (@TRANSMIT R psucc m))) q.
 Proof.
-rewrite th_post_bindA.
-split.
-- move=> [x [ω''
-      [/to_hoare_ptrigger_postE [-> obligation] suffix]]].
-  by exists x.
-- move=> [x [obligation suffix]].
-  exists x, (witness_update c ω op x); split=> //.
-  by apply/to_hoare_ptrigger_postE.
+apply: th_pre_bindA;
+  first by exact: to_hoare_distinguished_trigger_preI.
+move=> [] q_flip /to_hoare_distinguished_trigger_postE ->;
+    last by exact: to_hoare_ret_preI.
+by do 2 (apply: th_pre_bindA=>*;
+  first by rewrite to_hoare_ptrigger_preE);
+  exact: to_hoare_ret_preI.
 Qed.
 
-(* TODO: check me, this thing is fully AI-gen'd right now. *)
-Theorem controller_correct
-  : correct_component lossy_channel (M := M)
+Lemma channel_post psucc m q_abstract q_concrete result q_concrete' :
+  channel_growth q_abstract q_concrete ->
+  post (store_specs (seq msg) |> transmitter psucc m)
+    q_concrete result q_concrete' ->
+  (result = Some m \/ result = None) /\
+  channel_growth (may_append q_abstract result) q_concrete'.
+Proof.
+move=> growth.
+rewrite th_post_bindA=> -[success [?[ ]]].
+rewrite to_hoare_distinguished_trigger_postE=> ->.
+case: success;
+  (* Message dropped *)
+  last by move/to_hoare_ret_postE=> [<- <-];
+    split=> //; right.
+(* Message passed *)
+(* Can the following lemmas be simplified somehow ? *)
+rewrite th_post_bindA=> -[? [? [+ +]]];
+  rewrite to_hoare_ptrigger_postE /= => -[-> <-];
+  rewrite th_post_bindA=> -[? [? [+ +]]];
+  rewrite to_hoare_ptrigger_postE=> -[-> _];
+  rewrite to_hoare_ret_postE=> -[<- <-].
+split; first by left.
+rewrite /channel_growth !size_rcons.
+exact: growth.
+Qed.
+
+Theorem channel_correct :
+  correct_component lossy_channel (M := M)
     lossy_contract (store_specs (seq msg)) channel_growth.
 Proof.
-move=> q_abstract q_concrete growth X [psucc m] caller; split.
-- apply: th_pre_bindA; first by exact: to_hoare_distinguished_trigger_preI.
-  move=> [] q_flip /to_hoare_distinguished_trigger_postE ->;
-    last by exact: to_hoare_ret_preI.
-  apply: th_pre_bindA=> [| current q_get _].
-  + by rewrite to_hoare_ptrigger_preE.
-  + apply: th_pre_bindA=> [| [] q_put _].
-    * by rewrite to_hoare_ptrigger_preE.
-    * exact: to_hoare_ret_preI.
-- move=> result q_concrete'.
-  rewrite th_post_bindA=> -[success [q_flip [ ]]].
-  move/to_hoare_distinguished_trigger_postE=> ->.
-  case: success=> /=.
-  + rewrite th_post_bindA=> -[current [q_get [+ +]]].
-    rewrite to_hoare_ptrigger_postE /= => -[-> <-].
-    rewrite th_post_bindA=> -[u [q_put [+ +]]].
-    rewrite to_hoare_ptrigger_postE=> -[-> _] /to_hoare_ret_postE=> -[<- <-].
-    split; first by left.
-    rewrite /channel_growth !size_rcons.
-    exact: growth.
-  + by move/to_hoare_ret_postE=> [<- <-]; split=> //; right.
+move=> q_abstract q_concrete growth X [psucc m] _; split=>[|?? run].
+- exact: channel_pre.
+- exact/channel_post/run/growth.
 Qed.
 
 End lossy_channel.

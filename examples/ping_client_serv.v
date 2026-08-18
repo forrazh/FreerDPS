@@ -221,13 +221,11 @@ clientQ final_network = clientQ initial_network
   \/ clientQ final_network = rcons (clientQ initial_network) Pong.
 Proof.
 move: run; rewrite th_post_bindA.
-move=> [incoming [network
-  [/to_hoare_ptrigger_postE [-> incoming_ok] suffix]]].
-move: suffix; case: incoming_ok=> -> /=.
-- rewrite to_hoare_ptrigger_postE /= => -[-> _]; right.
-  by rewrite /send_to_client client_does_not_consume_its_send.
-- rewrite to_hoare_ret_postE /= => -[_ <-]; left.
-  by rewrite client_does_not_consume_its_send.
+by move=> [incoming [network []]];
+  rewrite to_hoare_ptrigger_postE=> -[-> []] ->;
+  rewrite ?to_hoare_ptrigger_postE ?to_hoare_ret_postE;
+    [ move=>[-> _] /=; right | move=>[_ <-]; left ];
+  rewrite client_does_not_consume_its_send.
 Qed.
 
 Lemma s_p_run_growth
@@ -241,7 +239,7 @@ Lemma s_p_run_growth
 Proof.
 have [-> | ->] := s_p_run_grows run.
 - by exists 0%nat; split=>//; rewrite addn0.
-- by exists 1%nat; split=> //; rewrite size_rcons addn1.
+- by exists 1%nat; split=>//; rewrite size_rcons addn1.
 Qed.
 
 Lemma s_run
@@ -257,7 +255,7 @@ move: fuel initial_network final_network run;
   rewrite th_post_bindA=> -[ [] [net [Ha ]] ];
   have [x [Hx Hg]] := s_p_run_growth Ha.
 (* - by rewrite to_hoare_ret_postE cats1 /==> -[? <-]; rewrite Hy size_rcons. *)
-- by rewrite to_hoare_ret_postE /==> -[? <-]; rewrite Hg leq_add.
+- by rewrite to_hoare_ret_postE=> -[? <-]; rewrite Hg leq_add.
 by move=> H_loop; have ih' := (ih _ _ H_loop); apply: (leq_trans ih');
   rewrite Hg !addnS addnAC -addn2 ltn_add2l; exact: Hx.
 Qed.
@@ -308,28 +306,26 @@ Lemma protocol_respect (net : N) :
   protocol_inv net -> pre (c ||> protocol one_round) net.
 Proof.
 move=>[s_empty c_empty].
-rewrite /protocol /c !bindA.
-apply/th_pre_bindA=>[|??]; [
-  by apply/to_hoare_shared_contract_left_trigger_preI
-  | move/to_hoare_shared_contract_left_trigger_postE=>[-> _] /= ].
+rewrite /protocol !bindA.
+apply/th_pre_bindA=>[|??];
+  first by apply/to_hoare_shared_contract_left_trigger_preI.
 
-apply/th_pre_bindA=>[|r?]; [
-  by apply/to_hoare_shared_contract_right_trigger_preI
-  | move/to_hoare_shared_contract_right_trigger_postE=>[-> _] /=].
-case : r => [[]|]; last by exact: to_hoare_ret_preI.
+move/to_hoare_shared_contract_left_trigger_postE=>[-> _].
+apply/th_pre_bindA=>[|r?];
+  first by apply/to_hoare_shared_contract_right_trigger_preI.
 
-apply/th_pre_bindA=>[|??]; [
-  by apply/to_hoare_shared_contract_right_trigger_preI
-  | move/to_hoare_shared_contract_right_trigger_postE=>[-> _] /=].
+move/to_hoare_shared_contract_right_trigger_postE=>[-> _].
+case : r => [[]|]; try exact: to_hoare_ret_preI.
+
+apply/th_pre_bindA=>[|??];
+  first by apply/to_hoare_shared_contract_right_trigger_preI.
+move/to_hoare_shared_contract_right_trigger_postE=>[-> _].
 
 apply/th_pre_bindA=>[|r?].
-- apply/to_hoare_shared_contract_left_trigger_preI; exists [::].
-  by rewrite /send_to_client client_does_not_consume_its_send c_empty.
+apply/to_hoare_shared_contract_left_trigger_preI; exists [::].
+- by rewrite /= client_does_not_consume_its_send c_empty.
 - by move/to_hoare_shared_contract_left_trigger_postE=>[-> _];
-    case : r => [[]|];
-      exact: to_hoare_ret_preI.
-exact: to_hoare_ret_preI.
-
+      case : r => [[]|]; exact: to_hoare_ret_preI.
 Qed.
 
 Lemma protocol_run_inv (n n' : N) (result : outcome) :
@@ -337,22 +333,19 @@ Lemma protocol_run_inv (n n' : N) (result : outcome) :
    protocol_inv n'.
 Proof.
 move=> [server_empty client_empty].
-rewrite /protocol !bindA /c.
-move/th_post_bindA=>[[] [?
-  [/to_hoare_shared_contract_left_trigger_postE [-> _] /=]]].
-move/th_post_bindA=>[incoming [?
-  [/to_hoare_shared_contract_right_trigger_postE [-> incoming_ok] /=]]].
+rewrite /protocol !bindA th_post_bindA=> -[[] [? []]].
+rewrite to_hoare_shared_contract_left_trigger_postE=> -[-> _].
+move/th_post_bindA=>[incoming [? []]].
+rewrite to_hoare_shared_contract_right_trigger_postE=> -[-> incoming_ok].
+case: incoming_ok=> -> //=.
+move/th_post_bindA=>[[] [? []]] /=;
+rewrite to_hoare_shared_contract_right_trigger_postE=> -[-> _];
+move/th_post_bindA=>[wait_result [? []]];
+rewrite to_hoare_shared_contract_left_trigger_postE=> -[-> [? [_ incoming_ok]]] /=;
 case: incoming_ok=> ->.
-move/th_post_bindA=>[[] [?
-  [/to_hoare_shared_contract_right_trigger_postE [-> _] /=]]].
-move/th_post_bindA=>[wait_result [?
-  [/to_hoare_shared_contract_left_trigger_postE
-    [-> [? [_ incoming_ok]]] /=]]].
-case: incoming_ok=> ->.
-all: by rewrite to_hoare_ret_postE=> -[_ <-];
-  rewrite /send_to_client /receive_from_client
-    /receive_from_server /send_to_server client_empty server_empty
-    ?client_does_not_consume_its_send /=.
+all: by rewrite to_hoare_ret_postE=> -[_ <-] /=;
+  rewrite /send_to_server client_empty server_empty
+    ?client_does_not_consume_its_send.
 Qed.
 
 Lemma proto_correct :
