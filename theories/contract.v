@@ -59,13 +59,13 @@ Arguments callee_obligation [F Ω] (c ω) [α] (_ _).
 Definition const_witness {F : effect} :=
   fun (u : unit) (α : Type) (e : F α) (x : α) => u.
 
-Inductive no_caller_obligation {F : effect} {Ω : Type}
+Definition no_caller_obligation {F : effect} {Ω : Type}
     (ω : Ω) (α : Type) (e : F α) : Prop :=
-| mk_no_caller_obligation : no_caller_obligation ω α e.
+  True.
 
-Inductive no_callee_obligation {F : effect} {Ω : Type}
+Definition no_callee_obligation {F : effect} {Ω : Type}
     (ω : Ω) (α : Type) (e : F α) (x : α) : Prop :=
-| mk_no_callee_obligation : no_callee_obligation ω α e x.
+  True.
 
 Definition no_contract (F : effect) : contract F unit :=
   {| witness_update := const_witness
@@ -306,9 +306,13 @@ Definition store_update (s : Type) :=
     obligations about the result of [Put] (which belongs to [unit] anyway, so
     there is not much to tell). *)
 
-Inductive o_callee_store (s : Type) (x : s) : forall (α : Type), STORE s α -> α -> Prop :=
-| get_o_callee (x' : s) (equ : x = x') : o_callee_store s x s Get x'
-| put_o_callee (x' : s) (u : unit) : o_callee_store s x unit (Put x') u.
+Definition o_callee_store (s : Type) (x : s) :
+    forall α, STORE s α -> α -> Prop :=
+  fun α op =>
+    match op in STORE _ α return α -> Prop with
+    | Get => fun x' => x = x'
+    | Put _ => fun _ => True
+    end.
 
 (** The actual contract can therefore be defined as follows: *)
 

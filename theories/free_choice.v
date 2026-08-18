@@ -33,7 +33,6 @@ Local Open Scope reals_ext_scope.
 
 Reserved Notation "x <|| p ||> y"
   (at level 40, left associativity, y at next level).
-Reserved Notation "a === b" (at level 70).
 Reserved Notation "a ≊ b" (at level 70).
 
 
@@ -203,53 +202,7 @@ Lemma cbindDl : forall A B p (a b : M A) (f : A -> M B),
 Proof. by move=>*; exact/law_can_bisim/rchoice_bindDl. Qed.
 
 #[export]
-HB.instance Definition _ := isMonadFreerChoiceEqReas.Build R M c1 cC cmm cA cbindDl.
-
-(*Lemma rchoice_bindDl_trans (A B : UU0) (p : {prob R}) (a b : M A)
-    (f : A -> M B) (c : M B) :
-    ((a >>= f) <|| p ||> (b >>= f)) === c ->
-    ((a <|| p ||> b) >>= f) === c.
-Proof. exact/equiv_trans/rchoice_bindDl. Qed.
-
-Lemma rchoice_bindDl_choice_congr (A B : UU0) (p : {prob R}) (a b : M A)
-    (f : A -> M B) (a' b' : M B) :
-  (a >>= f) === a' ->
-  (b >>= f) === b' ->
-  ((a <|| p ||> b) >>= f) === (a' <|| p ||> b').
-Proof.
-move=>??; apply/rchoice_bindDl_trans/equiv_bind_congr.
-  exact: equiv_refl.
-by case.
-Qed.
-
-Lemma equiv_bind_congr_trans (A B : UU0) (a b : M A) (f g : A -> M B)
-    (c : M B) :
-  a === b ->
-  (forall x, (f x) === (g x)) ->
-  (b >>= g) === c ->
-  (a >>= f) === c.
-Proof.
-by move=> ? ?; exact/equiv_trans/equiv_bind_congr.
-Qed.
-
-(* 6th step : Equiv correct *)
-Lemma equiv_correct (X : UU0) (m1 m2 : M X) : @choice_rel X m1 m2 ->
-  denote pM denote_flip_effect X m1 = denote pM denote_flip_effect X m2.
-Proof.
-elim => [*|*|*|*|*|*|????->|?????->?->|*] //=;
-  last first; rewrite ?denote_bind.
-- rewrite bindA; congr bind.
-  by apply/funext;
-    case; rewrite !compE denote_bind.
-- by congr bind; [| apply/funext].
-all: rewrite ?denote_choiceA_leftE ?denote_choiceA_rightE ?denote_trigger
-  !denote_flip_effect_inj_pE !choice_bindDl !bindretf.
-- exact: choiceA.
-- exact: choicemm.
-- exact: choiceC.
-- exact: choice1.
-Qed. *)
-
+HB.instance Definition _ := isMonadFreerChoiceEqReas.Build
+  R M c1 cC cmm cA cbindDl.
 End rel_s.
-(* Notation "a === b" := (@choice_rel _ _ a b). *)
 End RelModel.
