@@ -78,8 +78,7 @@ Class Distinguish (Fx F E : effect) `{Hp: F -< Fx, Hmp : E -<? Fx} : Prop :=
 Class StrictProvide2 (Fx F1 F2 : effect)
   `{p1: F1 -< Fx} `{p2: F2 -< Fx}
   `{! Distinguish Fx F1 F2} `{! Distinguish Fx F2 F1}
-  : Type
-.
+  : Type.
 
 (******************************************************************************
   * Sadly, this can't be used to declare StrictProvide right now because      *
@@ -88,6 +87,13 @@ Class StrictProvide2 (Fx F1 F2 : effect)
   * TODO: Investigate why.                                                    *
   *****************************************************************************)
 Notation "F1 ;; F2 -<< Fx" := (StrictProvide2 Fx F1 F2) (at level 50, no associativity): type_scope.
+
+#[global] Hint Mode MayProvide + + : typeclass_instances.
+#[global] Hint Mode Provide + + : typeclass_instances.
+#[global] Hint Mode Distinguish + + + - - :
+  typeclass_instances.
+#[global] Hint Mode StrictProvide2 + + + - - - - :
+  typeclass_instances.
 
 (** * Composing Effects *)
 

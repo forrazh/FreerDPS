@@ -291,12 +291,14 @@ Lemma to_hoare_trigger_postE
   end.
 Proof. by rewrite to_hoare_triggerE hoc_eff_postE. Qed.
 
-Lemma to_hoare_skip_preI (ω : Ω) :
-  pre (c |> (skip : M unit)) ω.
+Lemma to_hoare_ret_preI {A : Type} (x : A) (ω : Ω) :
+  pre (c |> (Ret x : M A)) ω.
 Proof. by rewrite /to_hoare denote_ret. Qed.
 
-Lemma to_hoare_skip_postE (ω : Ω) x ω' :
-  post (c |> (skip : M unit)) ω x ω' <-> post (Ret tt) ω x ω'.
+Lemma to_hoare_ret_postE {A : Type}
+    (value result : A) (ω ω' : Ω) :
+  post (c |> (Ret value : M A)) ω result ω' <->
+  value = result /\ ω = ω'.
 Proof. by rewrite /to_hoare denote_ret. Qed.
 
 Section BindFacts.
@@ -332,7 +334,7 @@ Lemma to_hoare_when_preE (ω : Ω) :
 Proof.
 by case: guard=> /=;
   [rewrite to_hoare_bindE; split=> [[ ] | ] //|];
-  split=> // *; exact: to_hoare_skip_preI.
+  split=> // *; exact: to_hoare_ret_preI.
 Qed.
 
 Lemma to_hoare_when_postE (ω : Ω) (x : unit) (ω' : Ω) :
@@ -396,8 +398,7 @@ Local Notation "c ||> p" := (to_hoare (M:=M) c p)
 Lemma to_hoare_distinguished_trigger_preI (ω : Ω) :
   pre (c ||> ptrigger op) ω.
 Proof.
-by rewrite to_hoare_triggerE /hoare_of_contract /gen_caller_obligation
-  (@injK_None Fx G F).
+by rewrite to_hoare_triggerE /hoare_of_contract /gen_caller_obligation injK_None.
 Qed.
 
 Lemma to_hoare_distinguished_trigger_postE (ω : Ω) (x : A) (ω' : Ω) :
@@ -405,11 +406,64 @@ Lemma to_hoare_distinguished_trigger_postE (ω : Ω) (x : A) (ω' : Ω) :
   ω' = ω.
 Proof.
 by rewrite to_hoare_triggerE /=
-  /gen_witness_update /gen_callee_obligation
-  (@injK_None Fx G F);
+  /gen_witness_update /gen_callee_obligation injK_None;
    split=> [[-> _] | ->].
 Qed.
 End ToHoareDistinguishSection.
+
+(** ** Shared Contract Trigger Views *)
+Section ToHoareSharedContractSection.
+Context {F G H : effect} `{StrictProvide2 H F G}
+    {M : freerMonad H} (Ω : Type) (ci : contract F Ω)
+    (cj : contract G Ω).
+
+Lemma to_hoare_shared_contract_left_trigger_preI
+    {A : Type} (op : F A) (ω : Ω) :
+  caller_obligation ci ω op ->
+  pre (to_hoare (M:=M)
+    (sharedcontractprod (Fx:=H) ci cj) (ptrigger (Fx:=H) op)) ω.
+Proof.
+by rewrite to_hoare_triggerE /hoare_of_contract /sharedcontractprod
+  /gen_caller_obligation /= injK_None injK_Some.
+Qed.
+
+Lemma to_hoare_shared_contract_right_trigger_preI
+    {A : Type} (op : G A) (ω : Ω) :
+  caller_obligation cj ω op ->
+  pre (to_hoare (M:=M)
+    (sharedcontractprod (Fx:=H) ci cj) (ptrigger (Fx:=H) op)) ω.
+Proof.
+by rewrite to_hoare_triggerE /hoare_of_contract /sharedcontractprod
+  /gen_caller_obligation /= injK_None injK_Some.
+Qed.
+
+Lemma to_hoare_shared_contract_left_trigger_postE
+    {A : Type} (op : F A)
+    (ω : Ω) (x : A) (ω' : Ω) :
+  post (to_hoare (M:=M)
+    (sharedcontractprod (Fx:=H) ci cj) (ptrigger (Fx:=H) op)) ω x ω' <->
+  ω' = witness_update ci ω op x /\
+  callee_obligation ci ω op x.
+Proof.
+by rewrite to_hoare_triggerE /hoare_of_contract /gen_witness_update
+  /sharedcontractprod /gen_callee_obligation /= injK_Some injK_None;
+  tauto.
+Qed.
+
+Lemma to_hoare_shared_contract_right_trigger_postE
+    {A : Type} (op : G A)
+    (ω : Ω) (x : A) (ω' : Ω) :
+  post (to_hoare (M:=M)
+    (sharedcontractprod (Fx:=H) ci cj) (ptrigger (Fx:=H) op)) ω x ω' <->
+  ω' = witness_update cj ω op x /\
+  callee_obligation cj ω op x.
+Proof.
+by rewrite to_hoare_triggerE /hoare_of_contract /gen_witness_update
+  /sharedcontractprod /gen_callee_obligation /= injK_None injK_Some;
+  tauto.
+Qed.
+
+End ToHoareSharedContractSection.
 
 Global Opaque gen_caller_obligation gen_witness_update gen_callee_obligation.
 Global Opaque hoare_of_contract.
