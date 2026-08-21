@@ -5,7 +5,7 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 From HB Require Import structures.
-From mathcomp Require Import ssreflect ssrfun boolp classical_sets.
+From mathcomp Require Import ssreflect ssrfun seq boolp classical_sets.
 From monae Require Import hierarchy.
 From FreerDPS Require Import mathcomp_extra init effect freer contract.
 
@@ -283,7 +283,7 @@ End WhenFacts.
 
 End GenericToHoareSection.
 Section SharedBindHelpers.
-Context {Fx F G : effect} `{StrictProvide2 Fx F G}
+Context {Fx F G : effect} `{[:: F; G] -<< Fx}
     {W : Type} (ci : contract F W) (cj : contract G W)
     {M : freerMonad Fx}.
 
@@ -329,62 +329,3 @@ Lemma to_hoare_preserves_invariant {Fx F : effect} `{F -<? Fx}
     preserves_invariant invariant (hoare_of_contract c op)) (A : UU0) (p : M A) :
   preserves_invariant invariant (c |> p).
 Proof. exact: denote_preserves_invariant. Qed.
-
-(** ** Trigger Views *)
-
-Section contract_trigger_helpers.
-Context {Fx F : effect} `{F -< Fx} {M : freerMonad Fx}
-    (Ω : Type) (c : contract F Ω) {A : Type}.
-
-Lemma to_hoare_ptrigger_preE (op : F A) (ω : Ω) :
-  pre (to_hoare (M:=M) c (ptrigger op)) ω <->
-  caller_obligation c ω op.
-Proof. by rewrite to_hoare_triggerE /= provided_callerP. Qed.
-
-Lemma to_hoare_ptrigger_postE (op : F A) (ω : Ω) (a : A) (ω' : Ω) :
-  post (to_hoare (M:=M) c (ptrigger op))
-    ω a ω' <->
-  ω' = witness_update c ω op a /\
-  callee_obligation c ω op a.
-Proof. by rewrite to_hoare_triggerE /= provided_calleeP. Qed.
-
-End contract_trigger_helpers.
-
-(** ** Shared Contract Trigger Views *)
-
-Section ToHoareSharedContractSection.
-Context {F G H : effect} `{StrictProvide2 H F G}
-    {M : freerMonad H} (Ω : Type) (ci : contract F Ω)
-    (cj : contract G Ω).
-
-Lemma to_hoare_shared_contract_left_trigger_preI
-    {A : Type} (op : F A) (ω : Ω) :
-  caller_obligation ci ω op ->
-  pre (to_hoare (M:=M)
-    (sharedcontractprod (Fx:=H) ci cj) (ptrigger (Fx:=H) op)) ω.
-Proof. by rewrite to_hoare_triggerE /= shared_left_callerP. Qed.
-
-Lemma to_hoare_shared_contract_right_trigger_preI
-    {A : Type} (op : G A) (ω : Ω) :
-  caller_obligation cj ω op ->
-  pre (to_hoare (M:=M)
-    (sharedcontractprod (Fx:=H) ci cj) (ptrigger (Fx:=H) op)) ω.
-Proof. by rewrite to_hoare_triggerE /= shared_right_callerP. Qed.
-
-Lemma to_hoare_shared_contract_left_trigger_postE
-    {A : Type} (op : F A) (ω : Ω) (x : A) (ω' : Ω) :
-  post (to_hoare (M:=M)
-    (sharedcontractprod (Fx:=H) ci cj) (ptrigger (Fx:=H) op)) ω x ω' <->
-  ω' = witness_update ci ω op x /\
-  callee_obligation ci ω op x.
-Proof. by rewrite to_hoare_triggerE /= shared_left_calleeP. Qed.
-
-Lemma to_hoare_shared_contract_right_trigger_postE
-    {A : Type} (op : G A) (ω : Ω) (x : A) (ω' : Ω) :
-  post (to_hoare (M:=M)
-    (sharedcontractprod (Fx:=H) ci cj) (ptrigger (Fx:=H) op)) ω x ω' <->
-  ω' = witness_update cj ω op x /\
-  callee_obligation cj ω op x.
-Proof. by rewrite to_hoare_triggerE /= shared_right_calleeP. Qed.
-
-End ToHoareSharedContractSection.

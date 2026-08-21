@@ -94,11 +94,11 @@ Definition tog d (ω : Ω) : Ω :=
   | right => (fst ω, ~~ (snd ω))
   end.
 
-Lemma tog_equ_1 d (ω : Ω) :
+Lemma tog_equ_1 (d : door) (ω : Ω) :
   sel d (tog d ω) = ~~ sel d ω.
 Proof. by case: d. Qed.
 
-Lemma tog_equ_2 d (ω : Ω) :
+Lemma tog_equ_2 (d : door) (ω : Ω) :
   sel (co d) (tog d ω) = sel (co d) ω.
 Proof. by case: d. Qed.
 
@@ -149,7 +149,7 @@ Definition doors_c : contract DOORS Ω :=
 
 Local Open Scope classical_set_scope.
 
-Remark one_door_safe_all_doors_safe (ω : Ω) d
+Remark one_door_safe_all_doors_safe (ω : Ω) (d : door)
     (safe : ~~ sel d ω \/ ~~ sel (co d) ω) :
   forall d', ~~ sel d' ω \/ ~~ sel (co d') ω.
 Proof.
@@ -171,7 +171,8 @@ Proof.
 rewrite /close_door -subTset=> hω _; apply: pre_to_hoare_bind.
   by rewrite to_hoare_triggerE /= provided_callerP.
 case=> w'; rewrite pre_to_hoare_whenP // !to_hoare_triggerE.
-by case=> ->; apply: provided_bind_caller=> /=.
+case=> ->.
+by apply: provided_bind_caller=> /=.
 Qed.
 
 Lemma open_door_respectful (ω : Ω) d (safe : ~~ sel (co d) ω) :
@@ -180,7 +181,8 @@ Proof.
 rewrite /open_door; apply: pre_to_hoare_bind.
   by rewrite to_hoare_triggerE /= provided_callerP.
 case=> w'; rewrite pre_to_hoare_whenP // !to_hoare_triggerE.
-by case=> ->; apply: provided_bind_caller; move: safe=> /= /negPf ->.
+case=> ->.
+by apply: provided_bind_caller; move: safe=> /= /negPf ->.
 Qed.
 
 Lemma close_door_run (ω : Ω) d (ω' : Ω) (x : unit)
@@ -188,10 +190,10 @@ Lemma close_door_run (ω : Ω) d (ω' : Ω) (x : unit)
   ~~ sel d ω'.
 Proof.
 move: run; rewrite /close_door post_to_hoare_bindP.
-move=> [opened [w] []].
-rewrite post_to_hoare_whenP !to_hoare_triggerE /= provided_calleeP=> -[->].
-case: opened=> /= [| /[swap] -> ->] // door_open [[]].
-rewrite provided_calleeP /= => -[-> _].
+move=> [opened [witness] []].
+rewrite post_to_hoare_whenP !to_hoare_triggerE /= provided_calleeP /==>-[-> ].
+case: opened=>/= [|/[swap]-> ->] // door_open [[]].
+rewrite provided_calleeP /= =>-[->_].
 by rewrite tog_equ_1 door_open.
 Qed.
 
@@ -249,36 +251,36 @@ Lemma respectful_run_inv {A : Type} (p : M A)
     (hpre : pre (doors_c |> p) ω)
     (hpost : post (doors_c |> p) ω a ω') :
   doors_safe ω'.
-Proof. by move: hpre hpost safe; exact: doors_run_preserves_safe. Qed.
+Proof.
+by move: hpre hpost safe; exact: doors_run_preserves_safe.
+Qed.
 End InvariantRunLemmas.
 
 (** ** Main Theorem *)
 Section controller_s.
-Context {Fx : effect} `{StrictProvide2 Fx DOORS (STORE nat)}
-  {M : inductiveFreerMonad Fx}.
+Context {Fx : effect} `{[:: DOORS; STORE nat] -<< Fx}
+    {M : inductiveFreerMonad Fx}.
 
 Lemma controller_pre {α : Type} (op : CONTROLLER α) (ω : Ω) :
   pre (doors_c |> controller (M := M) α op) ω.
 Proof.
 case: op=> [| d].
-- (* Tick *) apply: pre_to_hoare_bind=>[|cpt w].
-  + by rewrite to_hoare_triggerE;
-      exact: (distinguished_caller (F := DOORS) (G := STORE nat)).
+- (* Tick *) apply: pre_to_hoare_bind.
+  + by rewrite to_hoare_triggerE; exact: distinguished_caller.
+  + move=> cpt witness'.
     rewrite !to_hoare_triggerE.
-    move/(distinguished_callee (F := DOORS) (G := STORE nat))=> ->.
+    move/distinguished_callee=> ->.
     rewrite pre_to_hoare_whenP;
       case: (15 <? cpt)%nat=> //=;
       apply: pre_to_hoare_bind=>[| *].
     * by apply: pre_to_hoare_bind=> [| *];
         rewrite close_door_respectful.
-    * by rewrite to_hoare_triggerE;
-        exact: (distinguished_caller (F := DOORS) (G := STORE nat)).
+    * by rewrite to_hoare_triggerE; exact: distinguished_caller.
 - (* Trigger Open *) apply: pre_to_hoare_bind=> [| *].
   + apply: pre_to_hoare_bind=> [| ?? close_post].
     * by rewrite close_door_respectful.
     * exact/open_door_respectful/close_door_run/close_post.
-  + by rewrite to_hoare_triggerE;
-      exact: (distinguished_caller (F := DOORS) (G := STORE nat)).
+  + by rewrite to_hoare_triggerE; exact: distinguished_caller.
 Qed.
 
 Theorem controller_correct :

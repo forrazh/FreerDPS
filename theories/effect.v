@@ -22,7 +22,7 @@
 (* References: Kiselyov, FreeSpec *)
 (******************************************************************************)
 
-From mathcomp Require Import ssreflect ssrfun.
+From mathcomp Require Import ssreflect ssrfun seq.
 From monae Require Import hierarchy.
 
 Local Open Scope monae_scope.
@@ -75,25 +75,107 @@ Instance default_MayProvide (F E : effect) : (E -<? F) |1000 :=
 Class Distinguish (Fx F E : effect) `{Hp: F -< Fx, Hmp : E -<? Fx} : Prop :=
   { injK_None : forall {A} (e: F A), Hmp.(prj) (Hp.(inj) e) = None }.
 
-Class StrictProvide2 (Fx F1 F2 : effect)
-  `{p1: F1 -< Fx} `{p2: F2 -< Fx}
-  `{! Distinguish Fx F1 F2} `{! Distinguish Fx F2 F1}
-  : Type.
+(** [EMember F Fs] records a position occupied by [F] in [Fs]. *)
+(* Not using the mathcomp version to avoid relying on a too strict eqType *)
+(* Based on ExtLib's Data/Member.v *)
+Inductive EMember (F: effect) : seq effect -> Type :=
+| EM0 Fs : EMember F (F :: Fs)
+| EMNext G Fs :
+    EMember F Fs -> EMember F (G :: Fs).
 
-(******************************************************************************
-  * Sadly, this can't be used to declare StrictProvide right now because      *
-  * for an unknown reason, this notation does not create the instances for    *
-  * prov/dist by itself.                                                      *
-  * TODO: Investigate why.                                                    *
-  *****************************************************************************)
-Notation "F1 ;; F2 -<< Fx" := (StrictProvide2 Fx F1 F2) (at level 50, no associativity): type_scope.
+Arguments EM0 {F Fs}.
+Arguments EMNext {F G Fs} EMemberF.
+Existing Class EMember.
+#[global] Existing Instance EM0.
+
+#[global] Instance effect_EMember_next_instance
+    (F G : effect) (Fs : seq effect) `{EMember F Fs} :
+    EMember F (G :: Fs) | 10 :=
+  EMNext H.
+
+(** [HEMember EMemberF EMemberG] records that [EMemberF] identifies a
+    position strictly before the position identified by [EMemberG]. *)
+(* Based on Chlipala's heterogenous lists  *)
+Inductive HEMember :
+    forall F G Fs, EMember F Fs -> EMember G Fs -> Type :=
+| EMB0 F G Fs (EMemberG : EMember G Fs) :
+    HEMember F G (F :: Fs) EM0
+      (EMNext EMemberG)
+| EMBNext F G E Fs
+    (EMemberF : EMember F Fs) (EMemberG : EMember G Fs) :
+    HEMember F G Fs EMemberF EMemberG ->
+    HEMember F G (E :: Fs) (EMNext EMemberF)
+      (EMNext EMemberG).
+
+Arguments EMB0 {F G Fs} EMemberG.
+Arguments EMBNext {F G E Fs EMemberF EMemberG} beforeFG.
+Existing Class HEMember.
+#[global] Existing Instance EMB0.
+#[global] Existing Instance EMBNext.
+
+(** [StrictProvide Fx Fs] provides every effect in [Fs] and, for every pair
+    of positions, distinguishes the effects in both directions.  Both
+    properties use the same [Provide] witnesses. *)
+Class StrictProvide (Fx : effect) (Fs : seq effect) : Type :=
+  { strict_EMember_provide :
+      forall F, EMember F Fs -> F -< Fx;
+    strict_EMembers_distinguish :
+      forall F G (EMemberF : EMember F Fs)
+        (EMemberG : EMember G Fs),
+        HEMember F G Fs EMemberF EMemberG ->
+        @Distinguish Fx F G
+            (strict_EMember_provide F EMemberF)
+            (@may_prov Fx G (strict_EMember_provide G EMemberG)) /\
+          @Distinguish Fx G F
+            (strict_EMember_provide G EMemberG)
+            (@may_prov Fx F (strict_EMember_provide F EMemberF)) }.
+
+Arguments strict_EMember_provide {Fx Fs} StrictProvide F EMemberF.
+Arguments strict_EMembers_distinguish {Fx Fs}
+  StrictProvide F G EMemberF EMemberG beforeFG.
+
+#[global] Instance strict_EMember_provide_instance
+    (Fx F : effect) (Fs : seq effect)
+    `{strictFs : StrictProvide Fx Fs}
+    `{EMemberF : EMember F Fs} : F -< Fx | 100 :=
+  strict_EMember_provide strictFs F EMemberF.
+
+#[global] Instance strict_EMembers_distinguish_before_instance
+    (Fx F G : effect) (Fs : seq effect)
+    `{strictFs : StrictProvide Fx Fs}
+    `{EMemberF : EMember F Fs}
+    `{EMemberG : EMember G Fs}
+    `{beforeFG : @HEMember F G Fs EMemberF EMemberG} :
+    @Distinguish Fx F G
+      (strict_EMember_provide strictFs F EMemberF)
+      (@may_prov Fx G
+        (strict_EMember_provide strictFs G EMemberG)) | 100 :=
+  proj1 (strict_EMembers_distinguish strictFs F G
+    EMemberF EMemberG beforeFG).
+
+#[global] Instance strict_EMembers_distinguish_after_instance
+    (Fx F G : effect) (Fs : seq effect)
+    `{strictFs : StrictProvide Fx Fs}
+    `{EMemberF : EMember F Fs}
+    `{EMemberG : EMember G Fs}
+    `{beforeGF : @HEMember G F Fs EMemberG EMemberF} :
+    @Distinguish Fx F G
+      (strict_EMember_provide strictFs F EMemberF)
+      (@may_prov Fx G
+        (strict_EMember_provide strictFs G EMemberG)) | 100 :=
+  proj2 (strict_EMembers_distinguish strictFs G F
+    EMemberG EMemberF beforeGF).
+
+Notation "Fs -<< Fx" := (StrictProvide Fx Fs)
+  (at level 50, no associativity) : type_scope.
 
 #[global] Hint Mode MayProvide + + : typeclass_instances.
 #[global] Hint Mode Provide + + : typeclass_instances.
 #[global] Hint Mode Distinguish + + + - - :
   typeclass_instances.
-#[global] Hint Mode StrictProvide2 + + + - - - - :
-  typeclass_instances.
+#[global] Hint Mode EMember + + : typeclass_instances.
+#[global] Hint Mode HEMember + + + + + : typeclass_instances.
+#[global] Hint Mode StrictProvide + - : typeclass_instances.
 
 (** * Composing Effects *)
 
@@ -117,8 +199,8 @@ Infix "+" := eplus : effect_scope.
 (** For [eplus] to be used seamlessly as a concrete effect composite, we
     provide the necessary instances for the [MayProvide], [Provide] and
     [Distinguish] type classes. Note that these instances always prefer the
-    left operand of [eplus]. For instance, considering a situation where
-    there is an instance for [F -< Fx] and an instance for [F -< Ex],
+    left operand of [eplus]. For instance, considering a situation w0
+    t0 is an instance for [F -< Fx] and an instance for [F -< Ex],
     the instance of [F -< (Fx + Ex)] will rely on [Fx].
 
     The main use case for [eplus] is to locally provide an additional
@@ -236,7 +318,7 @@ Next Obligation. by move=> */=. Qed.
 Inductive eempty : effect := .
 
 (** Another example of general-purpose effect we can define is the [STORE s]
-    effect, where [s] is a type for a state, and [STORE s] allows for
+    effect, w0 [s] is a type for a state, and [STORE s] allows for
     manipulating a global, mutable variable of type [s] within an impure
     computation. *)
 
@@ -262,7 +344,6 @@ Arguments Put [s] (x).
     Impure computations are likely to use more than one effect, but the
     [freer] monad takes only one argument.  We introduce [eplus] (denoted by
     [<+>] or [⊕]) to compose effects together.  An impure computation
-    parameterized by [F ⊕ E] can therefore leverage the primitives of both [F]
+    parameterized by [F ⊕ E] can t0fore leverage the primitives of both [F]
     and [E]. *)
-
 

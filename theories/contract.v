@@ -10,7 +10,7 @@
     be used, and what to expect the result computed by “correct” operational
     semantics (according to a certain definition of “correct”). *)
 
-From mathcomp Require Import ssreflect.
+From mathcomp Require Import ssreflect seq.
 From FreerDPS Require Import effect freer.
 From HB Require Import structures.
 #[local]
@@ -254,7 +254,7 @@ Infix "-*-" := contractprod (at level 20) : contract_scope .
     witness state among its two operands. *)
 
 Definition sharedcontractprod {Fx F E : effect}
-    `{StrictProvide2 Fx F E}
+    `{[:: F; E] -<< Fx}
     {Ω : Type} (ci : contract F Ω) (cj : contract E Ω)
   : contract Fx Ω :=
   {|
@@ -435,7 +435,7 @@ End contract_distinguish_helpers.
 
 
 Section shared_contract_helpers.
-Context {Fx F G : effect} `{StrictProvide2 Fx F G}
+Context {Fx F G : effect} `{[:: F; G] -<< Fx}
     {W X : Type} (ci : contract F W) (cj : contract G W)
     (w w' : W) (x : X).
 
@@ -448,7 +448,7 @@ split.
 - by case=> + _; rewrite provided_callerP.
 - move=> caller; split.
   + rewrite provided_callerP; exact: caller.
-  + by rewrite /gen_caller_obligation (@injK_None Fx F G).
+  + exact: distinguished_caller.
 Qed.
 
 Lemma shared_right_callerP (op : G X) :
@@ -459,7 +459,7 @@ Proof.
 split.
 - by case=> _; rewrite provided_callerP.
 - move=> caller; split.
-  + by rewrite /gen_caller_obligation (@injK_None Fx G F).
+  + exact: distinguished_caller.
   + rewrite provided_callerP; exact: caller.
 Qed.
 
@@ -474,7 +474,7 @@ Lemma shared_left_calleeP (op : F X) :
 Proof.
 rewrite /gen_witness_update /gen_callee_obligation /=.
 rewrite /sharedcontractprod /= /gen_callee_obligation.
-rewrite (@injK_Some Fx F) (@injK_None Fx F G).
+rewrite injK_Some injK_None.
 by tauto.
 Qed.
 
@@ -489,7 +489,7 @@ Lemma shared_right_calleeP (op : G X) :
 Proof.
 rewrite /gen_witness_update /gen_callee_obligation /=.
 rewrite /sharedcontractprod /= /gen_callee_obligation.
-rewrite (@injK_None Fx G F) (@injK_Some Fx G).
+rewrite injK_None injK_Some.
 by tauto.
 Qed.
 End shared_contract_helpers.
