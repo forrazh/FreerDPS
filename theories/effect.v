@@ -78,8 +78,7 @@ Class Distinguish (Fx F E : effect) `{Hp: F -< Fx, Hmp : E -<? Fx} : Prop :=
 Class StrictProvide2 (Fx F1 F2 : effect)
   `{p1: F1 -< Fx} `{p2: F2 -< Fx}
   `{! Distinguish Fx F1 F2} `{! Distinguish Fx F2 F1}
-  : Type
-.
+  : Type.
 
 (******************************************************************************
   * Sadly, this can't be used to declare StrictProvide right now because      *

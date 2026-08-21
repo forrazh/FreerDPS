@@ -37,7 +37,7 @@ End about_freer_flip_monad.
 
 Section lossy_round_trip.
 Context {R : realType} {Fx : effect}
-  `{flip_provided : @FlipEff R -< Fx}
+  `{flip_provided : eempty -< Fx}
   {M : choiceEqFreerMonad R Fx flip_provided}.
 Local Notation "x <|| p ||> y" :=
   (@freer_choice R Fx flip_provided M p _ x y).

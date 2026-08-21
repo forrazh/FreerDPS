@@ -13,7 +13,6 @@ Close Scope nat_scope.
 (** * Specifying the Ping-Pong Protocol *)
 
 Module Export PingPongM.
-(** ** Messages *)
 (** ** Client *)
 
 Inductive client_api : effect :=
@@ -51,23 +50,35 @@ End PingPongM.
 
 Module NetworkChannelMod.
 
-Definition packets := seq msg.
+Record packet := mk_p {
+  m : msg;
+  can_still_be_dropped: bool
+}.
+
+Implicit Type p : packet.
+
+Definition new_packet_non_drop (m : msg) := mk_p m false.
+Notation "!- m" := (new_packet_non_drop m) (at level 1).
+Definition new_packet_may_drop (m : msg) := mk_p m true.
+Notation "?- m" := (new_packet_may_drop m) (at level 1).
+
+Definition packets := seq packet.
 
 Record N := mk_chan {
   serverQ : packets;
   clientQ : packets;
 }.
 
-Definition enqueue (message : msg) (queue : packets) :=
-  rcons queue message.
+Definition enqueue p (queue : packets) :=
+  rcons queue p.
 
-Definition send_to_server (message : msg) (network : N) :=
-  {| serverQ := enqueue message (serverQ network);
+Definition send_to_server p (network : N) :=
+  {| serverQ := enqueue p (serverQ network);
      clientQ := clientQ network |}.
 
-Definition send_to_client (message : msg) (network : N) :=
+Definition send_to_client p (network : N) :=
   {| serverQ := serverQ network;
-     clientQ := enqueue message (clientQ network) |}.
+     clientQ := enqueue p (clientQ network) |}.
 
 Definition receive_from_server (network : N) :=
   match clientQ network with
@@ -93,6 +104,47 @@ Lemma client_does_not_consume_its_send network :
   clientQ (receive_from_client network) = clientQ network.
 Proof. by rewrite /receive_from_client; case: (serverQ network). Qed.
 
+Definition deliver p := match p with
+| mk_p m _ => !-m
+end.
+Notation "!!- x" := (deliver x) (at level 1).
+
+
+Fixpoint drop_last (ps : packets) (keep:bool) := match ps with
+| [::] => [::]
+| [::x] => if keep then [:: !!-x] else [::]
+| [:: h & pps] => [::h & drop_last pps keep]
+end.
+
+Lemma drop_last_rcons ps p keep :
+  drop_last (rcons ps p) keep =
+    if keep then rcons ps (deliver p) else ps.
+Proof.
+elim: ps keep=> [|first_packet ps ih] keep; first by case: keep.
+rewrite rcons_cons.
+have rconsE :
+    rcons ps p = head p ps :: behead (rcons ps p) :=
+  headI ps p.
+have drop_last_cons x y tail keep' :
+    drop_last (x :: y :: tail) keep' =
+      x :: drop_last (y :: tail) keep'.
+  by [].
+rewrite rconsE drop_last_cons -rconsE ih.
+by case: keep.
+Qed.
+
+Definition drop_from_serv (n : N)(keep : bool) := match n with
+| mk_chan srvQ cliQ => {|serverQ:= drop_last srvQ keep; clientQ:= cliQ|}
+end.
+
+Definition drop_from_cli (n : N) (keep : bool) := match n with
+| mk_chan srvQ cliQ => {|serverQ:= srvQ; clientQ:= drop_last cliQ keep|}
+end.
+
+Definition drop_new_packet (n : N) (keep: bool) (q: bool) :=
+if q then drop_from_serv n keep
+else drop_from_cli n keep.
+
 End NetworkChannelMod.
 
 Import NetworkChannelMod.
@@ -106,7 +158,7 @@ Definition c_step (network : N) :
     forall X, client_api X -> X -> N :=
   fun X operation result =>
     match operation with
-    | SEND message => send_to_server message network
+    | SEND p => send_to_server ?-p network
     | WAIT => receive_from_server network
     end.
 
@@ -114,7 +166,7 @@ Definition c_o_caller (network : N) : forall X, client_api X -> Prop :=
   fun X op =>
     match op with
     | SEND _ => True
-    | WAIT => exists remaining, clientQ network = Pong :: remaining
+    | WAIT => exists remaining, clientQ network = ?-Pong :: remaining
     end.
 
 Definition c_o_callee (network : N) :
@@ -124,7 +176,7 @@ Definition c_o_callee (network : N) :
     | SEND _ => fun _ => True
     | WAIT => fun result =>
         exists remaining,
-          clientQ network = Pong :: remaining /\
+          clientQ network = ?-Pong :: remaining /\
           (result = Some Pong \/ result = None)
     end.
 
@@ -139,7 +191,7 @@ Local Notation "c ||> p" := (to_hoare (M:=M) c p)
 
 Lemma c_respect
     (network : N) (remaining : packets)
-    (Pong_available : clientQ network = Pong :: remaining) :
+    (Pong_available : clientQ network = ?-Pong :: remaining) :
   pre (c_contract ||> C) network.
 Proof.
 apply: th_pre_bindA=>[|? ω'];
@@ -149,10 +201,10 @@ by move=>[-> _]; exists remaining.
 Qed.
 
 Lemma c_run
-    (initial_network final_network : N) (message : option msg)
+    (initial_network final_network : N) (p : option msg)
     (run : post (c_contract ||> C)
-      initial_network message final_network) :
-  message = Some Pong \/ message = None.
+      initial_network p final_network) :
+  p = Some Pong \/ p = None.
 Proof.
 move: run; rewrite th_post_bindA=> -[[] [network []]].
 rewrite to_hoare_ptrigger_postE /= => -[-> _].
@@ -172,7 +224,7 @@ Definition s_step (network : N) :
     forall X, server_api X -> X -> N :=
   fun X operation result =>
     match operation with
-    | RPLY message => send_to_client message network
+    | RPLY p => send_to_client ?-p network
     | RECV => receive_from_client network
     end.
 
@@ -207,7 +259,7 @@ Lemma s_respect (network : N) fuel :
   pre (s_contract ||> S_ fuel) network.
 Proof.
 move: fuel network;
-  elim=> [|n ih] ?;
+  elim=> [|n ih] net;
     (apply: th_pre_bindA=>*; [exact: s_p_respect| ]).
 - exact: to_hoare_ret_preI.
 - exact: ih.
@@ -218,7 +270,7 @@ Lemma s_p_run_grows
   (run : post (s_contract ||> S_p)
     initial_network result final_network) :
 clientQ final_network = clientQ initial_network
-  \/ clientQ final_network = rcons (clientQ initial_network) Pong.
+  \/ clientQ final_network = rcons (clientQ initial_network) ?-Pong.
 Proof.
 move: run; rewrite th_post_bindA.
 by move=> [incoming [network []]];
@@ -247,8 +299,6 @@ Lemma s_run
     (run : post (s_contract ||> S_ fuel)
       initial_network result final_network) :
   size (clientQ final_network) <= size (clientQ initial_network) + (fuel.+1).
-  (* size (clientQ final_network) <=
-     size (clientQ initial_network ++ nseq (fuel.+1) Pong). *)
 Proof.
 move: fuel initial_network final_network run;
   elim=> [|n ih] initial_network ?;
@@ -267,9 +317,9 @@ Import ccm scm.
 
 
 (** * Protocol Description :
-       +---+  == send Ping ==>  +---+  == deliver Ping ==>  +---+
-       | C |                    | N |                        | S |
-       +---+  <== get Pong ==   +---+  <== reply Pong =====  +---+
+       +---+  == send Ping ==>  +---+  == delvr Ping ==>  +---+
+       | C |                    | N |                     | S |
+       +---+  <== get Pong ==   +---+  <== reply Pong ==  +---+
 *)
 Module ProtocolM.
 Section proto_s.

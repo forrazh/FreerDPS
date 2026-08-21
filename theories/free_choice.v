@@ -187,10 +187,10 @@ End fliphandler_construction.
 
 (** The equational structure is generalized in the same way as the syntax.
     Existing exact-effect uses specialize [Fx] to [FlipEff]. *)
-HB.mixin Record isMonadFreerChoiceEqReas
-    (R : realType) (Fx : effect)
+(* HB.mixin Record isMonadFreerChoiceEqReas *)
+    (* (R : realType) (Fx : effect)
     `{@FlipEff R -< Fx} (M : UU0 -> UU0)
-    of MonadFreerEqReas Fx M := {
+    of MonadFreer Fx M & WBisim M := {
   freer_choice1 : forall (A : UU0) (a b : M A),
     (a <|| 1%:i01 : {prob R} ||> b) ≈ a;
   freer_choiceC : forall (A : UU0) (p : {prob R}) (a b : M A),
@@ -257,7 +257,8 @@ Notation M := (freer Fx).
 Local Notation "x <|| p ||> y" :=
   (@freer_choice R Fx H_flip _ p _ x y).
 
-Inductive choice_rel :
+
+(* Variant choice_rel :
     forall [X : UU0], M X -> M X -> Prop :=
 | rchoice1 : forall [A : UU0] (a b : M A),
     (a <|| 1%:i01 ||> b) ≊ a
@@ -274,10 +275,31 @@ Inductive choice_rel :
       ((a >>= f) <|| p ||> (b >>= f))
 where "a ≊ b" := (@choice_rel _ a b).
 
-Print FreerLawRelation.
-Local Notation "a === b" := (@freer_eq _ choice_rel _ a b).
+Lemma rel_refl [A : UU0] (x : M A) :
+  x ≊ x.
+Proof.
+  elim : x=> //=.
+   constructor. *)
+
+
+Local Notation "a === b" := (@freer_eq _ _ a b).
+Require Import Eqdep.
+Ltac ssubst :=
+  lazymatch goal with
+  | H : existT _ _ _ = existT _ _ _ |- _ =>
+      apply Eqdep.EqdepTheory.inj_pair2 in H;
+      ssubst
+  | _ =>
+      subst
+  end.
+
+(* Goal forall A (a b : M A), a ≊ b -> a === b.
+move=> A a b.
+case=>[B a' b'||||].
+elim: a'=>//=. *)
+
 Lemma c1 A (a b : M A) : (a <|| 1%:i01 ||> b) === a.
-Proof. exact/law_can_bisim/rchoice1. Qed.
+Proof . apply: rchoice1. Qed.
 
 Lemma cC A p (a b : M A) :
   (a <|| p ||> b) === (b <|| p%:num.~%:i01 ||> a).
@@ -303,4 +325,4 @@ HB.instance Definition _ :=
 
 End rel_s.
 End RelModel.
-
+ *)

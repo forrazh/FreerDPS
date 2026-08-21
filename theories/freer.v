@@ -271,12 +271,14 @@ Definition iput {S} {Fx : effect} `{STORE S -< Fx} {M : freerMonad Fx} (s : S)
     : M unit :=
   ptrigger (Put s).
 
-Definition FreerLawRelation (F : effect) {M : freerMonad F} := forall A, M A -> M A -> Prop.
-
-Definition law_sound [F : effect] [M : freerMonad F] (law : FreerLawRelation) (N : monad) (h : F ~~> N) :=
-  forall A (m n : M A),
-    law A m n ->
-    denote N h A m = denote N h A n.
+Definition freer_rel (F : effect) {M : freerMonad F} :=
+  forall A, M A -> M A -> Prop.
+(*
+Definition law_sound [F : effect] [M : freerMonad F]
+  (r : freer_rel) (N : monad) (h : F ~~> N) :=
+forall A (m n : M A),
+  r A m n ->
+  denote N h A m = denote N h A n. *)
 
 Module FMwBi.
 Section fm_eq_s.
@@ -284,43 +286,63 @@ Section fm_eq_s.
 Import FreerMonadModel.
 Variable F : effect.
 Notation acto := (@freer F).
-Variable law : @FreerLawRelation F acto.
+Variable r : @freer_rel F acto.
 
-Inductive freer_eq [A : UU0] : acto A -> acto A -> Prop  :=
-| law_eq (m n : acto A) : (forall N h, @law_sound F acto law N h -> denote N h A m = denote N h A n) -> m === n
+Inductive freer_eq [A : UU0] : acto A -> acto A -> Prop :=
+| pure_eq x :
+    pure _ x === pure _ x
+| impure_eq B (op : F B) (f g : B -> acto A) :
+    (forall x, f x === g x) ->
+    impure op f === impure op g
 where "a === b" := (freer_eq a b).
 
-Lemma den_imp [N : monad] [A B : UU0] (h : F ~~> N) op f : denote N h A (impure op f) = h B op >>= (fun x => denote N h A (f x)).
+Lemma den_imp [N : monad] [A B : UU0] (h : F ~~> N) op f :
+  denote N h A (impure op f) = h B op >>= (fun x => denote N h A (f x)).
 Proof. by []. Qed.
-Lemma freer_eq_sound N h :
-  law_sound law h ->
+(* Lemma freer_eq_sound N h :
+  law_sound r h ->
   forall A m n,
     freer_eq m n ->
     denote N h A m = denote N h A n.
 Proof.
-by move=> + A m n [??]=> /[swap] /[apply] ->.
-Qed.
+move=> rh A m n mn.
+apply: rh.
+by case: mn. *)
+(* . /[apply].
 
+ h + r.
+by move=> + A m n [??]=> /[swap] /[apply] ->.
+Qed. *)
+(* Qed. *)
 Lemma rel_refl [A : UU0] (x : acto A) :
   x === x.
-Proof. exact: law_eq. Qed.
+Proof. by elim: x=> [| B op f]/=; constructor. Qed.
 
 Lemma rel_sym [A : UU0] (x y : acto A) :
   x === y -> y === x.
-Proof.
-move=> xy.
-apply: law_eq=> N h law_h.
-by have -> := (freer_eq_sound law_h xy).
-Qed.
+Proof. by elim; constructor. Qed.
+
+Require Import Eqdep.
+Ltac ssubst :=
+  lazymatch goal with
+  | H : existT _ _ _ = existT _ _ _ |- _ =>
+      apply Eqdep.EqdepTheory.inj_pair2 in H;
+      ssubst
+  | _ =>
+      subst
+  end.
 
 Lemma rel_trans [A : UU0] (x y z : acto A) :
   x === y ->
   y === z ->
   x === z.
 Proof.
-move=> xy yz.
-apply: law_eq=> N h law_h.
-exact: eq_trans (freer_eq_sound law_h xy) (freer_eq_sound law_h yz).
+move: x z.
+elim: y=>[a | B op f ih] x z xy xz;
+   inversion xy; subst;
+   inversion xz; ssubst.
+- exact: pure_eq.
+- by apply: impure_eq=> b; exact: (ih b).
 Qed.
 
 Add Parametric Relation {A : UU0} : (acto A) (@freer_eq A)
@@ -332,44 +354,37 @@ Hint Extern 0 (freer_eq _ _) => setoid_reflexivity : core.
 
 Lemma eq_bindmwB [A B : UU0] (f : A -> acto B) (d1 d2 : acto A) :
   d1 === d2 -> (d1 >>= f) === (d2 >>= f).
-Proof. move=>xy.
-apply: law_eq=> N h Hlaw.
-rewrite 2!denote_bind; congr bind.
-exact: (freer_eq_sound Hlaw xy).
-Qed.
+Proof. by elim=>// C op g g' Hgg ih; exact/impure_eq/ih. Qed.
 
 Lemma eq_bindfwB
     [A B : UU0] (f g : A -> acto B) (d : acto A) :
   (forall a, (f a) === (g a)) ->
   (d >>= f) === (d >>= g).
-Proof.
-move=>Hfg.
-apply: law_eq=> N h Hlaw.
-rewrite 2!denote_bind 2!compE; congr bind.
-apply: funext=>a.
-exact: (freer_eq_sound Hlaw (Hfg a)).
-Qed.
+Proof. by move=>*; elim: d=> //c op h ih; exact/impure_eq/ih. Qed.
 
 #[export]
 HB.instance Definition _ := hasWBisim.Build acto rel_refl rel_sym rel_trans eq_bindmwB eq_bindfwB.
 
 End fm_eq_s.
-Arguments freer_eq {_ _ _} a b.
+Arguments freer_eq {_ _} a b.
 Notation "a === b" := (freer_eq a b).
 End FMwBi.
 HB.export FMwBi.
 
-HB.mixin Record isMonadFreerEqReas (F : effect) (M : UU0 -> UU0) of MonadFreer F M & hasWBisim M := {
-  law : FreerLawRelation;
+
+(* HB.mixin Record isMonadFreerEqReas (F : effect) (M : UU0 -> UU0)
+  of MonadFreer F M & hasWBisim M := {
+  law : freer_rel;
   law_can_bisim : forall A (x y : M A), law A x y -> x ≈ y ;
-  bisim_denotes : forall A cm h (x y : M A), law_sound law h -> x ≈ y -> denote cm h A x = denote cm h A y ;
-}.
+  (* bisim_denotes : forall A cm h (x y : M A), law_sound law h -> x ≈ y ->
+    denote cm h A x = denote cm h A y ; *)
+}. *)
 
-#[short(type=eqFreerMonad)]
+(* #[short(type=eqFreerMonad)]
 HB.structure Definition MonadFreerEqReas (F : effect) :=
-  {M of isMonadFreerEqReas F M &}.
+  {M of isMonadFreerEqReas F M &}. *)
 
-Section setoid_eqFreerMonad.
+(* Section setoid_eqFreerMonad.
 Variables (F : effect) (M : eqFreerMonad F).
 
 #[global] Add Parametric Relation A : (M A) (@wBisim M A)
@@ -389,7 +404,7 @@ apply: wBisim_trans.
 - exact: (bindfwB _ _ _ _ y fg).
 Qed.
 
-End setoid_eqFreerMonad.
+End setoid_eqFreerMonad. *)
 
 Module FMEq.
 Section fm_sec.
@@ -397,23 +412,23 @@ Section fm_sec.
 Import FreerMonadModel.
 Variable F : effect.
 Notation acto := (@freer F).
-Variable law : @FreerLawRelation F acto.
+Variable law : @freer_rel F acto.
 
 Notation "a === b" := (@freer_eq F law _ a b).
 
-Lemma law_feq : forall A (x y : acto A), law x y -> x === y.
+(* Lemma law_feq : forall A (x y : acto A), law x y -> x === y.
 Proof.
 by move=>*; apply: law_eq=>??; apply.
-Qed.
+Qed. *)
 
-Lemma feq_den : forall A cm h (x y : acto A),
+(* Lemma feq_den  A cm h (x y : acto A) :
   law_sound law h -> x === y -> denote cm h A x = denote cm h A y.
 Proof.
-by move=> A cm h x y Hlaw [m n]; apply.
-Qed.
+by move=> Hlaw [m n]; apply.
+Qed. *)
 
-#[export]
-HB.instance Definition _ := isMonadFreerEqReas.Build F acto law_feq feq_den.
+(* #[export]
+HB.instance Definition _ := isMonadFreerEqReas.Build F acto law_feq. *)
 
 End fm_sec.
 End FMEq.

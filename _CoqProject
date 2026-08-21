@@ -18,6 +18,4 @@
 ./examples/airlock.v
 ./examples/ping_common.v
 ./examples/ping_prob.v
-./examples/ping_freer_prob.v
 ./examples/ping_client_serv.v
-./examples/ping_client_serv_prob.v
