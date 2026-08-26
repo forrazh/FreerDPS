@@ -9,12 +9,20 @@ Local Open Scope monae_scope.
 Local Open Scope proba_scope.
 Local Open Scope reals_ext_scope.
 Local Open Scope ring_scope.
+<<<<<<< HEAD
 Import ChoiceRelation.
 
 Section about_freer_flip_monad.
 Context {R : realType} {Fx: effect}
   `{@FlipEff R -< Fx} {M : choiceEqFreerMonad Fx R _}.
 
+=======
+(* Local Open Scope freer_flip_scope. *)
+Import ChoiceRelation.
+
+Section about_freer_flip_monad.
+Context {R : realType} {Fx: effect} `{@FlipEff R -< Fx} {M : choiceEqFreerMonad Fx R _}.
+>>>>>>> 90e8d677 (update to make code more relevant (to_hoare + contract))
 Fact freer_flip_choice (p : {prob R}) :
   (Ret true <|| p ||> Ret false : M _)  ≈  (flip p).
 Proof.
@@ -30,8 +38,12 @@ Qed.
 End about_freer_flip_monad.
 
 Section lossy_round_trip.
+<<<<<<< HEAD
 Context {R : realType} {Fx: effect}
   `{@FlipEff R -< Fx} {M : choiceEqFreerMonad Fx R _}.
+=======
+Context {R : realType} {Fx: effect} `{@FlipEff R -< Fx} {M : choiceEqFreerMonad Fx R _}.
+>>>>>>> 90e8d677 (update to make code more relevant (to_hoare + contract))
 Implicit Types (m : msg) (psucc : {prob R}).
 
 Definition transmit psucc m : M (option msg) :=
@@ -128,3 +140,4 @@ rewrite -[X in _ ≈ _ <|| _ ||> X]
 by rewrite freer_choiceA (s_of_pqK p1) (r_of_pqK p1 d0).
 Qed.
 End lossy_round_trip.
+

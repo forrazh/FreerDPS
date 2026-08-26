@@ -221,7 +221,6 @@ Definition gen_witness_update {Fx F : effect} `{F -<? Fx}
     (ω :  Ω) (e : Fx α) (x : α)
   : Ω :=
   if prj e is Some e then witness_update c ω e x else ω.
-(* Canonical locked_gen_witness_update := Unlockable gen_witness_update.unlock. *)
 Arguments gen_witness_update : simpl never.
 
 Definition gen_caller_obligation {Fx F : effect} `{F -<? Fx}

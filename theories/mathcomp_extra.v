@@ -37,6 +37,9 @@ Proof. by apply/propext; split => // -[]. Qed.
 Lemma andPT (P : Prop) : (P /\ True) = P.
 Proof. by apply/propext; split => // -[]. Qed.
 
+Lemma and_mrC (P Q R : Prop) : (P /\ Q /\ R) = ( P /\ R /\ Q).
+Proof. by move=>*; congr and; rewrite andC. Qed.
+
 Lemma ex2C A B (P : A -> B -> Prop) :
   (exists a b, P a b) = (exists b a, P a b).
 Proof. by apply/propeqP; split=> -[x [y xy]]; [exists y, x | exists y, x]. Qed.

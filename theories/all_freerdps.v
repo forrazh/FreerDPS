@@ -12,4 +12,7 @@ From FreerDPS Require Export
   component
   contract
   hoare
+  weakest_pre
+  strongest_post
+  hoare_lib
   .

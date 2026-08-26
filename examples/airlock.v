@@ -13,7 +13,6 @@ From FreerDPS Require Import all_freerdps.
 
 (* DOORS == TODO *)
 
-
 Module Export DoorsControllerM.
 (** ** Doors *)
 
@@ -170,8 +169,9 @@ Lemma close_door_respectful d : pre (doors_c ||> close_door d) = [set: _].
 Proof.
 rewrite /close_door -subTset=> hω _; apply: pre_to_hoare_bind.
   by rewrite to_hoare_triggerE /= provided_callerP.
-case=> w'; rewrite pre_to_hoare_whenP // !to_hoare_triggerE.
-by case=> ->; apply: provided_bind_caller=> /=.
+case=> w'; rewrite pre_to_hoare_whenP // !to_hoare_triggerE /=.
+case=> ->; apply: provided_bind_caller=> /=.
+by rewrite /gen_witness_update injK_Some /= => ->.
 Qed.
 
 Lemma open_door_respectful (ω : Ω) d (safe : ~~ sel (co d) ω) :
@@ -265,7 +265,7 @@ case: op=> [| d].
   + by rewrite to_hoare_triggerE;
       exact: (distinguished_caller (F := DOORS) (G := STORE nat)).
     rewrite !to_hoare_triggerE.
-    move/(distinguished_callee (F := DOORS) (G := STORE nat))=> ->.
+    move/(distinguished_callee (F := DOORS) (G := STORE nat)) => ->.
     rewrite pre_to_hoare_whenP;
       case: (15 <? cpt)%nat=> //=;
       apply: pre_to_hoare_bind=>[| *].
