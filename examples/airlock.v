@@ -13,10 +13,12 @@ From FreerDPS Require Import all_freerdps.
 
 (* DOORS == TODO *)
 
+
 Module Export DoorsControllerM.
 (** ** Doors *)
 
 Inductive door : Type := left | right.
+Implicit Type d : door.
 
 HB.instance Definition _ := gen_eqMixin door.
 
@@ -27,25 +29,25 @@ Inductive DOORS : effect :=
 Section doors_s.
 Context {Fx : effect} `{DOORS -< Fx} {M : freerMonad Fx}.
 
-Definition is_open (d : door) : M bool := ptrigger $ IsOpen d.
-Definition toggle (d : door) : M unit := ptrigger $ Toggle d.
-Definition open_door (d : door) : M unit :=
+Definition is_open d : M bool := ptrigger $ IsOpen d.
+Definition toggle d : M unit := ptrigger $ Toggle d.
+Definition open_door d : M unit :=
   is_open d >>= fun open => when (~~ open) (toggle d).
-Definition close_door (d : door) : M unit :=
+Definition close_door d : M unit :=
   is_open d >>= (when ^~ (toggle d)).
 End doors_s.
 
 Inductive CONTROLLER : effect :=
 | Tick : CONTROLLER unit
-| TriggerOpen (d : door) : CONTROLLER unit.
+| TriggerOpen d : CONTROLLER unit.
 
 Section controller_s.
 Context {Fx : effect} `{CONTROLLER -< Fx} {M : freerMonad Fx}.
 Definition tick : M unit := ptrigger Tick.
-Definition trigger_open (d : door) : M unit := ptrigger $ TriggerOpen d.
+Definition trigger_open d : M unit := ptrigger $ TriggerOpen d.
 End controller_s.
 
-Definition co (d : door) : door :=
+Definition co d : door :=
   match d with
   | left => right
   | right => left
@@ -54,8 +56,8 @@ Definition co (d : door) : door :=
 Lemma co_leftE : co left = right.
 Proof. by []. Qed.
 
-Definition controller {Fx : effect} `{DOORS -< Fx, (STORE nat) -< Fx}
-    {M : freerMonad Fx} : component (M:=M) CONTROLLER Fx :=
+Definition controller {Fx : effect} `{DOORS -< Fx, STORE nat -< Fx}
+    {M : freerMonad Fx} : component (M := M) CONTROLLER Fx :=
   fun _ op =>
     match op with
     | Tick =>
@@ -80,24 +82,24 @@ End DoorsControllerM.
 Definition Ω : Type := bool * bool.
 (*         S : Type := left * rght. *)
 
-Definition sel (d : door) : Ω -> bool :=
+Definition sel d : Ω -> bool :=
   match d with
   | left => fst
   | right => snd
   end.
 
-Definition tog (d : door) (ω : Ω) : Ω :=
+Definition tog d (ω : Ω) : Ω :=
   match d with
   | left => (~~ (fst ω), snd ω)
   | right => (fst ω, ~~ (snd ω))
   end.
 
-Lemma tog_equ_1 (d : door) (ω : Ω)
-  : sel d (tog d ω) = ~~ (sel d ω).
+Lemma tog_equ_1 d (ω : Ω) :
+  sel d (tog d ω) = ~~ sel d ω.
 Proof. by case: d. Qed.
 
-Lemma tog_equ_2 (d : door) (ω : Ω)
-  : sel (co d) (tog d ω) = sel (co d) ω.
+Lemma tog_equ_2 d (ω : Ω) :
+  sel (co d) (tog d ω) = sel (co d) ω.
 Proof. by case: d. Qed.
 
 Opaque tog.
@@ -140,12 +142,6 @@ Definition doors_o_callee (ω : Ω) : forall a, DOORS a -> a -> Prop :=
     | Toggle _ => fun _ => True
     end.
 
-Lemma doors_o_callee_is_openE
-    {ω : Ω} {d : door} {opened : bool} :
-  doors_o_callee ω bool (IsOpen d) opened ->
-  sel d ω = opened.
-Proof. by []. Qed.
-
 (* doors_c => {{door_caller}} p%step {{door_callee}} *)
 Definition doors_c : contract DOORS Ω :=
   make_contract step doors_o_caller doors_o_callee.
@@ -153,56 +149,50 @@ Definition doors_c : contract DOORS Ω :=
 
 Local Open Scope classical_set_scope.
 
-Remark one_door_safe_all_doors_safe (ω : Ω) (d : door)
-    (safe : ~~sel d ω \/ ~~sel (co d) ω)
-  : forall (d' : door), ~~sel d' ω \/ ~~sel (co d') ω.
+Remark one_door_safe_all_doors_safe (ω : Ω) d
+    (safe : ~~ sel d ω \/ ~~ sel (co d) ω) :
+  forall d', ~~ sel d' ω \/ ~~ sel (co d') ω.
 Proof.
-by move: d safe=> + /[swap]; case; case=>//=; rewrite or_comm.
+by move: d safe=> + /[swap]; case; case=> //=; rewrite or_comm.
 Qed.
 
 Definition doors_safe (ω : Ω) := ~~ sel left ω \/ ~~ sel right ω.
 
 Section RespectfulAndRunLemmas.
 Context {Fx : effect} `{DOORS -< Fx} {M : freerMonad Fx}.
-Implicit Type d : door.
 
 Local Notation "c ||> p" :=
-  (to_hoare (M:=M) c p)
+  (to_hoare (M := M) c p)
   (at level 50, no associativity).
 
 (** Closing a door [d] in any system [ω] is always a respectful operation. *)
 Lemma close_door_respectful d : pre (doors_c ||> close_door d) = [set: _].
 Proof.
-rewrite /close_door -subTset=> hω _; apply: th_pre_bindA.
-  by rewrite to_hoare_ptrigger_preE.
-case=> ?;
-  rewrite to_hoare_when_preE // to_hoare_ptrigger_postE
-    => -[ /[swap] ]=>/doors_o_callee_is_openE ? -> .
-by rewrite to_hoare_ptrigger_preE.
+rewrite /close_door -subTset=> hω _; apply: pre_to_hoare_bind.
+  by rewrite to_hoare_triggerE /= provided_callerP.
+case=> w'; rewrite pre_to_hoare_whenP // !to_hoare_triggerE.
+by case=> ->; apply: provided_bind_caller=> /=.
 Qed.
 
 Lemma open_door_respectful (ω : Ω) d (safe : ~~ sel (co d) ω) :
   pre (doors_c ||> open_door d) ω.
 Proof.
-rewrite /open_door; apply: th_pre_bindA.
-  by rewrite to_hoare_ptrigger_preE.
-case=> ?;
-  rewrite to_hoare_when_preE // to_hoare_ptrigger_postE
-    => -[ /[swap] ]=>/doors_o_callee_is_openE ? ->.
-rewrite /= to_hoare_ptrigger_preE.
-by move: safe=> /[swap] ->.
+rewrite /open_door; apply: pre_to_hoare_bind.
+  by rewrite to_hoare_triggerE /= provided_callerP.
+case=> w'; rewrite pre_to_hoare_whenP // !to_hoare_triggerE.
+by case=> ->; apply: provided_bind_caller; move: safe=> /= /negPf ->.
 Qed.
 
 Lemma close_door_run (ω : Ω) d (ω' : Ω) (x : unit)
-  (run : post (doors_c ||> close_door d) ω x ω') :
-~~ sel d ω'.
+    (run : post (doors_c ||> close_door d) ω x ω') :
+  ~~ sel d ω'.
 Proof.
-move: run; rewrite /close_door th_post_bindA.
-move=> [opened [? [ ] ] ].
-rewrite to_hoare_ptrigger_postE /= to_hoare_when_postE => -[<-] //.
-case: opened=> /doors_o_callee_is_openE=> [H' [?] | /[swap] <- ->] //.
-rewrite to_hoare_ptrigger_postE /= => -[-> _].
-by rewrite tog_equ_1 H'.
+move: run; rewrite /close_door post_to_hoare_bindP.
+move=> [opened [w] []].
+rewrite post_to_hoare_whenP !to_hoare_triggerE /= provided_calleeP=> -[->].
+case: opened=> /= [| /[swap] -> ->] // door_open [[]].
+rewrite provided_calleeP /= => -[-> _].
+by rewrite tog_equ_1 door_open.
 Qed.
 
 Opaque close_door.
@@ -216,25 +206,25 @@ Lemma doors_trigger_preserves_safe
   post (doors_c ||> ptrigger op) ω x ω' ->
   doors_safe ω -> doors_safe ω'.
 Proof.
-rewrite to_hoare_trigger_preE to_hoare_trigger_postE.
-case: prj => [door_op |_ ->//] /=.
-move=> + [-> _].
-move: door_op x; case=> d [] caller safe //=.
-apply: (one_door_safe_all_doors_safe _ d).
-move: safe=> /one_door_safe_all_doors_safe /(_ d).
-case=> [d_closed | ?]; right; rewrite tog_equ_2 //.
-apply/negP=> co_open; move/negP: d_closed=> d_closed.
-by move: caller=> /(_ co_open) d_open; exact: d_closed d_open.
+rewrite to_hoare_triggerE /=.
+rewrite /gen_caller_obligation /gen_witness_update /gen_callee_obligation.
+case: prj=> [door_op |] /=;
+  last by move=> _ [-> _].
+move: door_op x; case=> d /= [] caller [-> _] _ //.
+apply: (one_door_safe_all_doors_safe (tog d ω) d).
+rewrite tog_equ_1 tog_equ_2 negbK.
+case other_open: (sel (co d) ω); [left | by right].
+by apply: caller; rewrite other_open.
 Qed.
 
 Lemma doors_handler_preserves_safe {a : Type} (op : Fx a) :
   preserves_invariant doors_safe (hoare_of_contract doors_c op).
 Proof.
-move=> ??? Hpre Hpost.
+move=> witness result witness' hpre hpost.
 apply: doors_trigger_preserves_safe;
   rewrite to_hoare_triggerE.
-- exact: Hpre.
-- exact: Hpost.
+- exact: hpre.
+- exact: hpost.
 Qed.
 End RespectfulAndRunLemmas.
 
@@ -242,7 +232,7 @@ End RespectfulAndRunLemmas.
 Section InvariantRunLemmas.
 Context {Fx : effect} `{DOORS -< Fx} {M : inductiveFreerMonad Fx}.
 
-(** /!\ WARNING: This lemma is the only one needing `f_ind`  because we
+(** /!\ WARNING: This lemma is the only one needing `f_ind` because we
   * require to "execute" the freer program in order to denote it and see
   * if the invariant was preserved all along.
   *)
@@ -250,7 +240,7 @@ Lemma doors_run_preserves_safe {A : Type} (p : M A) :
   preserves_invariant doors_safe (doors_c |> p).
 Proof.
 by apply: to_hoare_preserves_invariant=> *;
-  exact: (doors_handler_preserves_safe (M:=M)).
+  exact: (doors_handler_preserves_safe (M := M)).
 Qed.
 
 Lemma respectful_run_inv {A : Type} (p : M A)
@@ -267,33 +257,38 @@ Section controller_s.
 Context {Fx : effect} `{StrictProvide2 Fx DOORS (STORE nat)}
   {M : inductiveFreerMonad Fx}.
 
-Lemma controller_pre {α : Type} (op : CONTROLLER α) (ω : Ω)
-  : pre (doors_c |> controller (M:=M) α op) ω.
+Lemma controller_pre {α : Type} (op : CONTROLLER α) (ω : Ω) :
+  pre (doors_c |> controller (M := M) α op) ω.
 Proof.
-case: op=> [|d].
-- (* Tick *) apply: th_pre_bindA.
-  + exact: to_hoare_distinguished_trigger_preI.
-  + move=> cpt? /to_hoare_distinguished_trigger_postE ->.
-    rewrite to_hoare_when_preE;
+case: op=> [| d].
+- (* Tick *) apply: pre_to_hoare_bind=>[|cpt w].
+  + by rewrite to_hoare_triggerE;
+      exact: (distinguished_caller (F := DOORS) (G := STORE nat)).
+    rewrite !to_hoare_triggerE.
+    move/(distinguished_callee (F := DOORS) (G := STORE nat))=> ->.
+    rewrite pre_to_hoare_whenP;
       case: (15 <? cpt)%nat=> //=;
-      apply: th_pre_bindA.
-    * by apply: th_pre_bindA=>[|*];
+      apply: pre_to_hoare_bind=>[| *].
+    * by apply: pre_to_hoare_bind=> [| *];
         rewrite close_door_respectful.
-    * by move=>*;
-        exact: to_hoare_distinguished_trigger_preI.
-- (* Trigger Open *) apply: th_pre_bindA=>[|*].
-  + apply: th_pre_bindA.
+    * by rewrite to_hoare_triggerE;
+        exact: (distinguished_caller (F := DOORS) (G := STORE nat)).
+- (* Trigger Open *) apply: pre_to_hoare_bind=> [| *].
+  + apply: pre_to_hoare_bind=> [| ?? close_post].
     * by rewrite close_door_respectful.
-    * by move=>?? Hclose; exact/open_door_respectful/close_door_run/Hclose.
-  + exact: to_hoare_distinguished_trigger_preI.
+    * exact/open_door_respectful/close_door_run/close_post.
+  + by rewrite to_hoare_triggerE;
+      exact: (distinguished_caller (F := DOORS) (G := STORE nat)).
 Qed.
 
-Theorem controller_correct
-  : correct_component controller (M:=M)
-    (no_contract CONTROLLER) doors_c (fun=> doors_safe).
+Theorem controller_correct :
+  correct_component controller (M := M)
+    (no_contract CONTROLLER) doors_c (fun _ => doors_safe).
 Proof.
-move=>? ω ?? op _; split=> [|?? Hpost]; [exact: controller_pre|split=> //].
-have Hpre := controller_pre op ω; move: Hpre Hpost.
+move=> ? ω ? ? op _; split=> [| ? ? hpost].
+  exact: controller_pre.
+split=> //.
+have hpre := controller_pre op ω; move: hpre hpost.
 exact: respectful_run_inv.
 Qed.
 

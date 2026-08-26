@@ -96,19 +96,19 @@ HB.export FreerMonadModel.
 
 HB.mixin Record isMonadFreer (F : effect) (M : Type -> Type) of Monad M := {
   trigger : F ~~> M ;
-  denote (N : monad) (l : F ~~> N) : M ~~> N ;
-  denote_ret : forall (N : monad) (l : F ~~> N) X (x : X),
-    denote N l X (Ret x) = Ret x ;
-  denote_bind : forall (N : monad) (l : F ~~> N) X Y m (f : X -> M Y),
-    denote N l Y (m >>= f) = denote N l X m >>= (denote N l Y \o f) ;
-  denote_trigger : forall (N : monad) (l : F ~~> N) X (op : F X),
-    denote N l X (trigger X op) = l X op ;
-  denote_unique : forall (N : monad) (l : F ~~> N) (denote' : M ~~> N),
+  denote (N : monad) (h : F ~~> N) : M ~~> N ;
+  denote_ret : forall (N : monad) (h : F ~~> N) X (x : X),
+    denote N h X (Ret x) = Ret x ;
+  denote_bind : forall (N : monad) (h : F ~~> N) X Y m (f : X -> M Y),
+    denote N h Y (m >>= f) = denote N h X m >>= (denote N h Y \o f) ;
+  denote_trigger : forall (N : monad) (h : F ~~> N) X (op : F X),
+    denote N h X (trigger X op) = h X op ;
+  denote_unique : forall (N : monad) (h : F ~~> N) (denote' : M ~~> N),
       (forall X (x : X), denote' X (ret X x) = Ret x) ->
       (forall X Y (m : M X) (f : X -> M Y), denote' Y (m >>= f) =
          denote' X m >>= (denote' Y \o f)) ->
-      (forall X (op : F X), denote' X (trigger X op) = l X op) ->
-    forall X (m : M X), denote' X m = denote N l X m
+      (forall X (op : F X), denote' X (trigger X op) = h X op) ->
+    forall X (m : M X), denote' X m = denote N h X m
 }.
 
 #[short(type=freerMonad)]
@@ -127,23 +127,23 @@ Notation acto := (@freer F).
 Definition trigger_effect : F ~~> acto := fun A op =>
   impure (inj op) (@pure _ _).
 
-Definition dnt (M : monad) (l : F ~~> M) : acto ~~> M :=
+Definition dnt (M : monad) (h : F ~~> M) : acto ~~> M :=
   fix aux a (p : acto a) :=
     match p with
     | pure x => Ret x
-    | impure Y op f => l _ op >>= fun x => aux a (f x)
+    | impure Y op f => h _ op >>= fun x => aux a (f x)
     end.
 
-Let dnt_ret (cm : monad) (dnt_effect : F ~~> cm) X (x : X) :
-  dnt dnt_effect (ret X x) = @hierarchy.ret cm X x.
+Let dnt_ret (cm : monad) (h : F ~~> cm) X (x : X) :
+  dnt h (ret X x) = @hierarchy.ret cm X x.
 Proof. by []. Qed.
 
-Let dnt_bind : forall (cm : monad) (dnt_effect : F ~~> cm) X Y m
+Let dnt_bind : forall (cm : monad) (h : F ~~> cm) X Y m
     (f : X -> acto Y),
-  dnt dnt_effect (m >>= f) =
-  dnt dnt_effect m >>= (fun x => dnt dnt_effect (f x)).
+  dnt h (m >>= f) =
+  dnt h m >>= (fun x => dnt h (f x)).
 Proof.
-    move=>cm dnt_effect X Y m f.
+    move=>cm h X Y m f.
     elim:m=>[x | Z fz k]/=.
     - by rewrite !bindretf.
     rewrite bindA=>H.
@@ -151,20 +151,20 @@ Proof.
     exact/boolp.funext/H.
 Qed.
 
-Let dnt_trigger (cm : monad) (dnt_effect : F ~~> cm) X (op : F X) :
-  dnt dnt_effect (trigger_effect op) = dnt_effect X op.
+Let dnt_trigger (cm : monad) (h : F ~~> cm) X (op : F X) :
+  dnt h (trigger_effect op) = h X op.
 Proof. by rewrite /dnt /trigger_effect/= bindmret. Qed.
 
-Let dnt_unique : forall (cm : monad) (dnt_effect : F ~~> cm)
+Let dnt_unique : forall (cm : monad) (h : F ~~> cm)
     (dnt' : acto ~~> cm),
   (forall X (x : X), dnt' X (ret X x) = @hierarchy.ret cm X x) ->
   (forall X Y (m : acto X) (f : X -> acto Y),
     dnt' Y (m >>= f) = dnt' X m >>= (fun x => dnt' Y (f x))) ->
   (forall X (op : F X),
-    dnt' X (trigger_effect op) = dnt_effect X op) ->
-  forall X (m : acto X), dnt' X m = dnt dnt_effect m.
+    dnt' X (trigger_effect op) = h X op) ->
+  forall X (m : acto X), dnt' X m = dnt h m.
 Proof.
-    move=>cm dnt_effect dnt' dret' dbind' dtrigger' X m.
+    move=>cm h dnt' dret' dbind' dtrigger' X m.
     rewrite/dnt.
     elim:m=>[x| Y fy k Hy]/=.
     - exact/dret'.
@@ -222,19 +222,19 @@ End FreerInductionModel.
 HB.export FreerInductionModel.
 
 Lemma denote_if : forall (F : effect) (M : freerMonad F) (cm : monad)
-   (dnt_effect : F ~~> cm) X (m m' : M X) b,
-  denote cm dnt_effect X (if b then m else m') =
-  if b then (denote cm dnt_effect X m) else (denote cm dnt_effect X m').
+   (h : F ~~> cm) X (m m' : M X) b,
+  denote cm h X (if b then m else m') =
+  if b then (denote cm h X m) else (denote cm h X m').
 Proof. by move=> ? ? ? ? ? ? ?; case. Qed.
 
 Lemma denote_when_trigger (Fx : effect) (M : freerMonad Fx) (cm : monad)
-    (l : Fx ~~> cm) (A X : Type) (guard : A -> bool) (op : Fx X) :
-  denote cm l unit \o
+    (h : Fx ~~> cm) (A X : Type) (guard : A -> bool) (op : Fx X) :
+  denote cm h unit \o
       (fun x => when (guard x) (trigger X op : M X)) =
     fun x =>
       if guard x then
-        l X op >>= (denote cm l unit \o fun=> (skip : M unit))
-      else denote cm l unit (skip : M unit).
+        h X op >>= (denote cm h unit \o fun=> (skip : M unit))
+      else denote cm h unit (skip : M unit).
 Proof.
 by apply/funext=> x; rewrite compE denote_if;
   case: (guard x)=> //=;
