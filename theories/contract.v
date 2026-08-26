@@ -12,6 +12,7 @@
 
 From mathcomp Require Import ssreflect.
 From FreerDPS Require Import effect freer.
+From HB Require Import structures.
 #[local]
 Open Scope signature_scope.
 Open Scope monae_scope.
@@ -214,11 +215,14 @@ Defined.
     [ci : contract F ΩF] and [cj : contract E ΩE], such that [contractprod ci cj] in a
     contract for [F + E]. *)
 
+(* HB.lock  *)
 Definition gen_witness_update {Fx F : effect} `{F -<? Fx}
     {Ω α : Type} (c : contract F Ω)
     (ω :  Ω) (e : Fx α) (x : α)
   : Ω :=
   if prj e is Some e then witness_update c ω e x else ω.
+(* Canonical locked_gen_witness_update := Unlockable gen_witness_update.unlock. *)
+Arguments gen_witness_update : simpl never.
 
 Definition gen_caller_obligation {Fx F : effect} `{F -<? Fx}
     {Ω α : Type} (c : contract F Ω)
@@ -336,3 +340,157 @@ Definition store_specs (s : Type) : contract (STORE s) s :=
     contracts are defined independently from impure computations and
     effs, we can actually define several contracts to consider
     different set of hypotheses. *)
+
+
+Section contract_helpers.
+Context {Fx F : effect} {Hfxf : F -< Fx} {W X Y : Type}
+    (c : contract F W) (w w' : W) (op : F X) (op' : F Y)
+    (x : X) (concl : Prop).
+
+Lemma provided_callerP :
+  gen_caller_obligation (H := Hfxf.(may_prov)) c w (inj op)
+  <-> caller_obligation c w op.
+Proof.
+by rewrite /gen_caller_obligation !injK_Some.
+Qed.
+
+Lemma provided_bind_caller :
+  (callee_obligation c w op x ->
+    caller_obligation c (witness_update c w op x) op') ->
+  gen_callee_obligation (H := Hfxf.(may_prov)) c w (inj op) x ->
+  gen_caller_obligation (H := Hfxf.(may_prov)) c
+    (gen_witness_update (H := Hfxf.(may_prov)) c w (inj op) x)
+    (inj op').
+Proof.
+rewrite /gen_witness_update /gen_callee_obligation.
+by rewrite /gen_caller_obligation !injK_Some.
+Qed.
+
+
+Lemma provided_calleeP :
+  (w' = gen_witness_update (H := Hfxf.(may_prov)) c w (inj op) x /\ gen_callee_obligation (H := Hfxf.(may_prov)) c w (inj op) x )
+  <-> (w' = witness_update c w op x /\ callee_obligation c w op x) .
+Proof.
+by split; rewrite /gen_callee_obligation /gen_witness_update !injK_Some.
+Qed.
+
+(* Lemma provided_callee :
+  (callee_obligation c w op x ->
+    w' = witness_update c w op x) <->
+  (gen_callee_obligation (H := Hfxf.(may_prov)) c w (inj op) x ->
+  w' = gen_witness_update (H := Hfxf.(may_prov)) c w (inj op) x).
+Proof.
+by split; rewrite /gen_callee_obligation /gen_witness_update !injK_Some.
+Qed.
+
+Lemma provided_callee_run :
+  (callee_obligation c w op x ->
+    w' = witness_update c w op x -> concl) ->
+  gen_callee_obligation (H := Hfxf.(may_prov)) c w (inj op) x ->
+  w' = gen_witness_update (H := Hfxf.(may_prov)) c w (inj op) x ->
+  concl.
+Proof.
+by rewrite /gen_callee_obligation /gen_witness_update !injK_Some.
+Qed.
+
+Lemma provided_callee_bind_run :
+  (callee_obligation c w op x ->
+    (exists y : Y,
+      w' = witness_update c (witness_update c w op x) op' y /\
+      callee_obligation c (witness_update c w op x) op' y) ->
+    concl) ->
+  gen_callee_obligation (H := Hfxf.(may_prov)) c w (inj op) x ->
+  (exists y : Y,
+    w' = gen_witness_update (H := Hfxf.(may_prov)) c
+      (gen_witness_update (H := Hfxf.(may_prov)) c w (inj op) x)
+      (inj op') y /\
+    gen_callee_obligation (H := Hfxf.(may_prov)) c
+      (gen_witness_update (H := Hfxf.(may_prov)) c w (inj op) x)
+      (inj op') y) ->
+  concl.
+Proof.
+by rewrite /gen_callee_obligation /gen_witness_update !injK_Some.
+Qed. *)
+End contract_helpers.
+
+Section contract_distinguish_helpers.
+Context {Fx F G : effect} {Hfxf : F -<? Fx} {Hfxg : G -< Fx}
+    {Hdist : @Distinguish Fx G F Hfxg Hfxf}
+    {W X : Type} (c : contract F W) (w w' : W) (op : G X) (x : X).
+
+Lemma distinguished_caller :
+  gen_caller_obligation (H := Hfxf) c w (inj op).
+Proof.
+by rewrite /gen_caller_obligation injK_None.
+Qed.
+
+Lemma distinguished_callee :
+  (w' = gen_witness_update (H := Hfxf) c w (inj op) x /\
+    gen_callee_obligation (H := Hfxf) c w (inj op) x) <->
+  w' = w.
+Proof.
+rewrite /gen_witness_update /gen_callee_obligation injK_None.
+by split=> [[-> _] | ->].
+Qed.
+End contract_distinguish_helpers.
+
+
+Section shared_contract_helpers.
+Context {Fx F G : effect} `{StrictProvide2 Fx F G}
+    {W X : Type} (ci : contract F W) (cj : contract G W)
+    (w w' : W) (x : X).
+
+Lemma shared_left_callerP (op : F X) :
+  gen_caller_obligation (Fx := Fx)
+    (sharedcontractprod (Fx := Fx) ci cj) w (inj (Fx := Fx) op)
+  <-> caller_obligation ci w op.
+Proof.
+split.
+- by case=> + _; rewrite provided_callerP.
+- move=> caller; split.
+  + rewrite provided_callerP; exact: caller.
+  + by rewrite /gen_caller_obligation (@injK_None Fx F G).
+Qed.
+
+Lemma shared_right_callerP (op : G X) :
+  gen_caller_obligation (Fx := Fx)
+    (sharedcontractprod (Fx := Fx) ci cj) w (inj (Fx := Fx) op)
+  <-> caller_obligation cj w op.
+Proof.
+split.
+- by case=> _; rewrite provided_callerP.
+- move=> caller; split.
+  + by rewrite /gen_caller_obligation (@injK_None Fx G F).
+  + rewrite provided_callerP; exact: caller.
+Qed.
+
+Lemma shared_left_calleeP (op : F X) :
+  (w' = gen_witness_update (Fx := Fx)
+      (sharedcontractprod (Fx := Fx) ci cj) w
+      (inj (Fx := Fx) op) x /\
+    gen_callee_obligation (Fx := Fx)
+      (sharedcontractprod (Fx := Fx) ci cj) w
+      (inj (Fx := Fx) op) x) <->
+  w' = witness_update ci w op x /\ callee_obligation ci w op x.
+Proof.
+rewrite /gen_witness_update /gen_callee_obligation /=.
+rewrite /sharedcontractprod /= /gen_callee_obligation.
+rewrite (@injK_Some Fx F) (@injK_None Fx F G).
+by tauto.
+Qed.
+
+Lemma shared_right_calleeP (op : G X) :
+  (w' = gen_witness_update (Fx := Fx)
+      (sharedcontractprod (Fx := Fx) ci cj) w
+      (inj (Fx := Fx) op) x /\
+    gen_callee_obligation (Fx := Fx)
+      (sharedcontractprod (Fx := Fx) ci cj) w
+      (inj (Fx := Fx) op) x) <->
+  w' = witness_update cj w op x /\ callee_obligation cj w op x.
+Proof.
+rewrite /gen_witness_update /gen_callee_obligation /=.
+rewrite /sharedcontractprod /= /gen_callee_obligation.
+rewrite (@injK_None Fx G F) (@injK_Some Fx G).
+by tauto.
+Qed.
+End shared_contract_helpers.
