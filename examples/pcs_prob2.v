@@ -315,8 +315,12 @@ End protocol_contract.
 Module ProbProtocolM.
 Section protocol.
 Context {R : realType} {ClientF ServerF ProtoF : effect}
+-> SP1 ClientFx flipEff.
+-> P1: F -< Fx.
+-> P2: G -< Fx.
+-> SP2 : P1 & P2 + P1 <> P2.
   `{StrictProvide2 ClientF (@FlipEff R) client_api}
-  `{StrictProvide2 ServerF (@FlipEff R) server_api}
+  `{StrictProvide2 ServerF clientF server_api}
   `{StrictProvide2 ProtoF ClientF ServerF}
   {M : freerMonad ProtoF}.
 
