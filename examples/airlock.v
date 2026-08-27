@@ -178,7 +178,7 @@ Lemma open_door_respectful (ω : Ω) d (safe : ~~ sel (co d) ω) :
   pre (doors_c ||> open_door d) ω.
 Proof.
 rewrite /open_door; apply: pre_to_hoare_bind.
-  by rewrite to_hoare_triggerE /= provided_callerP.
+  by rewrite pre_to_hoare_triggerP.
 case=> w'; rewrite pre_to_hoare_whenP // !to_hoare_triggerE.
 by case=> ->; apply: provided_bind_caller; move: safe=> /= /negPf ->.
 Qed.
@@ -189,9 +189,9 @@ Lemma close_door_run (ω : Ω) d (ω' : Ω) (x : unit)
 Proof.
 move: run; rewrite /close_door post_to_hoare_bindP.
 move=> [opened [w] []].
-rewrite post_to_hoare_whenP !to_hoare_triggerE /= provided_calleeP=> -[->].
+rewrite post_to_hoare_whenP post_to_hoare_triggerP=>-[->].
 case: opened=> /= [| /[swap] -> ->] // door_open [[]].
-rewrite provided_calleeP /= => -[-> _].
+rewrite post_to_hoare_triggerP=> -[-> _].
 by rewrite tog_equ_1 door_open.
 Qed.
 

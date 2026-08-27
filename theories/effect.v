@@ -233,6 +233,50 @@ Next Obligation. by move=> */=; exact: injK_None. Defined.
 Next Obligation. by move=> */=. Qed.
 Next Obligation. by move=> */=. Qed.
 
+Definition may_provideT (FX Fx F : effect) `{F -<? Fx}
+    `{H' : Fx -<? FX} : F -<? FX :=
+  {| prj := fun A fX =>
+       match H'.(prj) fX with
+       | Some fx => H.(prj) fx
+       | None => None
+       end |}.
+
+Local Definition injT (FX Fx F : effect) `{F -< Fx} `{H' : Fx -< FX} :=
+  fun (A : Type) (f : F A) => H'.(inj) (H.(inj) f).
+Local Lemma injK_SomeT (FX Fx F : effect) `{F -< Fx}
+    `{H' : Fx -< FX} :
+  forall A e,
+    (@may_provideT FX Fx F H.(may_prov) H'.(may_prov)).(prj)
+      (@injT FX Fx F H H' A e) = Some e.
+Proof.
+by move=> A e /=; rewrite !injK_Some.
+Qed.
+
+Definition provideT (FX Fx F : effect) `{F -< Fx} `{H' : Fx -< FX}
+    : F -< FX :=
+  {| may_prov := may_provideT FX Fx F;
+     inj := @injT FX Fx F H H';
+     injK_Some := @injK_SomeT FX Fx F H H' |}.
+
+Ltac find_provideT :=
+  match goal with
+  | |- @Provide ?FX ?F =>
+      match goal with
+      | inner : @Provide ?Fx ?F,
+        outer : @Provide ?FX ?Fx |- _ =>
+          exact (@provideT FX Fx F inner outer)
+      end
+  end.
+
+#[global] Hint Extern 500 (@Provide _ _) =>
+  find_provideT : typeclass_instances.
+
+Program Instance distinguishT (FX Fx F G : effect) `{F -< Fx}
+    `{H' : Fx -< FX} `{Hg' : G -<? Fx} `{Hg : G -<? FX}
+    `{@Distinguish FX Fx G H' Hg}
+  : @Distinguish FX F G (provideT FX Fx F) Hg | 500.
+Next Obligation. by move=> */=; exact: injK_None. Qed.
+
 Inductive eempty : effect := .
 
 (** Another example of general-purpose effect we can define is the [STORE s]
@@ -264,5 +308,3 @@ Arguments Put [s] (x).
     [<+>] or [⊕]) to compose effects together.  An impure computation
     parameterized by [F ⊕ E] can therefore leverage the primitives of both [F]
     and [E]. *)
-
-
