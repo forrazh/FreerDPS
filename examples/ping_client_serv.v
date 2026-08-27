@@ -37,8 +37,8 @@ Section server_program.
 Context {Fx : effect} `{server_api -< Fx} {M : freerMonad Fx}.
 Definition reply : M unit := ptrigger $ RPLY Pong.
 Definition recv : M (option msg) := ptrigger RECV.
-Definition S_p : M unit :=
-  recv >>= fun inc=> if inc is Some Ping then reply else skip.
+Definition S_p : M (option msg) :=
+  recv >>= fun inc=> if inc is Some Ping then reply >> Ret inc else Ret inc.
 Fixpoint loop {X : Type} (fuel : nat) (program : M X) : M unit :=
   match fuel with
   | 0%nat => program >> skip
@@ -191,11 +191,11 @@ Local Notation "c ||> p" := (to_hoare (M:=M) c p)
 
 Lemma c_respect
     (network : N) (remaining : packets)
-    (Pong_available : clientQ network = ?-Pong :: remaining) :
+    (pong_available : clientQ network = ?-Pong :: remaining) :
   pre (c_contract ||> C) network.
 Proof.
 apply: pre_to_hoare_bind=>[|? ω'];
-  rewrite to_hoare_ptrigger_preE ?to_hoare_ptrigger_postE.
+  rewrite pre_to_hoare_triggerP ?post_to_hoare_triggerP.
 - by [].
 by move=>[-> _]; exists remaining.
 Qed.
@@ -207,8 +207,8 @@ Lemma c_run
   p = Some Pong \/ p = None.
 Proof.
 move: run; rewrite post_to_hoare_bindP=> -[[] [network []]].
-rewrite to_hoare_ptrigger_postE /= => -[-> _].
-rewrite to_hoare_ptrigger_postE /= => -[_].
+rewrite post_to_hoare_triggerP /= => -[-> _].
+rewrite post_to_hoare_triggerP /= => -[_].
 by move=> [? [_ result]].
 Qed.
 
@@ -250,9 +250,13 @@ Local Notation "c ||> p" := (to_hoare (M:=M) c p)
 Lemma s_p_respect (network : N) :
   pre (s_contract ||> S_p) network.
 Proof.
-by apply: pre_to_hoare_bind=>[| [[]|]*];
-  rewrite ?to_hoare_ptrigger_preE //;
-  exact: to_hoare_ret_preI.
+apply: pre_to_hoare_bind=>[| [[]|] w Hpo];
+  rewrite ?pre_to_hoare_triggerP //;
+  move: Hpo;
+  rewrite post_to_hoare_triggerP=> -[-> _] /= .
+- apply: pre_to_hoare_bind=> [| [] w' _].
+  by rewrite pre_to_hoare_triggerP.
+all: exact: to_hoare_ret_preI.
 Qed.
 
 Lemma s_respect (network : N) fuel :
@@ -266,22 +270,25 @@ move: fuel network;
 Qed.
 
 Lemma s_p_run_grows
-  (initial_network final_network : N) (result : unit)
+  (initial_network final_network : N) (result : option msg)
   (run : post (s_contract ||> S_p)
     initial_network result final_network) :
 clientQ final_network = clientQ initial_network
   \/ clientQ final_network = rcons (clientQ initial_network) ?-Pong.
 Proof.
 move: run; rewrite post_to_hoare_bindP.
-by move=> [incoming [network []]];
-  rewrite to_hoare_ptrigger_postE=> -[-> []] ->;
-  rewrite ?to_hoare_ptrigger_postE ?to_hoare_ret_postE;
-    [ move=>[-> _] /=; right | move=>[_ <-]; left ];
-  rewrite client_does_not_consume_its_send.
+move=> [incoming [network []]];
+  rewrite post_to_hoare_triggerP=> -[-> /= []] ->;
+  rewrite ?post_to_hoare_triggerP ?to_hoare_ret_postE /= ?post_to_hoare_bindP
+    => Hpo; [right | left];
+    move: Hpo.
+- case; case; case=> w; rewrite post_to_hoare_triggerP to_hoare_ret_postE;
+    case=> [[-> _]].
+all: by move=> [? <-];  rewrite /= client_does_not_consume_its_send.
 Qed.
 
 Lemma s_p_run_growth
-    (initial_network final_network : N) (result : unit)
+    (initial_network final_network : N) (result : option msg)
     (run : post (s_contract ||> S_p)
       initial_network result final_network) :
   exists delivered,
@@ -302,9 +309,8 @@ Lemma s_run
 Proof.
 move: fuel initial_network final_network run;
   elim=> [|n ih] initial_network ?;
-  rewrite post_to_hoare_bindP=> -[ [] [net [Ha ]] ];
+  rewrite post_to_hoare_bindP => -[ r [net [Ha ]] ];
   have [x [Hx Hg]] := s_p_run_growth Ha.
-(* - by rewrite to_hoare_ret_postE cats1 /==> -[? <-]; rewrite Hy size_rcons. *)
 - by rewrite to_hoare_ret_postE=> -[? <-]; rewrite Hg leq_add.
 by move=> H_loop; have ih' := (ih _ _ H_loop); apply: (leq_trans ih');
   rewrite Hg !addnS addnAC -addn2 ltn_add2l; exact: Hx.
@@ -314,7 +320,6 @@ End server_respectful_and_run_lemmas.
 End scm.
 
 Import ccm scm.
-
 
 (** * Protocol Description :
        +---+  == send Ping ==>  +---+  == delvr Ping ==>  +---+
@@ -339,9 +344,9 @@ Definition protocol : component (M:=M) proto_api ProtoF :=
   fun _ op =>
     match op with
     | one_round =>
-        send >> recv  >>= fun incoming =>
+        send >> recv >>= fun incoming =>
           match incoming with
-          | Some Ping =>  reply >> wait >>= fun incoming =>
+          | Some Ping => reply >> wait >>= fun incoming =>
             match incoming with
             | Some Pong => Ret GotPong
             | _ => Ret LostPong
@@ -355,27 +360,23 @@ Definition protocol_inv (net : N) := serverQ net = [::] /\ clientQ net = [::].
 Lemma protocol_respect (net : N) :
   protocol_inv net -> pre (c ||> protocol one_round) net.
 Proof.
-move=>[s_empty c_empty].
+move=> [server_empty client_empty].
 rewrite /protocol !bindA.
-apply/pre_to_hoare_bind=>[|??];
-  first by apply/to_hoare_shared_contract_left_trigger_preI.
-
-move/to_hoare_shared_contract_left_trigger_postE=>[-> _].
-apply/pre_to_hoare_bind=>[|r?];
-  first by apply/to_hoare_shared_contract_right_trigger_preI.
-
-move/to_hoare_shared_contract_right_trigger_postE=>[-> _].
-case : r => [[]|]; try exact: to_hoare_ret_preI.
-
-apply/pre_to_hoare_bind=>[|??];
-  first by apply/to_hoare_shared_contract_right_trigger_preI.
-move/to_hoare_shared_contract_right_trigger_postE=>[-> _].
-
-apply/pre_to_hoare_bind=>[|r?].
-apply/to_hoare_shared_contract_left_trigger_preI; exists [::].
-- by rewrite /= client_does_not_consume_its_send c_empty.
-- by move/to_hoare_shared_contract_left_trigger_postE=>[-> _];
-      case : r => [[]|]; exact: to_hoare_ret_preI.
+apply/pre_to_hoare_bind=> [|??];
+  first by apply/pre_to_hoare_triggerL.
+move/post_to_hoare_triggerLP=> [-> _].
+apply/pre_to_hoare_bind=> [|r ?];
+  first by apply/pre_to_hoare_triggerR.
+move/post_to_hoare_triggerRP=> [-> _].
+case: r=> [[]|]; try exact: to_hoare_ret_preI.
+apply/pre_to_hoare_bind=> [|??];
+  first by apply/pre_to_hoare_triggerR.
+move/post_to_hoare_triggerRP=> [-> _].
+apply/pre_to_hoare_bind=> [|r ?].
+- apply/pre_to_hoare_triggerL; exists [::].
+  by rewrite /= client_does_not_consume_its_send client_empty.
+by move/post_to_hoare_triggerLP=> [-> _];
+  case: r=> [[]|]; exact: to_hoare_ret_preI.
 Qed.
 
 Lemma protocol_run_inv (n n' : N) (result : outcome) :
@@ -384,14 +385,14 @@ Lemma protocol_run_inv (n n' : N) (result : outcome) :
 Proof.
 move=> [server_empty client_empty].
 rewrite /protocol !bindA post_to_hoare_bindP=> -[[] [? []]].
-rewrite to_hoare_shared_contract_left_trigger_postE=> -[-> _].
-move/post_to_hoare_bindP=>[incoming [? []]].
-rewrite to_hoare_shared_contract_right_trigger_postE=> -[-> incoming_ok].
+rewrite post_to_hoare_triggerLP=> -[-> _].
+move/post_to_hoare_bindP=> [incoming [? []]].
+rewrite post_to_hoare_triggerRP=> -[-> incoming_ok].
 case: incoming_ok=> -> //=.
-move/post_to_hoare_bindP=>[[] [? []]] /=;
-rewrite to_hoare_shared_contract_right_trigger_postE=> -[-> _];
-move/post_to_hoare_bindP=>[wait_result [? []]];
-rewrite to_hoare_shared_contract_left_trigger_postE=> -[-> [? [_ incoming_ok]]] /=;
+move/post_to_hoare_bindP=> [[] [? []]] /=;
+rewrite post_to_hoare_triggerRP=> -[-> _];
+move/post_to_hoare_bindP=> [wait_result [? []]];
+rewrite post_to_hoare_triggerLP=> -[-> [? [_ incoming_ok]]] /=;
 case: incoming_ok=> ->.
 all: by rewrite to_hoare_ret_postE=> -[_ <-] /=;
   rewrite /send_to_server client_empty server_empty

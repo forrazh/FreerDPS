@@ -336,12 +336,12 @@ Section contract_trigger_helpers.
 Context {Fx F : effect} `{F -< Fx} {M : freerMonad Fx}
     (Ω : Type) (c : contract F Ω) {A : Type}.
 
-Lemma to_hoare_ptrigger_preE (op : F A) (ω : Ω) :
+Lemma pre_to_hoare_triggerP (op : F A) (ω : Ω) :
   pre (to_hoare (M:=M) c (ptrigger op)) ω <->
   caller_obligation c ω op.
 Proof. by rewrite to_hoare_triggerE /= provided_callerP. Qed.
 
-Lemma to_hoare_ptrigger_postE (op : F A) (ω : Ω) (a : A) (ω' : Ω) :
+Lemma post_to_hoare_triggerP (op : F A) (ω : Ω) (a : A) (ω' : Ω) :
   post (to_hoare (M:=M) c (ptrigger op))
     ω a ω' <->
   ω' = witness_update c ω op a /\
@@ -357,21 +357,21 @@ Context {F G H : effect} `{StrictProvide2 H F G}
     {M : freerMonad H} (Ω : Type) (ci : contract F Ω)
     (cj : contract G Ω).
 
-Lemma to_hoare_shared_contract_left_trigger_preI
+Lemma pre_to_hoare_triggerL
     {A : Type} (op : F A) (ω : Ω) :
   caller_obligation ci ω op ->
   pre (to_hoare (M:=M)
     (sharedcontractprod (Fx:=H) ci cj) (ptrigger (Fx:=H) op)) ω.
 Proof. by rewrite to_hoare_triggerE /= shared_left_callerP. Qed.
 
-Lemma to_hoare_shared_contract_right_trigger_preI
+Lemma pre_to_hoare_triggerR
     {A : Type} (op : G A) (ω : Ω) :
   caller_obligation cj ω op ->
   pre (to_hoare (M:=M)
     (sharedcontractprod (Fx:=H) ci cj) (ptrigger (Fx:=H) op)) ω.
 Proof. by rewrite to_hoare_triggerE /= shared_right_callerP. Qed.
 
-Lemma to_hoare_shared_contract_left_trigger_postE
+Lemma post_to_hoare_triggerLP
     {A : Type} (op : F A) (ω : Ω) (x : A) (ω' : Ω) :
   post (to_hoare (M:=M)
     (sharedcontractprod (Fx:=H) ci cj) (ptrigger (Fx:=H) op)) ω x ω' <->
@@ -379,7 +379,7 @@ Lemma to_hoare_shared_contract_left_trigger_postE
   callee_obligation ci ω op x.
 Proof. by rewrite to_hoare_triggerE /= shared_left_calleeP. Qed.
 
-Lemma to_hoare_shared_contract_right_trigger_postE
+Lemma post_to_hoare_triggerRP
     {A : Type} (op : G A) (ω : Ω) (x : A) (ω' : Ω) :
   post (to_hoare (M:=M)
     (sharedcontractprod (Fx:=H) ci cj) (ptrigger (Fx:=H) op)) ω x ω' <->
