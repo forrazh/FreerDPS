@@ -96,19 +96,19 @@ HB.export FreerMonadModel.
 
 HB.mixin Record isMonadFreer (F : effect) (M : Type -> Type) of Monad M := {
   trigger : F ~~> M ;
-  denote (N : monad) (l : F ~~> N) : M ~~> N ;
-  denote_ret : forall (N : monad) (l : F ~~> N) X (x : X),
-    denote N l X (Ret x) = Ret x ;
-  denote_bind : forall (N : monad) (l : F ~~> N) X Y m (f : X -> M Y),
-    denote N l Y (m >>= f) = denote N l X m >>= (denote N l Y \o f) ;
-  denote_trigger : forall (N : monad) (l : F ~~> N) X (op : F X),
-    denote N l X (trigger X op) = l X op ;
-  denote_unique : forall (N : monad) (l : F ~~> N) (denote' : M ~~> N),
+  denote (N : monad) (h : F ~~> N) : M ~~> N ;
+  denote_ret : forall (N : monad) (h : F ~~> N) X (x : X),
+    denote N h X (Ret x) = Ret x ;
+  denote_bind : forall (N : monad) (h : F ~~> N) X Y m (f : X -> M Y),
+    denote N h Y (m >>= f) = denote N h X m >>= (denote N h Y \o f) ;
+  denote_trigger : forall (N : monad) (h : F ~~> N) X (op : F X),
+    denote N h X (trigger X op) = h X op ;
+  denote_unique : forall (N : monad) (h : F ~~> N) (denote' : M ~~> N),
       (forall X (x : X), denote' X (ret X x) = Ret x) ->
       (forall X Y (m : M X) (f : X -> M Y), denote' Y (m >>= f) =
          denote' X m >>= (denote' Y \o f)) ->
-      (forall X (op : F X), denote' X (trigger X op) = l X op) ->
-    forall X (m : M X), denote' X m = denote N l X m
+      (forall X (op : F X), denote' X (trigger X op) = h X op) ->
+    forall X (m : M X), denote' X m = denote N h X m
 }.
 
 #[short(type=freerMonad)]
@@ -127,23 +127,23 @@ Notation acto := (@freer F).
 Definition trigger_effect : F ~~> acto := fun A op =>
   impure (inj op) (@pure _ _).
 
-Definition dnt (M : monad) (l : F ~~> M) : acto ~~> M :=
+Definition dnt (M : monad) (h : F ~~> M) : acto ~~> M :=
   fix aux a (p : acto a) :=
     match p with
     | pure x => Ret x
-    | impure Y op f => l _ op >>= fun x => aux a (f x)
+    | impure Y op f => h _ op >>= fun x => aux a (f x)
     end.
 
-Let dnt_ret (cm : monad) (dnt_effect : F ~~> cm) X (x : X) :
-  dnt dnt_effect (ret X x) = @hierarchy.ret cm X x.
+Let dnt_ret (cm : monad) (h : F ~~> cm) X (x : X) :
+  dnt h (ret X x) = @hierarchy.ret cm X x.
 Proof. by []. Qed.
 
-Let dnt_bind : forall (cm : monad) (dnt_effect : F ~~> cm) X Y m
+Let dnt_bind : forall (cm : monad) (h : F ~~> cm) X Y m
     (f : X -> acto Y),
-  dnt dnt_effect (m >>= f) =
-  dnt dnt_effect m >>= (fun x => dnt dnt_effect (f x)).
+  dnt h (m >>= f) =
+  dnt h m >>= (fun x => dnt h (f x)).
 Proof.
-    move=>cm dnt_effect X Y m f.
+    move=>cm h X Y m f.
     elim:m=>[x | Z fz k]/=.
     - by rewrite !bindretf.
     rewrite bindA=>H.
@@ -151,20 +151,20 @@ Proof.
     exact/boolp.funext/H.
 Qed.
 
-Let dnt_trigger (cm : monad) (dnt_effect : F ~~> cm) X (op : F X) :
-  dnt dnt_effect (trigger_effect op) = dnt_effect X op.
+Let dnt_trigger (cm : monad) (h : F ~~> cm) X (op : F X) :
+  dnt h (trigger_effect op) = h X op.
 Proof. by rewrite /dnt /trigger_effect/= bindmret. Qed.
 
-Let dnt_unique : forall (cm : monad) (dnt_effect : F ~~> cm)
+Let dnt_unique : forall (cm : monad) (h : F ~~> cm)
     (dnt' : acto ~~> cm),
   (forall X (x : X), dnt' X (ret X x) = @hierarchy.ret cm X x) ->
   (forall X Y (m : acto X) (f : X -> acto Y),
     dnt' Y (m >>= f) = dnt' X m >>= (fun x => dnt' Y (f x))) ->
   (forall X (op : F X),
-    dnt' X (trigger_effect op) = dnt_effect X op) ->
-  forall X (m : acto X), dnt' X m = dnt dnt_effect m.
+    dnt' X (trigger_effect op) = h X op) ->
+  forall X (m : acto X), dnt' X m = dnt h m.
 Proof.
-    move=>cm dnt_effect dnt' dret' dbind' dtrigger' X m.
+    move=>cm h dnt' dret' dbind' dtrigger' X m.
     rewrite/dnt.
     elim:m=>[x| Y fy k Hy]/=.
     - exact/dret'.
@@ -222,19 +222,19 @@ End FreerInductionModel.
 HB.export FreerInductionModel.
 
 Lemma denote_if : forall (F : effect) (M : freerMonad F) (cm : monad)
-   (dnt_effect : F ~~> cm) X (m m' : M X) b,
-  denote cm dnt_effect X (if b then m else m') =
-  if b then (denote cm dnt_effect X m) else (denote cm dnt_effect X m').
+   (h : F ~~> cm) X (m m' : M X) b,
+  denote cm h X (if b then m else m') =
+  if b then (denote cm h X m) else (denote cm h X m').
 Proof. by move=> ? ? ? ? ? ? ?; case. Qed.
 
 Lemma denote_when_trigger (Fx : effect) (M : freerMonad Fx) (cm : monad)
-    (l : Fx ~~> cm) (A X : Type) (guard : A -> bool) (op : Fx X) :
-  denote cm l unit \o
+    (h : Fx ~~> cm) (A X : Type) (guard : A -> bool) (op : Fx X) :
+  denote cm h unit \o
       (fun x => when (guard x) (trigger X op : M X)) =
     fun x =>
       if guard x then
-        l X op >>= (denote cm l unit \o fun=> (skip : M unit))
-      else denote cm l unit (skip : M unit).
+        h X op >>= (denote cm h unit \o fun=> (skip : M unit))
+      else denote cm h unit (skip : M unit).
 Proof.
 by apply/funext=> x; rewrite compE denote_if;
   case: (guard x)=> //=;
@@ -270,151 +270,3 @@ Definition iget {S} {Fx : effect} `{STORE S -< Fx} {M : freerMonad Fx}
 Definition iput {S} {Fx : effect} `{STORE S -< Fx} {M : freerMonad Fx} (s : S)
     : M unit :=
   ptrigger (Put s).
-
-Definition FreerLawRelation (F : effect) {M : freerMonad F} := forall A, M A -> M A -> Prop.
-
-Definition law_sound [F : effect] [M : freerMonad F] (law : FreerLawRelation) (N : monad) (h : F ~~> N) :=
-  forall A (m n : M A),
-    law A m n ->
-    denote N h A m = denote N h A n.
-
-Module FMwBi.
-Section fm_eq_s.
-
-Import FreerMonadModel.
-Variable F : effect.
-Notation acto := (@freer F).
-Variable law : @FreerLawRelation F acto.
-
-Inductive freer_eq [A : UU0] : acto A -> acto A -> Prop  :=
-| law_eq (m n : acto A) : (forall N h, @law_sound F acto law N h -> denote N h A m = denote N h A n) -> m === n
-where "a === b" := (freer_eq a b).
-
-Lemma den_imp [N : monad] [A B : UU0] (h : F ~~> N) op f : denote N h A (impure op f) = h B op >>= (fun x => denote N h A (f x)).
-Proof. by []. Qed.
-Lemma freer_eq_sound N h :
-  law_sound law h ->
-  forall A m n,
-    freer_eq m n ->
-    denote N h A m = denote N h A n.
-Proof.
-by move=> + A m n [??]=> /[swap] /[apply] ->.
-Qed.
-
-Lemma rel_refl [A : UU0] (x : acto A) :
-  x === x.
-Proof. exact: law_eq. Qed.
-
-Lemma rel_sym [A : UU0] (x y : acto A) :
-  x === y -> y === x.
-Proof.
-move=> xy.
-apply: law_eq=> N h law_h.
-by have -> := (freer_eq_sound law_h xy).
-Qed.
-
-Lemma rel_trans [A : UU0] (x y z : acto A) :
-  x === y ->
-  y === z ->
-  x === z.
-Proof.
-move=> xy yz.
-apply: law_eq=> N h law_h.
-exact: eq_trans (freer_eq_sound law_h xy) (freer_eq_sound law_h yz).
-Qed.
-
-Add Parametric Relation {A : UU0} : (acto A) (@freer_eq A)
-  reflexivity proved by (@rel_refl A)
-  symmetry proved by (@rel_sym A)
-  transitivity proved by (@rel_trans A)
-  as wBisims_rel.
-Hint Extern 0 (freer_eq _ _) => setoid_reflexivity : core.
-
-Lemma eq_bindmwB [A B : UU0] (f : A -> acto B) (d1 d2 : acto A) :
-  d1 === d2 -> (d1 >>= f) === (d2 >>= f).
-Proof. move=>xy.
-apply: law_eq=> N h Hlaw.
-rewrite 2!denote_bind; congr bind.
-exact: (freer_eq_sound Hlaw xy).
-Qed.
-
-Lemma eq_bindfwB
-    [A B : UU0] (f g : A -> acto B) (d : acto A) :
-  (forall a, (f a) === (g a)) ->
-  (d >>= f) === (d >>= g).
-Proof.
-move=>Hfg.
-apply: law_eq=> N h Hlaw.
-rewrite 2!denote_bind 2!compE; congr bind.
-apply: funext=>a.
-exact: (freer_eq_sound Hlaw (Hfg a)).
-Qed.
-
-#[export]
-HB.instance Definition _ := hasWBisim.Build acto rel_refl rel_sym rel_trans eq_bindmwB eq_bindfwB.
-
-End fm_eq_s.
-Arguments freer_eq {_ _ _} a b.
-Notation "a === b" := (freer_eq a b).
-End FMwBi.
-HB.export FMwBi.
-
-HB.mixin Record isMonadFreerEqReas (F : effect) (M : UU0 -> UU0) of MonadFreer F M & hasWBisim M := {
-  law : FreerLawRelation;
-  law_can_bisim : forall A (x y : M A), law A x y -> x ≈ y ;
-  bisim_denotes : forall A cm h (x y : M A), law_sound law h -> x ≈ y -> denote cm h A x = denote cm h A y ;
-}.
-
-#[short(type=eqFreerMonad)]
-HB.structure Definition MonadFreerEqReas (F : effect) :=
-  {M of isMonadFreerEqReas F M &}.
-
-Section setoid_eqFreerMonad.
-Variables (F : effect) (M : eqFreerMonad F).
-
-#[global] Add Parametric Relation A : (M A) (@wBisim M A)
-  reflexivity proved by (@wBisim_refl M A)
-  symmetry proved by (@wBisim_sym M A)
-  transitivity proved by (@wBisim_trans M A)
-  as wBisim_rel_eqFreerMonad.
-
-#[global] Add Parametric Morphism A B : bind with signature
-  (@wBisim M A) ==> (pointwise_relation A (@wBisim M B)) ==>
-    (@wBisim M B)
-  as bind_mor_eqFreerMonad.
-Proof.
-move=> x y xy f g fg.
-apply: wBisim_trans.
-- exact: (bindmwB _ _ _ _ _ xy).
-- exact: (bindfwB _ _ _ _ y fg).
-Qed.
-
-End setoid_eqFreerMonad.
-
-Module FMEq.
-Section fm_sec.
-
-Import FreerMonadModel.
-Variable F : effect.
-Notation acto := (@freer F).
-Variable law : @FreerLawRelation F acto.
-
-Notation "a === b" := (@freer_eq F law _ a b).
-
-Lemma law_feq : forall A (x y : acto A), law x y -> x === y.
-Proof.
-by move=>*; apply: law_eq=>??; apply.
-Qed.
-
-Lemma feq_den : forall A cm h (x y : acto A),
-  law_sound law h -> x === y -> denote cm h A x = denote cm h A y.
-Proof.
-by move=> A cm h x y Hlaw [m n]; apply.
-Qed.
-
-#[export]
-HB.instance Definition _ := isMonadFreerEqReas.Build F acto law_feq feq_den.
-
-End fm_sec.
-End FMEq.
-HB.export FMEq.

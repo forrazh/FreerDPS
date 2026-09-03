@@ -13,9 +13,10 @@
 ./theories/contract.v
 ./theories/mathcomp_extra.v
 ./theories/hoare.v
+./theories/hoare_correspondance.v
 ./theories/all_freerdps.v
 
 ./examples/airlock.v
 ./examples/ping_common.v
 ./examples/ping_prob.v
-./examples/ping_freer_prob.v
+./examples/ping_client_serv.v
