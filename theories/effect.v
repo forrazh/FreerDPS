@@ -72,13 +72,18 @@ Instance default_MayProvide (F E : effect) : (E -<? F) |1000 :=
     projecting the resulting primitive into [E] returns [None] as long as [F]
     and [E] are two different effects. *)
 
-Class Distinguish (Fx F E : effect) `{Hp: F -< Fx, Hmp : E -<? Fx} : Prop :=
-  { injK_None : forall {A} (e: F A), Hmp.(prj) (Hp.(inj) e) = None }.
+(* F -< Fx/G *)
+Class Distinguish (Fx F E : effect) `{F -< Fx} `{E -<? Fx} : Prop :=
+  { injK_None : forall {A} (e: F A), prj (inj e) = None }.
 
 Class StrictProvide2 (Fx F1 F2 : effect)
-  `{p1: F1 -< Fx} `{p2: F2 -< Fx}
-  `{! Distinguish Fx F1 F2} `{! Distinguish Fx F2 F1}
-  : Type.
+  : Type := {
+    p1 :: F1 -< Fx;
+    p2 :: F2 -< Fx;
+
+    d1 :: @Distinguish Fx F1 F2 p1 p2.(may_prov) ;
+    d2 :: @Distinguish Fx F2 F1 p2 p1.(may_prov) ;
+  }.
 
 (******************************************************************************
   * Sadly, this can't be used to declare StrictProvide right now because      *
@@ -86,13 +91,13 @@ Class StrictProvide2 (Fx F1 F2 : effect)
   * prov/dist by itself.                                                      *
   * TODO: Investigate why.                                                    *
   *****************************************************************************)
-Notation "F1 ;; F2 -<< Fx" := (StrictProvide2 Fx F1 F2) (at level 50, no associativity): type_scope.
+Notation "F1 ;; F2 -<< Fx" := (StrictProvide2 Fx F1 F2 ) (at level 50, no associativity): type_scope.
 
 #[global] Hint Mode MayProvide + + : typeclass_instances.
 #[global] Hint Mode Provide + + : typeclass_instances.
-#[global] Hint Mode Distinguish + + + - - :
+#[global] Hint Mode Distinguish + + + - -:
   typeclass_instances.
-#[global] Hint Mode StrictProvide2 + + + - - - - :
+#[global] Hint Mode StrictProvide2 --- :
   typeclass_instances.
 
 (** * Composing Effects *)
@@ -233,7 +238,7 @@ Next Obligation. by move=> */=; exact: injK_None. Defined.
 Next Obligation. by move=> */=. Qed.
 Next Obligation. by move=> */=. Qed.
 
-Definition may_provideT (FX Fx F : effect) `{F -<? Fx}
+Global Instance may_provideT (FX Fx F : effect) `{F -<? Fx}
     `{H' : Fx -<? FX} : F -<? FX :=
   {| prj := fun A fX =>
        match H'.(prj) fX with
@@ -252,7 +257,7 @@ Proof.
 by move=> A e /=; rewrite !injK_Some.
 Qed.
 
-Definition provideT (FX Fx F : effect) `{F -< Fx} `{H' : Fx -< FX}
+Global Instance provideT (FX Fx F : effect) `{F -< Fx} `{H' : Fx -< FX}
     : F -< FX :=
   {| may_prov := may_provideT FX Fx F;
      inj := @injT FX Fx F H H';
@@ -262,8 +267,8 @@ Ltac find_provideT :=
   match goal with
   | |- @Provide ?FX ?F =>
       match goal with
-      | inner : @Provide ?Fx ?F,
-        outer : @Provide ?FX ?Fx |- _ =>
+      | outer : @Provide ?FX ?Fx |- _ =>
+          let inner := constr:(_ : @Provide Fx F) in
           exact (@provideT FX Fx F inner outer)
       end
   end.
@@ -308,3 +313,23 @@ Arguments Put [s] (x).
     [<+>] or [⊕]) to compose effects together.  An impure computation
     parameterized by [F ⊕ E] can therefore leverage the primitives of both [F]
     and [E]. *)
+
+
+(* ----- *)
+Section s.
+Context {Fx F G : effect}.
+(* Context {Hf : F -< Fx} {Hg: G -< Fx}. *)
+(* Context {d1: @Distinguish Fx F G Hf may_prov} {d2: @Distinguish Fx G F Hg may_prov}. *)
+(* Global Instance Sp2 : @StrictProvide2 Fx F G Hf Hg d1 d2  := {fld:= tt}. *)
+(* Context `{Hf: F -< Fx} `{Hg: G -< Fx}. *)
+(* Context `{Distinguish Fx F G} `{Distinguish Fx G F}. *)
+(* Context `{Sp2: StrictProvide2 Fx F G}. *)
+(* Context `{Sp2': F;; G -<< Fx}. *)
+
+(* Context `{@Distinguish Fx F G Hf (Hg.(may_prov))} `{@Distinguish Fx G F Hg (Hf.(may_prov))}. *)
+Check (F ;; G -<< Fx).
+(* Global Instance Sp2 : `(StrictProvide2 Fx F G) := {fld:= tt}. *)
+(* Global Instance Sp2 : @StrictProvide2 Fx F G _ _ d1 _ _ _  := {fld:= tt}. *)
+End s.
+
+(* Check Sp2. *)

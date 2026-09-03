@@ -254,7 +254,7 @@ End InvariantRunLemmas.
 
 (** ** Main Theorem *)
 Section controller_s.
-Context {Fx : effect} `{StrictProvide2 Fx DOORS (STORE nat)}
+Context {Fx : effect} `{DOORS ;; (STORE nat) -<< Fx}
   {M : inductiveFreerMonad Fx}.
 
 Lemma controller_pre {α : Type} (op : CONTROLLER α) (ω : Ω) :

@@ -283,7 +283,7 @@ End WhenFacts.
 
 End GenericToHoareSection.
 Section SharedBindHelpers.
-Context {Fx F G : effect} `{StrictProvide2 Fx F G}
+Context {Fx F G : effect} `{F ;; G -<< Fx}
     {W : Type} (ci : contract F W) (cj : contract G W)
     {M : freerMonad Fx}.
 
@@ -322,6 +322,32 @@ Qed.
 
 End SharedBindHelpers.
 
+Section SharedLeftProgramHelpers.
+Context {Fx F G : effect} `{F ;; G -<< Fx}
+    {W : Type} (ci : contract F W) (cj : contract G W)
+    {M : freerMonad Fx}.
+
+
+
+Definition lift_left_program {A : Type} {Mf : freerMonad F} (p : Mf A) : M A :=
+  denote M (fun _ op => ptrigger (Fx := Fx) op) A p.
+
+Lemma pre_to_hoare_shared_leftP {A : Type} (p : M A) (w : W) :
+  pre (to_hoare (M := M)
+      (sharedcontractprod (Fx := Fx) ci cj) (p)) w ->
+  pre (to_hoare (M := M) ci (p)) w /\ pre (to_hoare (M := M) cj (p)) w.
+Abort.
+
+Lemma post_to_hoare_shared_leftP {A : Type} (p : freer F A)
+    (w : W) (result : A) (w' : W) :
+  post (to_hoare (M := M)
+      (sharedcontractprod (Fx := Fx) ci cj) (lift_left_program p))
+      w result w' <->
+  post (to_hoare (M := M) ci (lift_left_program p)) w result w'.
+Abort.
+
+End SharedLeftProgramHelpers.
+
 Lemma to_hoare_preserves_invariant {Fx F : effect} `{F -<? Fx}
   {M : inductiveFreerMonad Fx} {S : UU0}
   (invariant : set S) (c : contract F S)
@@ -353,7 +379,7 @@ End contract_trigger_helpers.
 (** ** Shared Contract Trigger Views *)
 
 Section ToHoareSharedContractSection.
-Context {F G H : effect} `{StrictProvide2 H F G}
+Context {F G H : effect} `{F ;; G -<< H}
     {M : freerMonad H} (Ω : Type) (ci : contract F Ω)
     (cj : contract G Ω).
 
@@ -386,5 +412,48 @@ Lemma post_to_hoare_triggerRP
   ω' = witness_update cj ω op x /\
   callee_obligation cj ω op x.
 Proof. by rewrite to_hoare_triggerE /= shared_right_calleeP. Qed.
+
+
+
+End ToHoareSharedContractSection.
+
+
+Section ToHoareSharedContractSection.
+Context {F G H I : effect} `{F ;; G -<< H} `{H -< I}
+    {M : freerMonad I} (Ω : Type) (ci : contract F Ω)
+    (cj : contract G Ω).
+Check effect.injT I H F .
+Goal forall A op, @inj _ _ _ A op = effect.injT I H F _ op.
+Proof. by []. Qed.
+
+Lemma pre_to_hoare_trigger_injL
+    {A : Type} (op : F A) (ω : Ω) :
+  caller_obligation ci ω op ->
+  pre (to_hoare (M:=M)
+    (sharedcontractprod (Fx:=H) ci cj) (ptrigger op)) ω.
+Proof. by rewrite to_hoare_triggerE /= shared_left_caller_injP. Qed.
+
+Lemma pre_to_hoare_trigger_injR
+    {A : Type} (op : G A) (ω : Ω) :
+  caller_obligation cj ω op ->
+  pre (to_hoare (M:=M)
+    (sharedcontractprod (Fx:=H) ci cj) (ptrigger op)) ω.
+Proof. by rewrite to_hoare_triggerE /= shared_right_caller_injP. Qed.
+
+Lemma post_to_hoare_trigger_injLP
+    {A : Type} (op : F A) (ω : Ω) (x : A) (ω' : Ω) :
+  post (to_hoare (M:=M)
+    (sharedcontractprod (Fx:=H) ci cj) (ptrigger op)) ω x ω' <->
+  ω' = witness_update ci ω op x /\
+  callee_obligation ci ω op x.
+Proof. by rewrite to_hoare_triggerE /= shared_left_callee_injP. Qed.
+
+Lemma post_to_hoare_trigger_injRP
+    {A : Type} (op : G A) (ω : Ω) (x : A) (ω' : Ω) :
+  post (to_hoare (M:=M)
+    (sharedcontractprod (Fx:=H) ci cj) (ptrigger op)) ω x ω' <->
+  ω' = witness_update cj ω op x /\
+  callee_obligation cj ω op x.
+Proof. by rewrite to_hoare_triggerE /= shared_right_callee_injP. Qed.
 
 End ToHoareSharedContractSection.
