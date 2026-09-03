@@ -166,17 +166,16 @@ Definition c_o_caller (network : N) : forall X, client_api X -> Prop :=
   fun X op =>
     match op with
     | SEND _ => True
-    | WAIT => exists remaining, clientQ network = ?-Pong :: remaining
+    | WAIT => exists remaining, clientQ network = !-Pong :: remaining
     end.
 
 Definition c_o_callee (network : N) :
     forall X, client_api X -> X -> Prop :=
   fun X op =>
     match op in client_api X return X -> Prop with
-    | SEND _ => fun _ => True
+    | SEND _ => fun _ => exists remaining,
+          serverQ network = ?-Ping :: remaining
     | WAIT => fun result =>
-        exists remaining,
-          clientQ network = ?-Pong :: remaining /\
           (result = Some Pong \/ result = None)
     end.
 
@@ -191,12 +190,11 @@ Local Notation "c ||> p" := (to_hoare (M:=M) c p)
 
 Lemma c_respect
     (network : N) (remaining : packets)
-    (pong_available : clientQ network = ?-Pong :: remaining) :
+    (coh : clientQ network = !-Pong :: remaining) :
   pre (c_contract ||> C) network.
 Proof.
 apply: pre_to_hoare_bind=>[|? ω'];
-  rewrite pre_to_hoare_triggerP ?post_to_hoare_triggerP.
-- by [].
+  rewrite pre_to_hoare_triggerP // post_to_hoare_triggerP /=.
 by move=>[-> _]; exists remaining.
 Qed.
 
@@ -208,8 +206,7 @@ Lemma c_run
 Proof.
 move: run; rewrite post_to_hoare_bindP=> -[[] [network []]].
 rewrite post_to_hoare_triggerP /= => -[-> _].
-rewrite post_to_hoare_triggerP /= => -[_].
-by move=> [? [_ result]].
+by rewrite post_to_hoare_triggerP /= => -[_].
 Qed.
 
 End client_respectful_and_run_lemmas.
@@ -229,7 +226,11 @@ Definition s_step (network : N) :
     end.
 
 Definition s_o_caller (network : N) : forall X, server_api X -> Prop :=
-  fun X op => True.
+  fun X op =>
+    match op with
+    | RPLY _ => True
+    | RECV => exists remaining, serverQ network = !-Ping :: remaining
+    end.
 
 Definition s_o_callee (network : N) :
     forall X, server_api X -> X -> Prop :=
@@ -247,24 +248,26 @@ Context {Fx : effect} `{server_api -< Fx} {M : freerMonad Fx}.
 Local Notation "c ||> p" := (to_hoare (M:=M) c p)
   (at level 50, no associativity).
 
-Lemma s_p_respect (network : N) :
+Lemma s_p_respect (network : N) (remaining : packets)
+  (coh : serverQ network = !- Ping :: remaining) :
   pre (s_contract ||> S_p) network.
 Proof.
 apply: pre_to_hoare_bind=>[| [[]|] w Hpo];
-  rewrite ?pre_to_hoare_triggerP //;
-  move: Hpo;
-  rewrite post_to_hoare_triggerP=> -[-> _] /= .
+  rewrite ?pre_to_hoare_triggerP //=.
+- by exists remaining; exact: coh.
+- move: Hpo; rewrite post_to_hoare_triggerP=> -[-> _] /= .
 - apply: pre_to_hoare_bind=> [| [] w' _].
   by rewrite pre_to_hoare_triggerP.
 all: exact: to_hoare_ret_preI.
 Qed.
 
-Lemma s_respect (network : N) fuel :
+Lemma s_respect (network : N) fuel (remaining : packets)
+  (coh : forall network, serverQ network = !- Ping :: remaining) :
   pre (s_contract ||> S_ fuel) network.
 Proof.
 move: fuel network;
-  elim=> [|n ih] net;
-    (apply: pre_to_hoare_bind=>*; [exact: s_p_respect| ]).
+  elim=> [|n ih] [/= sQ cQ] /=;
+    (apply: pre_to_hoare_bind=>*; [exact/s_p_respect| ]).
 - exact: to_hoare_ret_preI.
 - exact: ih.
 Qed.
@@ -331,7 +334,7 @@ Section proto_s.
 
 Inductive proto_api : effect := one_round : proto_api outcome.
 
-Context {ProtoF : effect} `{StrictProvide2 ProtoF client_api server_api}
+Context {ProtoF : effect} `{client_api ;; server_api -<< ProtoF}
 (* `{client_api -< ProtoF, server_api -< ProtoF} *)
   {M : freerMonad ProtoF}.
 Definition c : contract ProtoF N := c_contract -^- s_contract.
@@ -357,6 +360,10 @@ Definition protocol : component (M:=M) proto_api ProtoF :=
 
 Definition protocol_inv (net : N) := serverQ net = [::] /\ clientQ net = [::].
 
+(** This axiom is used here and only here because
+  * the packet drop is not a question yet *)
+Local Axiom WillDeliver  : forall p, ?-p = !-p.
+
 Lemma protocol_respect (net : N) :
   protocol_inv net -> pre (c ||> protocol one_round) net.
 Proof.
@@ -364,9 +371,10 @@ move=> [server_empty client_empty].
 rewrite /protocol !bindA.
 apply/pre_to_hoare_bind=> [|??];
   first by apply/pre_to_hoare_triggerL.
-move/post_to_hoare_triggerLP=> [-> _].
-apply/pre_to_hoare_bind=> [|r ?];
-  first by apply/pre_to_hoare_triggerR.
+move/post_to_hoare_triggerLP=> [-> _] /=.
+apply/pre_to_hoare_bind=> [|r ?].
+- apply/pre_to_hoare_triggerR.
+  by exists [::]; rewrite /= WillDeliver server_empty.
 move/post_to_hoare_triggerRP=> [-> _].
 case: r=> [[]|]; try exact: to_hoare_ret_preI.
 apply/pre_to_hoare_bind=> [|??];
@@ -374,7 +382,7 @@ apply/pre_to_hoare_bind=> [|??];
 move/post_to_hoare_triggerRP=> [-> _].
 apply/pre_to_hoare_bind=> [|r ?].
 - apply/pre_to_hoare_triggerL; exists [::].
-  by rewrite /= client_does_not_consume_its_send client_empty.
+  by rewrite /= WillDeliver client_does_not_consume_its_send client_empty.
 by move/post_to_hoare_triggerLP=> [-> _];
   case: r=> [[]|]; exact: to_hoare_ret_preI.
 Qed.
@@ -391,9 +399,9 @@ rewrite post_to_hoare_triggerRP=> -[-> incoming_ok].
 case: incoming_ok=> -> //=.
 move/post_to_hoare_bindP=> [[] [? []]] /=;
 rewrite post_to_hoare_triggerRP=> -[-> _];
-move/post_to_hoare_bindP=> [wait_result [? []]];
-rewrite post_to_hoare_triggerLP=> -[-> [? [_ incoming_ok]]] /=;
-case: incoming_ok=> ->.
+move/post_to_hoare_bindP=> [wait_result [? []]].
+rewrite post_to_hoare_triggerLP /=;
+  case=>->;case=>->.
 all: by rewrite to_hoare_ret_postE=> -[_ <-] /=;
   rewrite /send_to_server client_empty server_empty
     ?client_does_not_consume_its_send.
