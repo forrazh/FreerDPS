@@ -80,7 +80,6 @@ Class StrictProvide2 (Fx F1 F2 : effect)
   : Type := {
     p1 :: F1 -< Fx;
     p2 :: F2 -< Fx;
-
     d1 :: @Distinguish Fx F1 F2 p1 p2.(may_prov) ;
     d2 :: @Distinguish Fx F2 F1 p2 p1.(may_prov) ;
   }.
@@ -97,8 +96,8 @@ Notation "F1 ;; F2 -<< Fx" := (StrictProvide2 Fx F1 F2 ) (at level 50, no associ
 #[global] Hint Mode Provide + + : typeclass_instances.
 #[global] Hint Mode Distinguish + + + - -:
   typeclass_instances.
-#[global] Hint Mode StrictProvide2 --- :
-  typeclass_instances.
+#[global] Hint Mode StrictProvide2 - - - :
+   typeclass_instances.
 
 (** * Composing Effects *)
 
@@ -149,12 +148,7 @@ Next Obligation. by move=> */=. Qed.
 
 Instance eplus_left_MayProvide (Fx F E : effect) `{F -<? Fx}
   : F -<? (Fx + E) :=
-  { prj := fun A e => if e is in_left e then prj e else None
-                (* match e with *)
-                (* | in_left e => proj e *)
-                (* | _ => None *)
-                (* end *)
-  }.
+  { prj := fun A e => if e is in_left e then prj e else None }.
 
 Program Instance eplus_left_Provide (Fx F E : effect) `{F -< Fx}
   : F -< (Fx + E) :=
@@ -257,7 +251,7 @@ Proof.
 by move=> A e /=; rewrite !injK_Some.
 Qed.
 
-Global Instance provideT (FX Fx F : effect) `{F -< Fx} `{H' : Fx -< FX}
+Definition provideT (FX Fx F : effect) `{F -< Fx} `{H' : Fx -< FX}
     : F -< FX :=
   {| may_prov := may_provideT FX Fx F;
      inj := @injT FX Fx F H H';
@@ -276,11 +270,53 @@ Ltac find_provideT :=
 #[global] Hint Extern 500 (@Provide _ _) =>
   find_provideT : typeclass_instances.
 
-Program Instance distinguishT (FX Fx F G : effect) `{F -< Fx}
-    `{H' : Fx -< FX} `{Hg' : G -<? Fx} `{Hg : G -<? FX}
-    `{@Distinguish FX Fx G H' Hg}
-  : @Distinguish FX F G (provideT FX Fx F) Hg | 500.
-Next Obligation. by move=> */=; exact: injK_None. Qed.
+Check provideT.
+
+Instance distinguish_provideT
+    (FX Fx F G : effect)
+    (pf : F -< Fx) (pg : G -< Fx)
+    (different : @Distinguish Fx F G pf pg.(may_prov))
+    (outer : Fx -< FX) :
+    @Distinguish FX F G
+      (@provideT FX Fx F pf outer)
+      (@provideT FX Fx G pg outer).(may_prov).
+Proof. by constructor=> A op /=; rewrite !injK_Some injK_None. Defined.
+
+(** This one is not an instance because the typeclass
+  * resolver would just loop wildly otherwise *)
+Definition strictProvideT
+    (FX Fx F G : effect)
+    (sp : F ;; G -<< Fx) (outer : Fx -< FX) :
+    F ;; G -<< FX :=
+{|
+  p1 := @provideT FX Fx F sp.(p1) outer;
+  p2 := @provideT FX Fx G sp.(p2) outer
+|}.
+
+Ltac find_strict_provideT :=
+  multimatch goal with
+  | inner : @StrictProvide2 ?Fx ?F ?G
+      |- @StrictProvide2 ?FX ?F ?G =>
+      let outer := constr:(_ : @Provide FX Fx) in
+      exact (@strictProvideT FX Fx F G inner outer)
+  end.
+
+Ltac find_provideT_from_strict :=
+  multimatch goal with
+  | outer : @StrictProvide2 ?FX ?Fx ?Other
+      |- @Provide ?FX ?F =>
+      let inner := constr:(_ : @Provide Fx F) in
+      exact (@provideT FX Fx F inner outer.(p1))
+  | outer : @StrictProvide2 ?FX ?Other ?Fx
+      |- @Provide ?FX ?F =>
+      let inner := constr:(_ : @Provide Fx F) in
+      exact (@provideT FX Fx F inner outer.(p2))
+  end.
+#[global] Hint Extern 499 (@Provide _ _) =>
+  find_provideT_from_strict : typeclass_instances.
+
+#[global] Hint Extern 500 (@StrictProvide2 _ _ _) =>
+  find_strict_provideT : typeclass_instances.
 
 Inductive eempty : effect := .
 
@@ -313,23 +349,3 @@ Arguments Put [s] (x).
     [<+>] or [⊕]) to compose effects together.  An impure computation
     parameterized by [F ⊕ E] can therefore leverage the primitives of both [F]
     and [E]. *)
-
-
-(* ----- *)
-Section s.
-Context {Fx F G : effect}.
-(* Context {Hf : F -< Fx} {Hg: G -< Fx}. *)
-(* Context {d1: @Distinguish Fx F G Hf may_prov} {d2: @Distinguish Fx G F Hg may_prov}. *)
-(* Global Instance Sp2 : @StrictProvide2 Fx F G Hf Hg d1 d2  := {fld:= tt}. *)
-(* Context `{Hf: F -< Fx} `{Hg: G -< Fx}. *)
-(* Context `{Distinguish Fx F G} `{Distinguish Fx G F}. *)
-(* Context `{Sp2: StrictProvide2 Fx F G}. *)
-(* Context `{Sp2': F;; G -<< Fx}. *)
-
-(* Context `{@Distinguish Fx F G Hf (Hg.(may_prov))} `{@Distinguish Fx G F Hg (Hf.(may_prov))}. *)
-Check (F ;; G -<< Fx).
-(* Global Instance Sp2 : `(StrictProvide2 Fx F G) := {fld:= tt}. *)
-(* Global Instance Sp2 : @StrictProvide2 Fx F G _ _ d1 _ _ _  := {fld:= tt}. *)
-End s.
-
-(* Check Sp2. *)
