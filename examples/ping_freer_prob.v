@@ -9,12 +9,12 @@ Local Open Scope monae_scope.
 Local Open Scope proba_scope.
 Local Open Scope reals_ext_scope.
 Local Open Scope ring_scope.
-Local Open Scope freer_flip_scope.
-Import FreerFlipDenote.
-
+Import ChoiceRelation.
 
 Section about_freer_flip_monad.
-Context {R : realType} {M : choiceEqFreerMonad R}.
+Context {R : realType} {Fx: effect}
+  `{@FlipEff R -< Fx} {M : choiceEqFreerMonad Fx R _}.
+
 Fact freer_flip_choice (p : {prob R}) :
   (Ret true <|| p ||> Ret false : M _)  ≈  (flip p).
 Proof.
@@ -27,11 +27,11 @@ Fact flip_or_true (p q : {prob R}) :
 Proof.
     by rewrite -2!freer_flip_choice freer_choiceA freer_choicemm.
 Qed.
-
 End about_freer_flip_monad.
 
 Section lossy_round_trip.
-Context {R : realType} {M : choiceEqFreerMonad R}.
+Context {R : realType} {Fx: effect}
+  `{@FlipEff R -< Fx} {M : choiceEqFreerMonad Fx R _}.
 Implicit Types (m : msg) (psucc : {prob R}).
 
 Definition transmit psucc m : M (option msg) :=
@@ -69,7 +69,7 @@ by rewrite !freer_choice_bindDl !bindretf IH.
 Qed.
 
 Lemma freer_choice0 (A : UU0) (a b : M A) :
-  a <|| 0%:i01 ||> b ≈ b.
+  (a <|| 0%:i01 : {prob R} ||> b) ≈ b.
 Proof.
 have cplt0 : ((0%:i01 : {prob R})%:num.~%:i01) = 1%:i01.
   by exact/val_inj/GRing.subr0.
@@ -96,7 +96,6 @@ Proof.
     (freer_choicemm _ [q_of d, d] (Ret false)).
   by rewrite freer_choiceA (s_of_pqK p1) (r_of_pqK p1 d0).
 Qed.
-
 
 Lemma ping_pongs_success_stepE psucc fuel :
   ping_pongs_success (transmit:=transmit) psucc (fuel.+1) ≈
@@ -128,5 +127,4 @@ rewrite -[X in _ ≈ _ <|| _ ||> X]
   (freer_choicemm _ [q_of d, d] (flip (p_exs d n))).
 by rewrite freer_choiceA (s_of_pqK p1) (r_of_pqK p1 d0).
 Qed.
-
 End lossy_round_trip.
