@@ -270,10 +270,3 @@ Definition iget {S} {Fx : effect} `{STORE S -< Fx} {M : freerMonad Fx}
 Definition iput {S} {Fx : effect} `{STORE S -< Fx} {M : freerMonad Fx} (s : S)
     : M unit :=
   ptrigger (Put s).
-
-Definition FreerLawRelation (F : effect) {M : freerMonad F} := forall A, M A -> M A -> Prop.
-
-Definition law_sound [F : effect] [M : freerMonad F] (law : FreerLawRelation) (N : monad) (h : F ~~> N) :=
-  forall A (m n : M A),
-    law A m n ->
-    denote N h A m = denote N h A n.
