@@ -26,7 +26,6 @@ Require Import Morphisms.
 
 Import Order.TTheory Order.Syntax GRing.Theory Num.Theory.
 
-Declare Scope freer_flip_scope.
 Local Open Scope monae_scope.
 Local Open Scope ring_scope.
 Local Open Scope reals_ext_scope.
@@ -35,174 +34,139 @@ Reserved Notation "x <|| p ||> y"
   (at level 40, left associativity, y at next level).
 Reserved Notation "a ≊ b" (at level 70).
 
-
+(** Effect for a probabilistic Boolean choice. *)
 Inductive FlipEff {R : realType} : effect :=
-  flip_e (p : {prob R}) : FlipEff bool.
+  flipe (p : {prob R}) : FlipEff bool.
 
-Module FreerFlipDenote.
-Section freer_flip.
-Context {R : realType} {M : freerMonad (@FlipEff R)} {pM : probMonad R}.
-Implicit Type p q r s : {prob R}.
+(** The exact-effect handler is kept as the canonical denotation of a flip. *)
+Section exact_denotation.
+Context {R : realType} {pM : probMonad R}.
 
-Definition flip p : M bool := ptrigger $ flip_e p.
+Definition denote_flipeffect : FlipEff ~~> pM :=
+  fun X op => let: flipe p := op in bcoin p.
 
-Definition denote_flip_effect : FlipEff ~~> pM :=
-  fun X fx => let: flip_e p := fx in bcoin p.
-Lemma denote_flip_effect_pE p : denote_flip_effect _ (flip_e p) = bcoin p.
-Proof. by []. Qed.
-Lemma denote_flip_effect_inj_pE p : denote_flip_effect _ (inj $ flip_e p) = bcoin p.
+Lemma denote_flipeffectE p :
+  denote_flipeffect _ (flipe p) = bcoin p.
 Proof. by []. Qed.
 
-Lemma denote_flipE p :
-  denote (s := M) pM denote_flip_effect bool (flip p) = bcoin p.
-Proof. exact: denote_trigger. Qed.
+Lemma denote_flipeffect_injE p :
+  denote_flipeffect _ (inj $ flipe p) = bcoin p.
+Proof. by []. Qed.
 
-Definition freer_choice p {X} (a b : M X) :=
-  flip p >>= (fun b0 => if b0 then a else b).
+End exact_denotation.
 
-Notation "x <|| p ||> y" := (@freer_choice p _ x y).
-(* TODO: use this notation *)
+(** The syntax only requires [FlipEff] to be provided by the ambient effect.
+    When [Fx] is [FlipEff], the reflexive [Provide] instance recovers the
+    original, non-polymorphic interface. *)
+Section syntax.
+Context {R : realType} {Fx : effect} `{@FlipEff R -< Fx}
+  {M : freerMonad Fx}.
 
-Lemma denote_freer_choiceE (X : UU0) p (a b : M X) :
-  denote (s := M) pM denote_flip_effect X (a <|| p ||> b) =
-    denote (s := M) pM denote_flip_effect bool (flip p) >>=
-      (fun b0 => denote (s := M) pM denote_flip_effect X (if b0 then a else b)).
-Proof.
-by rewrite denote_bind; under eq_bind do rewrite compE denote_if.
-Qed.
+Definition flip (p : {prob R}) : M bool := ptrigger $ flipe p.
 
-Lemma denote_choiceA_leftE (T : UU0) p q (a b c : M T) :
-  denote (s := M) pM denote_flip_effect bool (flip p) >>=
-    ((denote (s := M) pM denote_flip_effect T) \o
-      (fun b0 => if b0 then a else b <|| q ||> c)) =
-  denote (s := M) pM denote_flip_effect bool (flip p) >>=
-    (fun b0 =>
-      if b0 then denote (s := M) pM denote_flip_effect T a
-      else denote (s := M) pM denote_flip_effect bool (flip q) >>=
-        (fun b1 => denote (s := M) pM denote_flip_effect T (if b1 then b else c))).
-Proof.
-by under eq_bind do rewrite compE denote_if denote_freer_choiceE.
-Qed.
+Definition freer_choice (p : {prob R}) {X} (a b : M X) :=
+  flip p >>= fun choice => if choice then a else b.
 
-Local Open Scope reals_ext_scope.
+End syntax.
 
-Lemma denote_choiceA_rightE (T : UU0) p q (a b c : M T) :
-  denote (s := M) pM denote_flip_effect bool (flip [s_of p, q]) >>=
-    ((denote (s := M) pM denote_flip_effect T) \o
-      (fun b0 => if b0 then a <|| [r_of p, q] ||> b else c)) =
-  denote (s := M) pM denote_flip_effect bool (flip [s_of p, q]) >>=
-    (fun b0 =>
-      if b0 then
-        denote (s := M) pM denote_flip_effect bool
-          (flip [r_of p, q]) >>=
-            (fun b1 => denote (s := M) pM denote_flip_effect T (if b1 then a else b))
-      else
-        denote (s := M) pM denote_flip_effect T c).
-Proof.
-by under eq_bind do rewrite compE denote_if denote_freer_choiceE.
-Qed.
+Notation "x <|| p ||> y" := (freer_choice p x y).
 
-Lemma denote_choice_bindDlE (A B : UU0) p (a b : M A)
-  (f : A -> M B) :
-  denote pM denote_flip_effect B (a <|| p ||> b >>= f) =
-    denote pM denote_flip_effect B ((a >>= f) <|| p ||> (b >>= f)).
-Proof.
-rewrite denote_bind denote_freer_choiceE [in RHS]denote_freer_choiceE.
-rewrite -compE bindA; congr bind.
-by apply/funext => -[]; rewrite denote_bind.
-Qed.
-
-End freer_flip.
-Notation "x <|| p ||> y" := (@freer_choice _ _ p _ x y).
-End FreerFlipDenote.
-
-Import FreerFlipDenote.
-
-HB.mixin Record isMonadFreerChoiceEqReas
-    (R : realType) (M : UU0 -> UU0) of MonadFreerEqReas (@FlipEff R) M := {
+HB.mixin Record isMonadFreerChoiceEqReas (Fx : effect)
+    (R : realType) `{@FlipEff R -< Fx} (M : UU0 -> UU0)
+    of MonadFreer Fx M & hasWBisim M := {
   freer_choice1 : forall (A : UU0) (a b : M A),
     (a <|| 1%:i01 : {prob R} ||> b) ≈ a;
-  freer_choiceC : forall (A : UU0) p (a b : M A),
+  freer_choiceC : forall (A : UU0) (p : {prob R}) (a b : M A),
     (a <|| p ||> b) ≈ (b <|| p%:num.~%:i01 ||> a);
-  freer_choicemm : forall (A : UU0) p (a : M A),
+  freer_choicemm : forall (A : UU0) (p : {prob R}) (a : M A),
     (a <|| p ||> a) ≈ a;
-  freer_choiceA : forall (A : UU0) p q (a b c : M A),
+  freer_choiceA : forall (A : UU0) (p q : {prob R}) (a b c : M A),
     (a <|| p ||> (b <|| q ||> c)) ≈
       ((a <|| [r_of p, q] ||> b) <|| [s_of p, q] ||> c);
-  freer_choice_bindDl : forall (A B : UU0) p (a b : M A)
+  freer_choice_bindDl : forall (A B : UU0) (p : {prob R}) (a b : M A)
       (f : A -> M B),
     ((a <|| p ||> b) >>= f) ≈
       ((a >>= f) <|| p ||> (b >>= f))
 }.
 
 #[short(type=choiceEqFreerMonad)]
-HB.structure Definition MonadFreerChoiceEqReas (R : realType) :=
-  {M of isMonadFreerChoiceEqReas R M &}.
+HB.structure Definition MonadFreerChoiceEqReas Fx (R : realType)
+    `{flipprovided : @FlipEff R -< Fx} :=
+  {M of isMonadFreerChoiceEqReas Fx R flipprovided M &}.
 
 Section setoid_choiceEqFreerMonad.
-Variables (R : realType) (M : choiceEqFreerMonad R).
+Context {R : realType} {Fx : effect}
+  `{flipprovided : @FlipEff R -< Fx}.
+Variable M : choiceEqFreerMonad Fx R flipprovided.
+
+#[global] Add Parametric Relation A : (M A) (@wBisim M A)
+  reflexivity proved by (@wBisim_refl M A)
+  symmetry proved by (@wBisim_sym M A)
+  transitivity proved by (@wBisim_trans M A)
+  as wBisim_rel_choiceEqFreerMonad.
+
+#[global] Add Parametric Morphism A B : bind with signature
+  (@wBisim M A) ==> (pointwise_relation A (@wBisim M B)) ==>
+    (@wBisim M B)
+  as bind_mor_choiceEqFreerMonad.
+Proof.
+move=> a b related f g pointwise_related.
+apply: wBisim_trans.
+  exact: (bindmwB _ _ _ _ _ related).
+exact: (bindfwB _ _ _ _ b pointwise_related).
+Qed.
 
 #[global] Add Parametric Morphism A (p : {prob R}) :
-    (@freer_choice R M p A) with signature
+    (@freer_choice R Fx flipprovided M p A) with signature
   (@wBisim M A) ==> (@wBisim M A) ==> (@wBisim M A)
-  as freer_choice_mor_eqFreerMonad.
+  as freer_choice_mor_choiceEqFreerMonad.
 Proof.
-move=> a a' aa b b' bb.
+move=> a a' related_a b b' related_b.
 rewrite /freer_choice.
 apply: bindfwB=> -[].
-- exact: aa.
-- exact: bb.
+  exact: related_a.
+exact: related_b.
 Qed.
 
 End setoid_choiceEqFreerMonad.
 
-Module RelModel.
-Section rel_s.
+Module ChoiceRelation.
+Section relation.
+Context {R : realType} {Fx : effect}
+  `{flipprovided : @FlipEff R -< Fx}.
+Local Notation M := (freer Fx).
 
-Context {R : realType}.
-Notation M := (freer (@FlipEff R)).
-
-Inductive choice_rel :
-    forall [X : UU0], freer (@FlipEff R) X -> freer (@FlipEff R) X -> Prop :=
-| rchoice1 : forall [A : UU0] (a b : M A),
-    (a <|| 1%:i01 ||> b) ≊ a
-| rchoiceC : forall [A : UU0] p (a b : M A),
-    (a <|| p ||> b) ≊ (b <|| p%:num.~%:i01 ||> a)
-| rchoicemm : forall [A : UU0] p (a : M A),
-    (a <|| p ||> a) ≊ a
-| rchoiceA : forall [A : UU0] p q (a b c : M A),
-    (a <|| p ||> (b <|| q ||> c)) ≊
+(** Equivalence and bind congruence close the five choice laws. *)
+Inductive choice_eq : forall [A : UU0], M A -> M A -> Prop :=
+| choice_refl A (a : M A) : choice_eq a a
+| choice_sym A (a b : M A) : choice_eq a b -> choice_eq b a
+| choice_trans A (a b c : M A) :
+    choice_eq a b -> choice_eq b c -> choice_eq a c
+| choice_bindm A B (f : A -> M B) (a b : M A) :
+    choice_eq a b -> choice_eq (a >>= f) (b >>= f)
+| choice_bindf A B (f g : A -> M B) (a : M A) :
+    (forall x, choice_eq (f x) (g x)) ->
+    choice_eq (a >>= f) (a >>= g)
+| choice1 A (a b : M A) :
+    choice_eq (a <|| 1%:i01 : {prob R} ||> b) a
+| choiceC A (p : {prob R}) (a b : M A) :
+    choice_eq (a <|| p ||> b) (b <|| p%:num.~%:i01 ||> a)
+| choicemm A (p : {prob R}) (a : M A) :
+    choice_eq (a <|| p ||> a) a
+| choiceA A (p q : {prob R}) (a b c : M A) :
+    choice_eq (a <|| p ||> (b <|| q ||> c))
       ((a <|| [r_of p, q] ||> b) <|| [s_of p, q] ||> c)
-| rchoice_bindDl : forall [A B : UU0] p (a b : M A)
-    (f : A -> M B),
-    ((a <|| p ||> b) >>= f) ≊
-      ((a >>= f) <|| p ||> (b >>= f))
-where "a ≊ b" := (@choice_rel _ a b).
+| choice_bindDl A B (p : {prob R}) (a b : M A) (f : A -> M B) :
+    choice_eq ((a <|| p ||> b) >>= f)
+      ((a >>= f) <|| p ||> (b >>= f)).
 
-Notation "a === b" := (@freer_eq _ choice_rel _ a b).
+#[export] HB.instance Definition _ :=
+  @hasWBisim.Build (freer Fx) choice_eq choice_refl choice_sym choice_trans
+    choice_bindm choice_bindf.
 
-Lemma c1 : forall A (a b : M A), (a <|| 1%:i01 ||> b) === a.
-Proof. by move=>*; exact/law_can_bisim/rchoice1. Qed.
+#[export] HB.instance Definition _ :=
+  isMonadFreerChoiceEqReas.Build Fx R flipprovided (freer Fx)
+    choice1 choiceC choicemm choiceA choice_bindDl.
 
-Lemma cC : forall A p (a b : M A),
-  (a <|| p ||> b) === (b <|| p%:num.~%:i01 ||> a).
-Proof. by move=>*; exact/law_can_bisim/rchoiceC. Qed.
-
-Lemma cmm : forall A p (a : M A), (a <|| p ||> a) === a.
-Proof. by move=>*; exact/law_can_bisim/rchoicemm. Qed.
-
-Lemma cA : forall A p q (a b c : M A),
-  (a <|| p ||> (b <|| q ||> c)) ===
-    ((a <|| [r_of p, q] ||> b) <|| [s_of p, q] ||> c).
-Proof. by move=>*; exact/law_can_bisim/rchoiceA. Qed.
-
-Lemma cbindDl : forall A B p (a b : M A) (f : A -> M B),
-  ((a <|| p ||> b) >>= f) ===
-    ((a >>= f) <|| p ||> (b >>= f)).
-Proof. by move=>*; exact/law_can_bisim/rchoice_bindDl. Qed.
-
-#[export]
-HB.instance Definition _ := isMonadFreerChoiceEqReas.Build
-  R M c1 cC cmm cA cbindDl.
-End rel_s.
-End RelModel.
+End relation.
+End ChoiceRelation.
