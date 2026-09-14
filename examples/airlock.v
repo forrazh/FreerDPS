@@ -265,7 +265,7 @@ case: op=> [| d].
   + by rewrite to_hoare_triggerE;
       exact: (distinguished_caller (F := DOORS) (G := STORE nat)).
     rewrite !to_hoare_triggerE.
-    move/(distinguished_callee (F := DOORS) (G := STORE nat)) => ->.
+    move/(distinguished_callee)=>->.
     rewrite pre_to_hoare_whenP;
       case: (15 <? cpt)%nat=> //=;
       apply: pre_to_hoare_bind=>[| *].

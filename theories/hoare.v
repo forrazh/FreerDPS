@@ -35,7 +35,6 @@ Arguments pre {Σ α} (_ _).
 Arguments post {Σ α} (_ _ _).
 
 Definition hoare_ret {Σ α} (x : α) : hoare Σ α :=
-Definition hoare_ret {Σ α} (x : α) : hoare Σ α :=
   mk_hoare [set: Σ] (fun s y s' => x = y /\ s = s').
 
 Definition hoare_bind {Σ α β}
@@ -58,13 +57,11 @@ Module hoare_mon.
 Section hm.
 Variable Σ : Type.
 Let ret := @hoare_ret Σ.
-Let ret := @hoare_ret Σ.
 Let bind := @hoare_bind Σ.
 
 Let right_neutral : BindLaws.right_neutral bind ret.
 Proof.
 move=> A [pr po].
-rewrite /bind /ret /hoare_bind /hoare_ret/=; congr mk_hoare.
 rewrite /bind /ret /hoare_bind /hoare_ret/=; congr mk_hoare.
 - by apply/funext => s/=; apply/propext; split; tauto.
 - apply/eq3_fun => s a s''.
@@ -76,7 +73,6 @@ Qed.
 
 Let left_neutral : BindLaws.left_neutral bind ret.
 Proof.
-move=> A B a f; rewrite /bind /ret /hoare_bind /hoare_ret/=.
 move=> A B a f; rewrite /bind /ret /hoare_bind /hoare_ret/=.
 move fa : (f a) => [pr po]; congr mk_hoare.
 - apply/funext=> s; rewrite andTP; apply/propext; split.
@@ -91,7 +87,6 @@ Qed.
 
 Let assoc : BindLaws.associative bind.
 Proof.
-move=> A B C m f g; rewrite /bind /ret /hoare_bind /hoare_ret/=.
 move=> A B C m f g; rewrite /bind /ret /hoare_bind /hoare_ret/=.
 case: m => prA poA/=; congr mk_hoare.
 - apply/funext => s; apply/propext; split.

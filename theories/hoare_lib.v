@@ -175,10 +175,8 @@ Lemma pre_to_hoare_triggerP (op : F A) (ω : Ω) :
 Proof. by rewrite to_hoare_triggerE /= provided_callerP. Qed.
 
 Lemma post_to_hoare_triggerP (op : F A) (ω : Ω) (a : A) (ω' : Ω) :
-  post (to_hoare (M:=M) c (ptrigger op))
-    ω a ω' <->
-  ω' = witness_update c ω op a /\
-  callee_obligation c ω' op a.
+  post (to_hoare (M:=M) c (ptrigger op)) ω a ω' <->
+  ω' = witness_update c ω op a /\ callee_obligation c ω' op a.
 Proof. by rewrite to_hoare_triggerE /= provided_calleeP. Qed.
 
 End contract_trigger_helpers.

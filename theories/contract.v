@@ -355,9 +355,9 @@ by rewrite /gen_caller_obligation !injK_Some.
 Qed.
 
 Lemma provided_bind_caller :
-  (callee_obligation c w op x ->
+  (callee_obligation c w' op x ->
     caller_obligation c (witness_update c w op x) op') ->
-  gen_callee_obligation c w (inj op) x ->
+  gen_callee_obligation c w' (inj op) x ->
   gen_caller_obligation c
     (gen_witness_update c w (inj op) x)
     (inj op').
@@ -369,8 +369,8 @@ Qed.
 
 Lemma provided_calleeP :
   (w' = gen_witness_update c w (inj op) x
-  /\ gen_callee_obligation c w (inj op) x )
-  <-> (w' = witness_update c w op x /\ callee_obligation c w op x) .
+  /\ gen_callee_obligation c w' (inj op) x )
+  <-> (w' = witness_update c w op x /\ callee_obligation c w' op x) .
 Proof.
 by split; rewrite /gen_callee_obligation /gen_witness_update !injK_Some.
 Qed.
@@ -392,7 +392,7 @@ Qed.
 
 Lemma distinguished_callee :
   (w' = gen_witness_update c w (inj op) x /\
-    gen_callee_obligation c w (inj op) x) <->
+    gen_callee_obligation c w' (inj op) x) <->
   w' = w.
 Proof.
 rewrite /gen_witness_update /gen_callee_obligation injK_None.
@@ -438,9 +438,9 @@ Lemma shared_left_calleeP (op : F X) :
       (ci -^- cj) w
       (inj op) x /\
     gen_callee_obligation (Fx := Fx)
-      (ci -^- cj) w
+      (ci -^- cj) w'
       (inj op) x) <->
-  w' = witness_update ci w op x /\ callee_obligation ci w op x.
+  w' = witness_update ci w op x /\ callee_obligation ci w' op x.
 Proof.
 rewrite /gen_witness_update /gen_callee_obligation /=.
 rewrite /sharedcontractprod /= /gen_callee_obligation.
@@ -453,9 +453,9 @@ Lemma shared_right_calleeP (op : G X) :
       (ci -^- cj) w
       (inj op) x /\
     gen_callee_obligation (Fx := Fx)
-      (ci -^- cj) w
+      (ci -^- cj) w'
       (inj op) x) <->
-  w' = witness_update cj w op x /\ callee_obligation cj w op x.
+  w' = witness_update cj w op x /\ callee_obligation cj w' op x.
 Proof.
 rewrite /gen_witness_update /gen_callee_obligation /=.
 rewrite /sharedcontractprod /= /gen_callee_obligation.
@@ -505,9 +505,9 @@ Lemma shared_left_callee_injP (op : F X) :
       (ci -^- cj) w
       (effect.injT H Fx F _ op) x /\
     gen_callee_obligation
-      (ci -^- cj) w
+      (ci -^- cj) w'
       (effect.injT H Fx F _ op) x) <->
-  w' = witness_update ci w op x /\ callee_obligation ci w op x.
+  w' = witness_update ci w op x /\ callee_obligation ci w' op x.
 Proof.
 rewrite /gen_witness_update /gen_callee_obligation /=.
 rewrite /sharedcontractprod /= /gen_callee_obligation.
@@ -520,9 +520,9 @@ Lemma shared_right_callee_injP (op : G X) :
       (ci -^- cj) w
       (effect.injT H Fx G _ op) x /\
     gen_callee_obligation
-      (ci -^- cj) w
+      (ci -^- cj) w'
       (effect.injT H Fx G _ op) x) <->
-  w' = witness_update cj w op x /\ callee_obligation cj w op x.
+  w' = witness_update cj w op x /\ callee_obligation cj w' op x.
 Proof.
 rewrite /gen_witness_update /gen_callee_obligation /=.
 rewrite /sharedcontractprod /= /gen_callee_obligation.
