@@ -72,14 +72,17 @@ Instance default_MayProvide (F E : effect) : (E -<? F) |1000 :=
     projecting the resulting primitive into [E] returns [None] as long as [F]
     and [E] are two different effects. *)
 
-Class Distinguish (Fx F E : effect) `{Hp: F -< Fx, Hmp : E -<? Fx} : Prop :=
-  { injK_None : forall {A} (e: F A), Hmp.(prj) (Hp.(inj) e) = None }.
+(* F -< Fx/G *)
+Class Distinguish (Fx F E : effect) `{F -< Fx} `{E -<? Fx} : Prop :=
+  { injK_None : forall {A} (e: F A), prj (inj e) = None }.
 
 Class StrictProvide2 (Fx F1 F2 : effect)
-  `{p1: F1 -< Fx} `{p2: F2 -< Fx}
-  `{! Distinguish Fx F1 F2} `{! Distinguish Fx F2 F1}
-  : Type
-.
+  : Type := {
+    p1 :: F1 -< Fx;
+    p2 :: F2 -< Fx;
+    d1 :: @Distinguish Fx F1 F2 p1 p2.(may_prov) ;
+    d2 :: @Distinguish Fx F2 F1 p2 p1.(may_prov) ;
+  }.
 
 (******************************************************************************
   * Sadly, this can't be used to declare StrictProvide right now because      *
@@ -87,7 +90,14 @@ Class StrictProvide2 (Fx F1 F2 : effect)
   * prov/dist by itself.                                                      *
   * TODO: Investigate why.                                                    *
   *****************************************************************************)
-Notation "F1 ;; F2 -<< Fx" := (StrictProvide2 Fx F1 F2) (at level 50, no associativity): type_scope.
+Notation "F1 ;; F2 -<< Fx" := (StrictProvide2 Fx F1 F2 ) (at level 50, no associativity): type_scope.
+
+#[global] Hint Mode MayProvide + + : typeclass_instances.
+#[global] Hint Mode Provide + + : typeclass_instances.
+#[global] Hint Mode Distinguish + + + - -:
+  typeclass_instances.
+#[global] Hint Mode StrictProvide2 - - - :
+   typeclass_instances.
 
 (** * Composing Effects *)
 
@@ -138,12 +148,7 @@ Next Obligation. by move=> */=. Qed.
 
 Instance eplus_left_MayProvide (Fx F E : effect) `{F -<? Fx}
   : F -<? (Fx + E) :=
-  { prj := fun A e => if e is in_left e then prj e else None
-                (* match e with *)
-                (* | in_left e => proj e *)
-                (* | _ => None *)
-                (* end *)
-  }.
+  { prj := fun A e => if e is in_left e then prj e else None }.
 
 Program Instance eplus_left_Provide (Fx F E : effect) `{F -< Fx}
   : F -< (Fx + E) :=
@@ -227,6 +232,90 @@ Next Obligation. by move=> */=; exact: injK_None. Defined.
 Next Obligation. by move=> */=. Qed.
 Next Obligation. by move=> */=. Qed.
 
+Global Instance may_provideT (FX Fx F : effect) `{F -<? Fx}
+    `{H' : Fx -<? FX} : F -<? FX :=
+  {| prj := fun A fX =>
+       match H'.(prj) fX with
+       | Some fx => H.(prj) fx
+       | None => None
+       end |}.
+
+Local Definition injT (FX Fx F : effect) `{F -< Fx} `{H' : Fx -< FX} :=
+  fun (A : Type) (f : F A) => H'.(inj) (H.(inj) f).
+Local Lemma injK_SomeT (FX Fx F : effect) `{F -< Fx}
+    `{H' : Fx -< FX} :
+  forall A e,
+    (@may_provideT FX Fx F H.(may_prov) H'.(may_prov)).(prj)
+      (@injT FX Fx F H H' A e) = Some e.
+Proof.
+by move=> A e /=; rewrite !injK_Some.
+Qed.
+
+Definition provideT (FX Fx F : effect) `{F -< Fx} `{H' : Fx -< FX}
+    : F -< FX :=
+  {| may_prov := may_provideT FX Fx F;
+     inj := @injT FX Fx F H H';
+     injK_Some := @injK_SomeT FX Fx F H H' |}.
+
+Ltac find_provideT :=
+  match goal with
+  | |- @Provide ?FX ?F =>
+      match goal with
+      | outer : @Provide ?FX ?Fx |- _ =>
+          let inner := constr:(_ : @Provide Fx F) in
+          exact (@provideT FX Fx F inner outer)
+      end
+  end.
+
+#[global] Hint Extern 500 (@Provide _ _) =>
+  find_provideT : typeclass_instances.
+
+Instance distinguish_provideT
+    (FX Fx F G : effect)
+    (pf : F -< Fx) (pg : G -< Fx)
+    (different : @Distinguish Fx F G pf pg.(may_prov))
+    (outer : Fx -< FX) :
+    @Distinguish FX F G
+      (@provideT FX Fx F pf outer)
+      (@provideT FX Fx G pg outer).(may_prov).
+Proof. by constructor=> A op /=; rewrite !injK_Some injK_None. Defined.
+
+(** This one is not an instance because the typeclass
+  * resolver would just loop wildly otherwise *)
+Definition strictProvideT
+    (FX Fx F G : effect)
+    (sp : F ;; G -<< Fx) (outer : Fx -< FX) :
+    F ;; G -<< FX :=
+{|
+  p1 := @provideT FX Fx F sp.(p1) outer;
+  p2 := @provideT FX Fx G sp.(p2) outer
+|}.
+
+Ltac find_strict_provideT :=
+  multimatch goal with
+  | inner : @StrictProvide2 ?Fx ?F ?G
+      |- @StrictProvide2 ?FX ?F ?G =>
+      let outer := constr:(_ : @Provide FX Fx) in
+      exact (@strictProvideT FX Fx F G inner outer)
+  end.
+
+Ltac find_provideT_from_strict :=
+  multimatch goal with
+  | outer : @StrictProvide2 ?FX ?Fx ?Other
+      |- @Provide ?FX ?F =>
+      let inner := constr:(_ : @Provide Fx F) in
+      exact (@provideT FX Fx F inner outer.(p1))
+  | outer : @StrictProvide2 ?FX ?Other ?Fx
+      |- @Provide ?FX ?F =>
+      let inner := constr:(_ : @Provide Fx F) in
+      exact (@provideT FX Fx F inner outer.(p2))
+  end.
+#[global] Hint Extern 499 (@Provide _ _) =>
+  find_provideT_from_strict : typeclass_instances.
+
+#[global] Hint Extern 500 (@StrictProvide2 _ _ _) =>
+  find_strict_provideT : typeclass_instances.
+
 Inductive eempty : effect := .
 
 (** Another example of general-purpose effect we can define is the [STORE s]
@@ -258,5 +347,3 @@ Arguments Put [s] (x).
     [<+>] or [⊕]) to compose effects together.  An impure computation
     parameterized by [F ⊕ E] can therefore leverage the primitives of both [F]
     and [E]. *)
-
-

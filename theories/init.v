@@ -10,6 +10,7 @@ From monae Require Import hierarchy.
 Global Close Scope nat_scope.
 Global Open Scope monae_scope.
 
+(* TODO: Check if this is already in monae *)
 Definition when {X} {M : monad}  (b : bool) (m : M X) : M unit :=
   if b then m >> skip else skip.
 Notation "f $ x" := (f x) (at level 60, right associativity, only parsing).

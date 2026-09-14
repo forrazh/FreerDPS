@@ -34,6 +34,9 @@ Proof. by move=> UV; apply/eq3_exists => x y z; exact/eq_exists. Qed.
 Lemma andTP (P : Prop) : (True /\ P) = P.
 Proof. by apply/propext; split => // -[]. Qed.
 
+Lemma andPT (P : Prop) : (P /\ True) = P.
+Proof. by apply/propext; split => // -[]. Qed.
+
 Lemma ex2C A B (P : A -> B -> Prop) :
   (exists a b, P a b) = (exists b a, P a b).
 Proof. by apply/propeqP; split=> -[x [y xy]]; [exists y, x | exists y, x]. Qed.
