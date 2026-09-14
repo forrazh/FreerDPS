@@ -128,3 +128,4 @@ rewrite -[X in _ ≈ _ <|| _ ||> X]
 by rewrite freer_choiceA (s_of_pqK p1) (r_of_pqK p1 d0).
 Qed.
 End lossy_round_trip.
+
