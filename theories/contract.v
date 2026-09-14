@@ -254,8 +254,7 @@ Infix "-*-" := contractprod (at level 20) : contract_scope .
     witness state among its two operands. *)
 Section s.
 Context {Fx : effect}.
-Definition sharedcontractprod {F E : effect}
-    `{F -< Fx, E -< Fx} `{F ;; E -<< Fx}
+Definition sharedcontractprod {F E : effect} `{F ;; E -<< Fx}
     {Ω : Type} (ci : contract F Ω) (cj : contract E Ω)
   : contract Fx Ω :=
   {|
