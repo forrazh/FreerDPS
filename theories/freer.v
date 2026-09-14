@@ -277,6 +277,3 @@ Definition law_sound [F : effect] [M : freerMonad F] (law : FreerLawRelation) (N
   forall A (m n : M A),
     law A m n ->
     denote N h A m = denote N h A n.
-
-Module FMwBi.
-Section fm_eq_s.
