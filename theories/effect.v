@@ -270,8 +270,6 @@ Ltac find_provideT :=
 #[global] Hint Extern 500 (@Provide _ _) =>
   find_provideT : typeclass_instances.
 
-Check provideT.
-
 Instance distinguish_provideT
     (FX Fx F G : effect)
     (pf : F -< Fx) (pg : G -< Fx)

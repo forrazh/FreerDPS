@@ -412,9 +412,6 @@ Lemma post_to_hoare_triggerRP
   ω' = witness_update cj ω op x /\
   callee_obligation cj ω op x.
 Proof. by rewrite to_hoare_triggerE /= shared_right_calleeP. Qed.
-
-
-
 End ToHoareSharedContractSection.
 
 
@@ -422,9 +419,6 @@ Section ToHoareSharedContractSection.
 Context {F G H I : effect} `{F ;; G -<< H} `{H -< I}
     {M : freerMonad I} (Ω : Type) (ci : contract F Ω)
     (cj : contract G Ω).
-Check effect.injT I H F .
-Goal forall A op, @inj _ _ _ A op = effect.injT I H F _ op.
-Proof. by []. Qed.
 
 Lemma pre_to_hoare_trigger_injL
     {A : Type} (op : F A) (ω : Ω) :
@@ -455,5 +449,4 @@ Lemma post_to_hoare_trigger_injRP
   ω' = witness_update cj ω op x /\
   callee_obligation cj ω op x.
 Proof. by rewrite to_hoare_triggerE /= shared_right_callee_injP. Qed.
-
 End ToHoareSharedContractSection.

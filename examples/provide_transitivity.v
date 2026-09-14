@@ -53,7 +53,7 @@ Context `{root_children : AB ;; C -<< Root}.
 Goal LA -< Root.
 Proof. exact: _. Qed.
 
-(* This tests look very hard to resolve *)
+(* These tests are very hard to resolve *)
 (* Goal LB -< Root.
 Proof. exact: _. Qed. *)
 (* Print HintDb typeclass_instances.
@@ -73,6 +73,7 @@ Context `{level2 : N1 -< N2}.
 Context `{level3 : N2 -< N3}.
 Context `{direct_to_root : N3 -< Root}.
 
+(* This tests are very hard to resolve *)
 (* Goal L0 -< Root.
 Proof. exact: _. Qed.
 
