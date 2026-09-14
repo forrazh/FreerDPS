@@ -69,7 +69,7 @@ by rewrite !freer_choice_bindDl !bindretf IH.
 Qed.
 
 Lemma freer_choice0 (A : UU0) (a b : M A) :
-  (a <|| 0%:i01 : {prob R} ||> b) ≈ b.
+  a <|| 0%:i01 : {prob R} ||> b ≈ b.
 Proof.
 have cplt0 : ((0%:i01 : {prob R})%:num.~%:i01) = 1%:i01.
   by exact/val_inj/GRing.subr0.
