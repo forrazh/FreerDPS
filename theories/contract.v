@@ -75,10 +75,7 @@ Definition no_promise {F : effect} {Ω : Type}
   True.
 
 Definition no_contract (F : effect) : contract F unit :=
-  {| state_update := const_witness
-   ; requirement := no_requirement
-   ; promise := no_promise
-   |}.
+  make_contract const_witness no_requirement no_promise.
 
 (** A similar —and as simple— contract is the one that forbids the use of a
     given effect. *)
