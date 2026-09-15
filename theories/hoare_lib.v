@@ -313,24 +313,24 @@ End ToHoareSharedContractSection.
 Module frame_rule.
 Module Export SyntaxFreer.
 
-Inductive t {F : effect} : Type -> Type :=
-| ret : forall A, A -> t A
-| bind : forall B A, t B -> (B -> t A) -> t A
-| trigger : forall A, F A -> t A.
+Inductive fSyntax {F : effect} : Type -> Type :=
+| ret : forall A, A -> fSyntax A
+| bind : forall B A, fSyntax B -> (B -> fSyntax A) -> fSyntax A
+| trigger : forall A, F A -> fSyntax A.
 
 Fixpoint sem {Fx F : effect} `{F -< Fx} {M : freerMonad Fx} {A}
-    (m : @t F A) : M A :=
+    (m : @fSyntax F A) : M A :=
   match m with
   | ret A a => Ret a
   | bind A B m f => sem m >>= (sem \o f)
-  | trigger A op => ptrigger op
+  | trigger A cmd => ptrigger cmd
   end.
 
-Notation freerSyntax := t.
-Notation frRet := ret.
-Notation frBind := bind.
-Notation frTrigger := trigger.
-Notation freerSem := sem.
+Abbreviation freerSyntax := fSyntax.
+Abbreviation frRet := ret.
+Abbreviation frBind := bind.
+Abbreviation frTrigger := trigger.
+Abbreviation freerSem := sem.
 End SyntaxFreer.
 
 (** A witness records that a program uses only one of the two effects. *)
@@ -351,7 +351,7 @@ Lemma freer_contract_left (m : M U) :
 Proof.
 rewrite /freer_to_hoare.
 case=> syntax; elim: syntax m=>
-    [X x m <- | X Y prefix IHprefix suffix IHsuffix m <- | X op m <-] /=.
+    [X x m <- | X Y prefix IHprefix suffix IHsuffix m <- | X cmd m <-] /=.
 - by rewrite !denote_ret.
 - rewrite !denote_bind.
   under eq_bind=> x do rewrite !compE (IHsuffix x) //=.
@@ -360,7 +360,7 @@ case=> syntax; elim: syntax m=>
   rewrite /gen_state_update /gen_requirement /gen_promise /=.
   rewrite injK_Some injK_None.
   congr mk_hoare.
-  + by apply/funext=> w; rewrite andPT.
+  + by apply/funext=> s; rewrite andPT.
   + by apply/eq3_fun=> s b s'; rewrite andPT.
 Qed.
 
@@ -369,7 +369,7 @@ Lemma freer_contract_right (m : M U) :
 Proof.
 rewrite /freer_to_hoare.
 case=> syntax; elim: syntax m=>
-    [X x m <- | X Y prefix IHprefix suffix IHsuffix m <- | X op m <-] /=.
+    [X x m <- | X Y prefix IHprefix suffix IHsuffix m <- | X cmd m <-] /=.
 - by rewrite !denote_ret.
 - rewrite !denote_bind.
   under eq_bind=> x do rewrite !compE (IHsuffix x) //=.
@@ -378,7 +378,7 @@ case=> syntax; elim: syntax m=>
   rewrite /gen_state_update /gen_requirement /gen_promise /=.
   rewrite injK_Some injK_None.
   congr mk_hoare.
-  + by apply/funext=> w; rewrite andTP.
+  + by apply/funext=> s; rewrite andTP.
   + by apply/eq3_fun=> s b s'; rewrite andTP.
 Qed.
 
