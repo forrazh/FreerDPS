@@ -108,8 +108,7 @@ HB.mixin Record isMonadFreer (F : effect) (M : Type -> Type) of Monad M := {
       (forall X Y (m : M X) (f : X -> M Y), denote' Y (m >>= f) =
          denote' X m >>= (denote' Y \o f)) ->
       (forall X (op : F X), denote' X (trigger X op) = h X op) ->
-    forall X (m : M X), denote' X m = denote N h X m
-}.
+    forall X (m : M X), denote' X m = denote N h X m }.
 
 #[short(type=freerMonad)]
 HB.structure Definition MonadFreer (F : effect) :=
