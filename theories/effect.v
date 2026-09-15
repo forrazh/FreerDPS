@@ -323,12 +323,12 @@ Inductive eempty : effect := .
     manipulating a global, mutable variable of type [s] within an impure
     computation. *)
 
-Inductive STORE (s : Type) : effect :=
-| Get : STORE s s
-| Put (x : s) : STORE s unit.
+Inductive STORE (S : Type) : effect :=
+| Get : STORE S S
+| Put : S -> STORE S unit.
 
-Arguments Get {s}.
-Arguments Put [s] (x).
+Arguments Get {S}.
+Arguments Put [S] (_).
 
 (** According to the definition of [STORE s], an impure computation can use two
     primitives. The term [Get : STORE s s] describes a primitive expected to

@@ -33,9 +33,9 @@ Definition correct_component {Ex E F : effect} `{E -<? Ex} {M : freerMonad Ex}
     (cE : contract E ΩE) (pred : ΩF -> ΩE -> Prop) :
   Prop :=
   forall (ωF : ΩF) (ωE : ΩE) (init : pred ωF ωE) (α : Type)
-      (op : F α) (o_caller : caller_obligation cF ωF op),
-    pre (to_hoare cE $ c α op) ωE /\
+      (op : F α) (o_caller : requirement cF ωF op),
+    pre (cE |> c α op) ωE /\
     forall (x : α) (ωE' : ΩE),
-      post (to_hoare (M:=M) cE (c α op)) ωE x ωE' ->
-      callee_obligation cF ωF op x /\
-      pred (witness_update cF ωF op x) ωE'.
+      post (cE |> (c α op : M _)) ωE x ωE' ->
+      promise cF ωF op x /\
+      pred (state_update cF ωF op x) ωE'.

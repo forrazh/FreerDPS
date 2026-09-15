@@ -23,13 +23,13 @@ Implicit Type d : door.
 HB.instance Definition _ := gen_eqMixin door.
 
 Inductive DOORS : effect :=
-| IsOpen : door -> DOORS bool
+| CheckOpen : door -> DOORS bool
 | Toggle : door -> DOORS unit.
 
 Section doors_s.
 Context {Fx : effect} `{DOORS -< Fx} {M : freerMonad Fx}.
 
-Definition is_open d : M bool := ptrigger $ IsOpen d.
+Definition is_open d : M bool := ptrigger $ CheckOpen d.
 Definition toggle d : M unit := ptrigger $ Toggle d.
 Definition open_door d : M unit :=
   is_open d >>= fun open => when (~~ open) (toggle d).
@@ -47,13 +47,13 @@ Definition tick : M unit := ptrigger Tick.
 Definition trigger_open d : M unit := ptrigger $ TriggerOpen d.
 End controller_s.
 
-Definition co d : door :=
+Definition opposite_door d : door :=
   match d with
   | left => right
   | right => left
   end.
 
-Lemma co_leftE : co left = right.
+Lemma co_leftE : opposite_door left = right.
 Proof. by []. Qed.
 
 Definition controller {Fx : effect} `{DOORS -< Fx, STORE nat -< Fx}
@@ -67,7 +67,7 @@ Definition controller {Fx : effect} `{DOORS -< Fx, STORE nat -< Fx}
         close_door right >>
         iput 0%nat
     | TriggerOpen d =>
-      close_door (co d) >>
+      close_door (opposite_door d) >>
       open_door d >>
       iput 0%nat
     end.
@@ -79,30 +79,32 @@ End DoorsControllerM.
 
 (* ----------------------------- Witness States ----------------------------- *)
 
-Definition Ω : Type := bool * bool.
-(*         S : Type := left * rght. *)
+Definition open := true.
+Definition closed := false.
 
-Definition sel d : Ω -> bool :=
+Definition Ω : Type := bool * bool.
+
+Definition door_state d : Ω -> bool :=
   match d with
   | left => fst
   | right => snd
   end.
 
-Definition tog d (ω : Ω) : Ω :=
+Definition toggle d (t : Ω) : Ω :=
   match d with
-  | left => (~~ (fst ω), snd ω)
-  | right => (fst ω, ~~ (snd ω))
+  | left => (~~ t.1, t.2)
+  | right => (t.1, ~~ t.2)
   end.
 
 Lemma tog_equ_1 d (ω : Ω) :
-  sel d (tog d ω) = ~~ sel d ω.
+  door_state d (toggle d ω) = ~~ door_state d ω.
 Proof. by case: d. Qed.
 
 Lemma tog_equ_2 d (ω : Ω) :
-  sel (co d) (tog d ω) = sel (co d) ω.
+  door_state (opposite_door d) (toggle d ω) = door_state (opposite_door d) ω.
 Proof. by case: d. Qed.
 
-Opaque tog.
+Opaque toggle.
 
 (* -------------------------------------------------------------------------- *)
 
@@ -117,77 +119,91 @@ Opaque tog.
 
 (* -------------------------------- Contract -------------------------------- *)
 (* Ω = bool * bool : doors state *)
-Definition step (ω : Ω) (a : Type) (op : DOORS a) (_ : a) : Ω :=
-  if op is Toggle d then tog d ω else ω.
+Definition doors_witness_update (t : Ω) (U : Type) (c : DOORS U) : Ω :=
+  if c is Toggle d then toggle d t else t.
 
 (** *** Requirements / Precondition *)
-Definition doors_o_caller (ω : Ω) : forall a, DOORS a -> Prop :=
-  fun a op =>
-    match op with
-    (** Given the door [d] of a system [ω], it is always possible to ask for
-        the state of [d]. *)
-    | IsOpen _ => True
-    (** If [d] is closed, the second door [co d] has to be closed too for a
-        trigger toggling [d] to be valid. *)
-    | Toggle d => sel (co d) ω -> sel d ω
-    end.
+Definition doors_requirement (t : Ω) : forall U, DOORS U -> Prop :=
+  fun _ op =>
+     match op with
+     | CheckOpen _ => True
+     | Toggle d => door_state (opposite_door d) t -> door_state d t
+     end.
+(*
+doors_o_caller does not hold when we toggle a door d
+which is closed while the opposite door is open;
+observe that doors_o_caller can be true if the opposite door is
+open while we try to close the other open door (though this
+situation is of course not supposed to happen)
+*)
+
+(*
+true true   true
+true false  false
+false false true
+false true  true
+*)
 
 (** *** Promises / PostCondition *)
-Definition doors_o_callee (ω : Ω) : forall a, DOORS a -> a -> Prop :=
-  fun a op =>
-    match op in DOORS a return a -> Prop with
-    (** The reported state of [d] shall reflect its true state. *)
-    | IsOpen d => fun opened => sel d ω = opened
-    (** A toggle operation has no meaningful result. *)
+
+Definition doors_promise (t : Ω) : forall U, DOORS U -> U -> Prop :=
+  fun U op =>
+    match op in DOORS _ with
+    | CheckOpen d => fun b => door_state d t = b
     | Toggle _ => fun _ => True
     end.
 
+(*
+relation between a command c and a state u;
+it is false only when the state of a door that we check is not u
+*)
+
+
 (* doors_c => {{door_caller}} p%step {{door_callee}} *)
 Definition doors_c : contract DOORS Ω :=
-  make_contract step doors_o_caller doors_o_callee.
-(* -------------------------------------------------------------------------- *)
+  make_contract
+   (fun t u c _ => doors_witness_update t u c)
+   doors_requirement
+   doors_promise.
 
 Local Open Scope classical_set_scope.
 
 Remark one_door_safe_all_doors_safe (ω : Ω) d
-    (safe : ~~ sel d ω \/ ~~ sel (co d) ω) :
-  forall d', ~~ sel d' ω \/ ~~ sel (co d') ω.
+    (safe : ~~ door_state d ω \/ ~~ door_state (opposite_door d) ω) :
+  forall d', ~~ door_state d' ω \/ ~~ door_state (opposite_door d') ω.
 Proof.
 by move: d safe=> + /[swap]; case; case=> //=; rewrite or_comm.
 Qed.
 
-Definition doors_safe (ω : Ω) := ~~ sel left ω \/ ~~ sel right ω.
+Definition doors_safe (ω : Ω) := ~~ door_state left ω \/ ~~ door_state right ω.
 
 Section RespectfulAndRunLemmas.
 Context {Fx : effect} `{DOORS -< Fx} {M : freerMonad Fx}.
 
-Local Notation "c ||> p" :=
-  (to_hoare (M := M) c p)
-  (at level 50, no associativity).
-
 (** Closing a door [d] in any system [ω] is always a respectful operation. *)
-Lemma close_door_respectful d : pre (doors_c ||> close_door d) = [set: _].
+Lemma close_door_respectful d : pre (doors_c |> (close_door d : M _)) = [set: _].
 Proof.
-rewrite /close_door -subTset=> hω _; apply: pre_to_hoare_bind.
+rewrite /close_door -subTset=> hω _.
+rewrite freer_to_hoare_bindE/=; split.
   by rewrite to_hoare_triggerE /= provided_callerP.
 case=> w'; rewrite pre_to_hoare_whenP // !to_hoare_triggerE.
 by case=> ->; apply: provided_bind_caller=> /=.
 Qed.
 
-Lemma open_door_respectful (ω : Ω) d (safe : ~~ sel (co d) ω) :
-  pre (doors_c ||> open_door d) ω.
+Lemma open_door_respectful (ω : Ω) d (safe : ~~ door_state (opposite_door d) ω) :
+  pre (doors_c |> (open_door d : M _)) ω.
 Proof.
-rewrite /open_door; apply: pre_to_hoare_bind.
+rewrite /open_door freer_to_hoare_bindE; split.
   by rewrite pre_to_hoare_triggerP.
 case=> w'; rewrite pre_to_hoare_whenP // !to_hoare_triggerE.
 by case=> ->; apply: provided_bind_caller; move: safe=> /= /negPf ->.
 Qed.
 
 Lemma close_door_run (ω : Ω) d (ω' : Ω) (x : unit)
-    (run : post (doors_c ||> close_door d) ω x ω') :
-  ~~ sel d ω'.
+    (run : post (doors_c |> (close_door d : M _)) ω x ω') :
+  ~~ door_state d ω'.
 Proof.
-move: run; rewrite /close_door post_to_hoare_bindP.
+move: run; rewrite /close_door freer_to_hoare_bindE.
 move=> [opened [w] []].
 rewrite post_to_hoare_whenP post_to_hoare_triggerP=>-[->].
 case: opened=> /= [| /[swap] -> ->] // door_open [[]].
@@ -198,22 +214,22 @@ Qed.
 Opaque close_door.
 Opaque open_door.
 Opaque Nat.ltb.
-Opaque sel.
+Opaque door_state.
 
 Lemma doors_trigger_preserves_safe
     {a : Type} (op : Fx a) (ω : Ω) (x : a) (ω' : Ω) :
-  pre (doors_c ||> ptrigger op) ω ->
-  post (doors_c ||> ptrigger op) ω x ω' ->
+  pre (doors_c |> (ptrigger op : M _)) ω ->
+  post (doors_c |> (ptrigger op : M _)) ω x ω' ->
   doors_safe ω -> doors_safe ω'.
 Proof.
 rewrite to_hoare_triggerE /=.
-rewrite /gen_caller_obligation /gen_witness_update /gen_callee_obligation.
+rewrite /gen_requirement /gen_state_update /gen_promise.
 case: prj=> [door_op |] /=;
   last by move=> _ [-> _].
 move: door_op x; case=> d /= [] caller [-> _] _ //.
-apply: (one_door_safe_all_doors_safe (tog d ω) d).
+apply: (one_door_safe_all_doors_safe (toggle d ω) d).
 rewrite tog_equ_1 tog_equ_2 negbK.
-case other_open: (sel (co d) ω); [left | by right].
+case other_open: (door_state (opposite_door d) ω); [left | by right].
 by apply: caller; rewrite other_open.
 Qed.
 
@@ -261,24 +277,26 @@ Lemma controller_pre {α : Type} (op : CONTROLLER α) (ω : Ω) :
   pre (doors_c |> controller (M := M) α op) ω.
 Proof.
 case: op=> [| d].
-- (* Tick *) apply: pre_to_hoare_bind=>[|cpt w].
-  + by rewrite to_hoare_triggerE;
-      exact: (distinguished_caller (F := DOORS) (G := STORE nat)).
-    rewrite !to_hoare_triggerE.
-    move/(distinguished_callee (F := DOORS) (G := STORE nat))=> ->.
-    rewrite pre_to_hoare_whenP;
-      case: (15 <? cpt)%nat=> //=;
-      apply: pre_to_hoare_bind=>[| *].
-    * by apply: pre_to_hoare_bind=> [| *];
+- (* Tick *)
+  rewrite freer_to_hoare_bindE; split =>[|cpt w].
+  + rewrite to_hoare_triggerE.
+    exact: distinguished_caller.
+  + rewrite !to_hoare_triggerE.
+    move/distinguished_callee=> ->.
+    rewrite pre_to_hoare_whenP.
+    case: (15 <? cpt)%nat=> //=.
+    rewrite freer_to_hoare_bindE; split => [|*].
+    * by rewrite freer_to_hoare_bindE; split => [|*];
         rewrite close_door_respectful.
-    * by rewrite to_hoare_triggerE;
-        exact: (distinguished_caller (F := DOORS) (G := STORE nat)).
-- (* Trigger Open *) apply: pre_to_hoare_bind=> [| *].
-  + apply: pre_to_hoare_bind=> [| ?? close_post].
+    * rewrite to_hoare_triggerE => x ?.
+      by apply: distinguished_caller.
+- (* Trigger Open *)
+  rewrite freer_to_hoare_bindE; split => [|*].
+  + rewrite freer_to_hoare_bindE; split => [|? ? close_post].
     * by rewrite close_door_respectful.
     * exact/open_door_respectful/close_door_run/close_post.
-  + by rewrite to_hoare_triggerE;
-      exact: (distinguished_caller (F := DOORS) (G := STORE nat)).
+  + rewrite to_hoare_triggerE => x ?.
+    exact: distinguished_caller.
 Qed.
 
 Theorem controller_correct :
