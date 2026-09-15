@@ -124,27 +124,6 @@ HB.export Hoare.
 (*HB.instance Definition _ (S : Type) :=
   isMonadHoare.Build S (hoare S).*)
 
-Lemma hoare_bindE {Σ α β} (h : hoare Σ α) (k : α -> hoare Σ β) :
-  @bind (hoare Σ) α β h k = hoare_bind h k.
-Proof. by []. Qed.
-
-(** This actually may not be really useful as we reason
-  * either on pre or on post cond.
-  *)
-Lemma hoare_ext {Σ α} (h1 h2 : hoare Σ α) :
-  (forall s, pre h1 s <-> pre h2 s) ->
-  (forall s x s', post h1 s x s' <-> post h2 s x s') ->
-  h1 = h2.
-Proof.
-  case: h1 => pre1 post1; case: h2 => pre2 post2.
-  move=> pre_equiv post_equiv /=.
-  congr mk_hoare.
-  - apply/boolp.funext=> s.
-    exact/boolp.propext/pre_equiv.
-  apply/eq3_fun=> s x s'.
-  exact/boolp.propext/post_equiv.
-Qed.
-
 (** ** Invariant Preservation *)
 
 Definition preserves_invariant {S A}
