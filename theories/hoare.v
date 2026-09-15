@@ -344,30 +344,6 @@ Qed.
 
 End SharedBindHelpers.
 
-Section SharedLeftProgramHelpers.
-Context {Fx F G : effect} `{F ;; G -<< Fx}
-    {W : Type} (ci : contract F W) (cj : contract G W)
-    {M : freerMonad Fx}.
-
-
-
-Definition lift_left_program {A : Type} {Mf : freerMonad F} (p : Mf A) : M A :=
-  denote M (fun _ op => ptrigger (Fx := Fx) op) A p.
-
-Lemma pre_to_hoare_shared_leftP {A : Type} (p : M A) (w : W) :
-  pre (ci -^- cj |> p) w ->
-  pre (ci |> p) w /\ pre (cj |> p) w.
-Abort.
-
-Lemma post_to_hoare_shared_leftP {A : Type} (p : freer F A)
-    (w : W) (result : A) (w' : W) :
-  post (ci -^- cj |> lift_left_program p)
-      w result w' <->
-  post (ci |> lift_left_program p) w result w'.
-Abort.
-
-End SharedLeftProgramHelpers.
-
 Lemma to_hoare_preserves_invariant {Fx F : effect} `{F -<? Fx}
   {M : inductiveFreerMonad Fx} {S : UU0}
   (invariant : set S) (c : contract F S)

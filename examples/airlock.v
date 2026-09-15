@@ -144,12 +144,6 @@ false false true
 false true  true
 *)
 
-
-    (** Given the door [d] of a system [ω], it is always possible to ask for
-        the state of [d]. *)
-    (** If [d] is closed, the second door [co d] has to be closed too for a
-        trigger toggling [d] to be valid. *)
-
 (** *** Promises / PostCondition *)
 
 Definition doors_promise (t : Ω) : forall U, DOORS U -> U -> Prop :=
@@ -286,23 +280,23 @@ case: op=> [| d].
 - (* Tick *)
   rewrite freer_to_hoare_bindE; split =>[|cpt w].
   + rewrite to_hoare_triggerE.
-    exact: (distinguished_caller (F := DOORS) (G := STORE nat)).
+    exact: distinguished_caller.
   + rewrite !to_hoare_triggerE.
-    move/(distinguished_callee (F := DOORS) (G := STORE nat))=> ->.
+    move/distinguished_callee=> ->.
     rewrite pre_to_hoare_whenP.
     case: (15 <? cpt)%nat=> //=.
     rewrite freer_to_hoare_bindE; split => [|*].
     * by rewrite freer_to_hoare_bindE; split => [|*];
         rewrite close_door_respectful.
     * rewrite to_hoare_triggerE => x ?.
-      by apply: (distinguished_caller (F := DOORS) (G := STORE nat)).
+      by apply: distinguished_caller.
 - (* Trigger Open *)
   rewrite freer_to_hoare_bindE; split => [|*].
   + rewrite freer_to_hoare_bindE; split => [|? ? close_post].
     * by rewrite close_door_respectful.
     * exact/open_door_respectful/close_door_run/close_post.
   + rewrite to_hoare_triggerE => x ?.
-    exact: (distinguished_caller (F := DOORS) (G := STORE nat)).
+    exact: distinguished_caller.
 Qed.
 
 Theorem controller_correct :

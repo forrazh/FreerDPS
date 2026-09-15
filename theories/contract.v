@@ -227,7 +227,6 @@ Definition gen_state_update {Fx F : effect} `{F -<? Fx}
     (ω :  Ω) (e : Fx α) (x : α)
   : Ω :=
   if prj e is Some e then state_update c ω e x else ω.
-(* Canonical locked_gen_state_update := Unlockable gen_state_update.unlock. *)
 Arguments gen_state_update : simpl never.
 
 Definition gen_requirement {Fx F : effect} `{F -<? Fx}
@@ -463,11 +462,6 @@ rewrite (@injK_None Fx G F) (@injK_Some Fx G).
 by tauto.
 Qed.
 End shared_contract_helpers.
-
-
-(******************************************************************************)
-(******************************************************************************)
-(******************************************************************************)
 
 Section shared_contract_inj_helpers.
 Context {H Fx F G : effect} `{F;; G-<<Fx, Fx -< H}
