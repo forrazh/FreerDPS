@@ -5,7 +5,7 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 From HB Require Import structures.
-From mathcomp Require Import ssreflect ssrfun boolp classical_sets.
+From mathcomp Require Import ssreflect ssrfun functions boolp classical_sets.
 From monae Require Import hierarchy.
 From FreerDPS Require Import mathcomp_extra init effect freer contract.
 
@@ -418,3 +418,81 @@ Lemma post_to_hoare_trigger_injRP
 Proof. by rewrite to_hoare_triggerE /= shared_right_callee_injP. Qed.
 
 End ToHoareSharedContractSection.
+
+(* Frame rule machinery *)
+Module frame_rule.
+Module Export SyntaxFreer.
+
+Inductive t {F : effect} : Type -> Type :=
+| ret : forall A, A -> t A
+| bind : forall B A, t B -> (B -> t A) -> t A
+| trigger : forall A, F A -> t A.
+
+Fixpoint sem {Fx F : effect} `{F -< Fx} {M : freerMonad Fx} {A}
+    (m : @t F A) : M A :=
+  match m with
+  | ret A a => Ret a
+  | bind A B m f => sem m >>= (sem \o f)
+  | trigger A op => ptrigger op
+  end.
+
+Notation freerSyntax := t.
+Notation frRet := ret.
+Notation frBind := bind.
+Notation frTrigger := trigger.
+Notation freerSem := sem.
+End SyntaxFreer.
+
+(** A witness records that a program uses only one of the two effects. *)
+Section split_effects.
+Context {Fx F G : effect} `{F ;; G -<< Fx}.
+Context {M : freerMonad Fx} {A : UU0}.
+
+Definition provideLeft_isFreer (n : M A) := {m | freerSem (F := F) m = n}.
+Definition provideRight_isFreer (n : M A) := {m | freerSem (F := G) m = n}.
+End split_effects.
+
+Section contract_correspondance.
+Context {Fx F G : effect} `{F ;; G -<< Fx} {M : freerMonad Fx}
+  {T U : UU0} (cf : contract F T) (cg : contract G T).
+
+Lemma freer_contract_left (m : M U) :
+  provideLeft_isFreer m -> (cf -^- cg |> m) = (cf |> m).
+Proof.
+rewrite /freer_to_hoare.
+case=> syntax; elim: syntax m=>
+    [X x m <- | X Y prefix IHprefix suffix IHsuffix m <- | X op m <-] /=.
+- by rewrite !denote_ret.
+- rewrite !denote_bind.
+  under eq_bind=> x do rewrite !compE (IHsuffix x) //=.
+  by rewrite IHprefix.
+- rewrite !denote_trigger /hoare_of_contract /sharedcontractprod /=.
+  rewrite /gen_state_update /gen_requirement /gen_promise /=.
+  rewrite injK_Some injK_None.
+  congr mk_hoare.
+  + by apply/funext=> w; rewrite andPT.
+  + by apply/eq3_fun=> s b s'; rewrite andPT.
+Qed.
+
+Lemma freer_contract_right (m : M U) :
+  provideRight_isFreer m -> (cf -^- cg |> m) = (cg |> m).
+Proof.
+rewrite /freer_to_hoare.
+case=> syntax; elim: syntax m=>
+    [X x m <- | X Y prefix IHprefix suffix IHsuffix m <- | X op m <-] /=.
+- by rewrite !denote_ret.
+- rewrite !denote_bind.
+  under eq_bind=> x do rewrite !compE (IHsuffix x) //=.
+  by rewrite IHprefix.
+- rewrite !denote_trigger /hoare_of_contract /sharedcontractprod /=.
+  rewrite /gen_state_update /gen_requirement /gen_promise /=.
+  rewrite injK_Some injK_None.
+  congr mk_hoare.
+  + by apply/funext=> w; rewrite andTP.
+  + by apply/eq3_fun=> s b s'; rewrite andTP.
+Qed.
+
+End contract_correspondance.
+End frame_rule.
+
+Export frame_rule.
