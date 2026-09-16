@@ -41,7 +41,7 @@ Definition S_p : M (option msg) :=
   recv >>= fun inc=> if inc is Some Ping then reply >> Ret inc else Ret inc.
 Fixpoint loop {X : Type} (fuel : nat) (program : M X) : M unit :=
   match fuel with
-  | 0%nat => program >> skip
+  | O => program >> skip
   | S remaining => program >> loop remaining program
   end.
 Definition S_ (fuel : nat) : M unit := loop fuel S_p.
@@ -116,7 +116,7 @@ Notation "?- m" := (mk_p m true) (at level 1).
 
 Definition packets := seq packet.
 
-Record N := mk_chan {
+Record net_state := mk_chan {
   serverQ : packets;
   clientQ : packets;
 }.
@@ -124,37 +124,37 @@ Record N := mk_chan {
 Definition enqueue p (queue : packets) :=
   rcons queue p.
 
-Definition send_to_server p (network : N) :=
-  {| serverQ := enqueue p (serverQ network);
-     clientQ := clientQ network |}.
+Definition send_to_server p (ns : net_state) :=
+  {| serverQ := enqueue p (serverQ ns);
+     clientQ := clientQ ns |}.
 
-Definition send_to_client p (network : N) :=
-  {| serverQ := serverQ network;
-     clientQ := enqueue p (clientQ network) |}.
+Definition send_to_client p (ns : net_state) :=
+  {| serverQ := serverQ ns;
+     clientQ := enqueue p (clientQ ns) |}.
 
-Definition receive_from_server (network : N) :=
-  match clientQ network with
-  | [::] => network
+Definition receive_from_server (ns : net_state) :=
+  match clientQ ns with
+  | [::] => ns
   | _ :: remaining =>
-      {| serverQ := serverQ network;
+      {| serverQ := serverQ ns;
          clientQ := remaining |}
   end.
 
-Definition receive_from_client (network : N) :=
-  match serverQ network with
-  | [::] => network
+Definition receive_from_client (ns : net_state) :=
+  match serverQ ns with
+  | [::] => ns
   | _ :: remaining =>
       {| serverQ := remaining;
-         clientQ := clientQ network |}
+         clientQ := clientQ ns |}
   end.
 
-Lemma server_does_not_consume_its_send network :
-  serverQ (receive_from_server network) = serverQ network.
-Proof. by rewrite /receive_from_server; case: (clientQ network). Qed.
+Lemma server_does_not_consume_its_send ns :
+  serverQ (receive_from_server ns) = serverQ ns.
+Proof. by rewrite /receive_from_server; case: (clientQ ns). Qed.
 
-Lemma client_does_not_consume_its_send network :
-  clientQ (receive_from_client network) = clientQ network.
-Proof. by rewrite /receive_from_client; case: (serverQ network). Qed.
+Lemma client_does_not_consume_its_send ns :
+  clientQ (receive_from_client ns) = clientQ ns.
+Proof. by rewrite /receive_from_client; case: (serverQ ns). Qed.
 
 Definition deliver p := match p with
 | mk_p m _ => !-m
@@ -185,15 +185,15 @@ rewrite rconsE drop_last_cons -rconsE ih.
 by case: keep.
 Qed.
 
-Definition drop_from_serv (n : N)(keep : bool) := match n with
+Definition drop_from_serv (n : net_state)(keep : bool) := match n with
 | mk_chan srvQ cliQ => {|serverQ:= drop_last srvQ keep; clientQ:= cliQ|}
 end.
 
-Definition drop_from_cli (n : N) (keep : bool) := match n with
+Definition drop_from_cli (n : net_state) (keep : bool) := match n with
 | mk_chan srvQ cliQ => {|serverQ:= srvQ; clientQ:= drop_last cliQ keep|}
 end.
 
-Definition drop_new_packet (n : N) (keep: bool) (q: bool) :=
+Definition drop_new_packet (n : net_state) (keep: bool) (q: bool) :=
 if q then drop_from_serv n keep
 else drop_from_cli n keep.
 
@@ -206,35 +206,33 @@ Local Open Scope nat_scope.
 
 Module ccm.
 
-Definition c_step (network : N) :
-    forall X, client_api X -> X -> N :=
-  fun X operation result =>
-    match operation with
-    | SEND p => send_to_server ?-p network
-    | WAIT => receive_from_server network
+Definition c_step (ns : net_state) :
+    forall X, client_api X -> X -> net_state :=
+  fun X cmd result =>
+    match cmd with
+    | SEND p => send_to_server ?-p ns
+    | WAIT => receive_from_server ns
     end.
 
-
-
-Definition c_requirment (network : N) : forall X, client_api X -> Prop :=
+Definition c_requirment (ns : net_state) : forall X, client_api X -> Prop :=
   fun X cmd =>
     match cmd with
     | SEND _ => True
-    | WAIT => match clientQ network with
+    | WAIT => match clientQ ns with
       | [::] => True
       | (!- Pong) :: _ => True
       | _ => False
       end
-    (* exists remaining, clientQ network = !-Pong :: remaining *)
+    (* exists remaining, clientQ ns = !-Pong :: remaining *)
     end.
 
-Definition c_promise (network : N) :
+Definition c_promise (ns : net_state) :
     forall X, client_api X -> X -> Prop :=
   fun X cmd =>
     match cmd in client_api X return X -> Prop with
     | SEND _ => fun _ => True
     | WAIT => fun result =>
-                    match clientQ network with
+                    match clientQ ns with
                     | [::] => result = None
                     | !-Pong :: _ => result = Some Pong
                     | _ => False
@@ -242,19 +240,20 @@ Definition c_promise (network : N) :
           (* (result = Some Pong \/ result = None) *)
     end.
 
-Definition client_c : contract client_api N :=
+Definition client_c : contract client_api net_state :=
   make_contract c_step c_requirment c_promise.
 
 
 Section client_respectful_and_run_lemmas.
 Context {Fx : effect} `{client_api -< Fx} {M : freerMonad Fx}.
 
-Fact send_respect (network : N) :
-  pre (client_c |> (send : M _)) network.
+Fact send_respect (ns : net_state) :
+  pre (client_c |> (send : M _)) ns.
 Proof. by rewrite to_hoare_triggerE /= provided_callerP. Qed.
 
-Fact send_run (iN fN : N) (u:unit) (run : post (client_c |> (send : M _)) iN u fN ) :
-  fN.(clientQ) = iN.(clientQ) /\ fN.(serverQ) = serverQ (send_to_server ?- Ping iN).
+Fact send_run (ins fns : net_state) (u:unit) (run : post (client_c |> (send : M _)) ins u fns ) :
+  fns.(clientQ) = ins.(clientQ)
+  /\ fns.(serverQ) = serverQ (send_to_server ?- Ping ins).
 Proof.
 by move: run; rewrite to_hoare_triggerE /= provided_calleeP /=; case=>->.
 Qed.
@@ -265,17 +264,17 @@ Proof.
 by rewrite to_hoare_triggerE /= provided_callerP /=; case: coh=> ->.
 Qed.
 
-Fact wait_run (iN fN : N) (p: option msg) (run : post (client_c |> (wait : M _)) iN p fN ) :
-  fN.(clientQ) = behead iN.(clientQ) /\ fN.(serverQ) = iN.(serverQ).
+Fact wait_run (ins fns : net_state) (p: option msg) (run : post (client_c |> (wait : M _)) ins p fns ) :
+  fns.(clientQ) = behead ins.(clientQ) /\ fns.(serverQ) = ins.(serverQ).
 Proof.
 move: run; rewrite to_hoare_triggerE /= provided_calleeP /=; case=>->.
-by case: iN=> sQ; case=>[| [[] [] rm] ].
+by case: ins=> sQ; case=>[| [[] [] rm] ].
 Qed.
 
 Lemma c_respect
-    (network : N) (remaining : packets)
-    (coh : clientQ network = !-Pong :: remaining \/ clientQ network = [::]) :
-  pre (client_c |> (C : M _)) network.
+    (ns : net_state) (remaining : packets)
+    (coh : clientQ ns = !-Pong :: remaining \/ clientQ ns = [::]) :
+  pre (client_c |> (C : M _)) ns.
 Proof.
 rewrite freer_to_hoare_bindE; split.
 - exact: send_respect.
@@ -284,10 +283,10 @@ exact/wait_respect/coh.
 Qed.
 
 Lemma c_run
-    (iN fN : N) (p : option msg)
+    (ins fns : net_state) (p : option msg)
     (run : post (client_c |> (C : M _))
-      iN p fN) :
-  fN.(clientQ) = behead iN.(clientQ) /\ fN.(serverQ) = serverQ (send_to_server ?- Ping iN).
+      ins p fns) :
+  fns.(clientQ) = behead ins.(clientQ) /\ fns.(serverQ) = serverQ (send_to_server ?- Ping ins).
 Proof.
 move: run.
 rewrite freer_to_hoare_bindE.
@@ -303,54 +302,50 @@ End ccm.
 
 Module scm.
 
-Definition s_step (network : N) :
-    forall X, server_api X -> X -> N :=
-  fun X operation result =>
-    match operation with
-    | RPLY p => send_to_client ?-p network
-    | RECV => receive_from_client network
-    end.
+Definition s_step (ns : net_state) :
+    forall X, server_api X -> X -> net_state := fun X cmd result =>
+match cmd with
+| RPLY p => send_to_client ?-p ns
+| RECV => receive_from_client ns
+end.
 
-Definition s_requirment (network : N) : forall X, server_api X -> Prop :=
+Definition s_requirment (ns : net_state) : forall X, server_api X -> Prop :=
   fun X cmd =>
-    match cmd with
-    | RPLY _ => True
-    | RECV =>
-        match serverQ network with
-        | [::] => True
-        | (!- Ping) :: _ => True
-        | _ => False
-        end
-    end.
+match cmd with
+| RPLY _ => True
+| RECV => match serverQ ns with
+          | [::] => True
+          | (!- Ping) :: _ => True
+          | _ => False
+          end
+end.
 
-Definition s_promise (network : N) :
-    forall X, server_api X -> X -> Prop :=
-  fun X cmd =>
-    match cmd in server_api X return X -> Prop with
-    | RECV => fun result =>
-      result = None \/ result = Some Ping
-    | RPLY m => fun r => match clientQ network with
-        | [::] => False
-        | ?-m :: _ => m = Pong
-        | _ => False
-        end
-    end.
+Definition s_promise (ns : net_state) :
+    forall X, server_api X -> X -> Prop := fun X cmd =>
+match cmd with
+| RECV => fun result => result = None \/ result = Some Ping
+| RPLY m => fun r => match clientQ ns with
+                      | [::] => False
+                      | ?-m :: _ => m = Pong
+                      | _ => False
+                      end
+end.
 
 
-Definition server_c : contract server_api N :=
+Definition server_c : contract server_api net_state :=
   make_contract s_step s_requirment s_promise.
 
 Section server_respectful_and_run_lemmas.
 Context {Fx : effect} `{server_api -< Fx} {M : freerMonad Fx}.
 
-Fact reply_respect (network : N) :
-  pre (server_c |> (reply : M _)) network.
+Fact reply_respect (ns : net_state) :
+  pre (server_c |> (reply : M _)) ns.
 Proof. by rewrite to_hoare_triggerE /= provided_callerP. Qed.
 
-Fact reply_run (iN fN : N) (u : unit)
-    (run : post (server_c |> (reply : M _)) iN u fN) :
-  fN.(clientQ) = clientQ (send_to_client ?- Pong iN) /\
-  fN.(serverQ) = iN.(serverQ).
+Fact reply_run (ins fns : net_state) (u : unit)
+    (run : post (server_c |> (reply : M _)) ins u fns) :
+  fns.(clientQ) = clientQ (send_to_client ?- Pong ins) /\
+  fns.(serverQ) = ins.(serverQ).
 Proof.
 by move: run; rewrite to_hoare_triggerE /= provided_calleeP /=; case=>->.
 Qed.
@@ -362,18 +357,18 @@ Proof.
 by rewrite to_hoare_triggerE /= provided_callerP /=; case: coh=> ->.
 Qed.
 
-Fact recv_run (iN fN : N) (p : option msg)
-    (run : post (server_c |> (recv : M _)) iN p fN) :
-  fN.(clientQ) = iN.(clientQ) /\ fN.(serverQ) = behead iN.(serverQ).
+Fact recv_run (ins fns : net_state) (p : option msg)
+    (run : post (server_c |> (recv : M _)) ins p fns) :
+  fns.(clientQ) = ins.(clientQ) /\ fns.(serverQ) = behead ins.(serverQ).
 Proof.
 move: run; rewrite to_hoare_triggerE /= provided_calleeP /=; case=>->.
-by case: iN=> + cQ; case=>[| [[] [] rm] ].
+by case: ins=> + cQ; case=>[| [[] [] rm] ].
 Qed.
 
-Lemma s_p_respect (network : N) (remaining : packets)
-  (coh : serverQ network = !- Ping :: remaining \/
-         serverQ network = [::]) :
-  pre (server_c |> (S_p : M _)) network.
+Lemma s_p_respect (ns : net_state) (remaining : packets)
+  (coh : serverQ ns = !- Ping :: remaining \/
+         serverQ ns = [::]) :
+  pre (server_c |> (S_p : M _)) ns.
 Proof.
 rewrite /S_p freer_to_hoare_bindE; split.
   exact/recv_respect/coh.
@@ -385,13 +380,13 @@ all: by rewrite pre_ret.
 Qed.
 
 Lemma s_p_run
-    (iN fN : N) (result : option msg)
+    (ins fns : net_state) (result : option msg)
     (run : post (server_c |> (S_p : M _))
-      iN result fN) :
+      ins result fns) :
   match result with
-  | Some Ping => fN.(clientQ) = clientQ (send_to_client ?- Pong iN)
-  | _ => fN.(clientQ) = clientQ iN
-  end /\ fN.(serverQ) = behead iN.(serverQ).
+  | Some Ping => fns.(clientQ) = clientQ (send_to_client ?- Pong ins)
+  | _ => fns.(clientQ) = clientQ ins
+  end /\ fns.(serverQ) = behead ins.(serverQ).
 Proof.
 move: run.
 rewrite /S_p freer_to_hoare_bindE.
@@ -406,9 +401,9 @@ End scm.
 Import ccm scm.
 
 (** * Protocol Description :
-       +---+  == send Ping ==>  +---+  == delvr Ping ==>  +---+
-       | C |                    | N |                     | S |
-       +---+  <== get Pong ==   +---+  <== reply Pong ==  +---+
+       +---+  == send Ping ==>  +-----------+  == delvr Ping ==>  +---+
+       | C |                    | net_state |                     | S |
+       +---+  <== get Pong ==   +-----------+  <== reply Pong ==  +---+
 *)
 Module ProtocolM.
 Section proto_s.
@@ -418,7 +413,7 @@ Inductive proto_api : effect := one_round : proto_api outcome.
 Context {ProtoF : effect}.
 Context `{client_api ;; server_api -<< ProtoF}.
 Context {M : freerMonad ProtoF}.
-Definition proto_c : contract ProtoF N := client_c -^- server_c.
+Definition proto_c : contract ProtoF net_state := client_c -^- server_c.
 
 (* Local Notation "c |> p" := (to_hoare (M:=M) c p) (at level 90). *)
 
@@ -439,13 +434,13 @@ Definition protocol : component (M:=M) proto_api ProtoF :=
           end
     end.
 
-Definition protocol_inv (net : N) := serverQ net = [::] /\ clientQ net = [::].
+Definition protocol_inv (net : net_state) := serverQ net = [::] /\ clientQ net = [::].
 
 (** This axiom is used here and only here because
   * the packet drop is not a question yet *)
 Local Axiom WillDeliver : forall p, ?-p = !-p.
 
-Lemma protocol_respect (net : N) :
+Lemma protocol_respect (net : net_state) :
   protocol_inv net -> pre (proto_c |> protocol one_round) net.
 Proof.
 move=>[s0 c0]; rewrite /= bindA.
@@ -453,17 +448,16 @@ rewrite freer_to_hoare_bindE freer_contract_left //=; split.
   exact: send_respect.
 case=> [] [s1 c1] /send_run /=.
 case=> -> ->.
-rewrite freer_to_hoare_bindE WillDeliver s0 freer_contract_right //=; split.
+rewrite freer_to_hoare_bindE WillDeliver s0 c0 freer_contract_right //=; split.
   by apply: s_p_respect; left.
 move=> [[]|] [s2 c2] /s_p_run /= => -[] -> ->.
-(* case: om=> [[]|]. *)
-+ rewrite freer_to_hoare_bindE WillDeliver c0 freer_contract_left //=; split.
++ rewrite freer_to_hoare_bindE WillDeliver freer_contract_left //=; split.
     by apply: wait_respect=> /=; left.
 move=> [[]|] [s3 c3] /wait_run => /= -[] -> ->.
 all: by rewrite pre_ret.
 Qed.
 
-Lemma protocol_run_inv (n n' : N) (result : outcome) :
+Lemma protocol_run_inv (n n' : net_state) (result : outcome) :
   protocol_inv n -> post (proto_c |> protocol one_round) n result n' ->
    protocol_inv n'.
 Proof.
@@ -496,11 +490,122 @@ End ProtocolM.
 (******************************************************************************)
 (* TODO: Rewrite the above using FlipEff instead of `proto_api`, normally the *)
 (*       proofs should be quite straightforward (reusing ping_freer_prob.v at *)
-(*      most points).                                                         *)
+(*       most points).                                                        *)
 (******************************************************************************)
 
 (**
-A network transmission succeeds with probability [1 - p]. Packet losses are
+A ns transmission succeeds with probability [1 - p]. Packet losses are
+independent. For one round trip:
+
+<<
+P(Pong received) = P(Ping delivered) * P(Pong delivered)
+                 = (1 - p) * (1 - p)
+                 = (1 - p)^2.
+>>
+
+For at most [n] attempts, with [q = (1 - p)^2]:
+
+<<
+P(n) = 1 - (1 - q)^n.
+>>
+*)
+
+Module ProtocolM2.
+Section proto_s.
+Inductive proto_api : effect :=
+| send_ping : proto_api unit
+| recv_and_reply: proto_api outcome
+| receive_pong : proto_api outcome.
+
+Context {ProtoF : effect}.
+Context `{client_api ;; server_api -<< ProtoF}.
+Context {M : freerMonad ProtoF}.
+Definition proto_c : contract ProtoF net_state := client_c -^- server_c.
+
+(* Local Notation "c |> p" := (to_hoare (M:=M) c p) (at level 90). *)
+
+(* Definition S_p : M (option msg) := *)
+  (* recv >>= fun inc=> if inc is Some Ping then reply >> Ret inc else Ret inc.  *)
+
+Definition protocol : component (M:=M) proto_api ProtoF :=
+  fun _ cmd =>
+    match cmd with
+| send_ping => send
+| recv_and_reply=> S_p >>= fun inc => match inc with | Some Ping => Some Ping | _ => None end
+| receive_pong => _
+end.
+    | one_round =>
+        send >> S_p >>= fun inc => match inc with
+          | Some Ping => wait >>= fun inc =>
+            match inc with
+            | Some Pong => Ret GotPong
+            | _ => Ret LostPong
+            end
+          | _ => Ret LostPing
+          end
+    end.
+
+Definition protocol_inv (net : net_state) := serverQ net = [::] /\ clientQ net = [::].
+
+(** This axiom is used here and only here because
+  * the packet drop is not a question yet *)
+Local Axiom WillDeliver : forall p, ?-p = !-p.
+
+Lemma protocol_respect (net : net_state) :
+  protocol_inv net -> pre (proto_c |> protocol one_round) net.
+Proof.
+move=>[s0 c0]; rewrite /= bindA.
+rewrite freer_to_hoare_bindE freer_contract_left //=; split.
+  exact: send_respect.
+case=> [] [s1 c1] /send_run /=.
+case=> -> ->.
+rewrite freer_to_hoare_bindE WillDeliver s0 c0 freer_contract_right //=; split.
+  by apply: s_p_respect; left.
+move=> [[]|] [s2 c2] /s_p_run /= => -[] -> ->.
++ rewrite freer_to_hoare_bindE WillDeliver freer_contract_left //=; split.
+    by apply: wait_respect=> /=; left.
+move=> [[]|] [s3 c3] /wait_run => /= -[] -> ->.
+all: by rewrite pre_ret.
+Qed.
+
+Lemma protocol_run_inv (n n' : net_state) (result : outcome) :
+  protocol_inv n -> post (proto_c |> protocol one_round) n result n' ->
+   protocol_inv n'.
+Proof.
+move=> [s0 c0]; rewrite /= bindA.
+rewrite freer_to_hoare_bindE freer_contract_left //;
+  case=>[[]] [[s1 c1]] [].
+move/send_run=> /= [] -> ->.
+rewrite freer_to_hoare_bindE freer_contract_right // s0 c0 WillDeliver;
+  case=>[[[]|]] [[s2 c2]] [] /= => /s_p_run=> /= -[] -> -> .
+- rewrite freer_to_hoare_bindE freer_contract_left //;
+    case=>[inc] [[s3 c3]] [].
+  move/wait_run=> /= [] -> ->; case: inc=>[[]|].
+all: by rewrite post_ret=> -[] ? <- //.
+Qed.
+
+Lemma proto_correct :
+  correct_component protocol (no_contract proto_api) proto_c
+    (fun=> protocol_inv).
+Proof.
+move=>[] n inv ? [] []; split=>[|m n' Hpost] /=.
+  exact: protocol_respect.
+by split=>//; move: (protocol_run_inv inv Hpost).
+Qed.
+
+End proto_s.
+End ProtocolM.
+
+(** * Probability of Success *)
+
+(******************************************************************************)
+(* TODO: Rewrite the above using FlipEff instead of `proto_api`, normally the *)
+(*       proofs should be quite straightforward (reusing ping_freer_prob.v at *)
+(*       most points).                                                        *)
+(******************************************************************************)
+
+(**
+A ns transmission succeeds with probability [1 - p]. Packet losses are
 independent. For one round trip:
 
 <<
