@@ -5,7 +5,7 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 From HB Require Import structures.
-From mathcomp Require Import ssreflect ssrfun functions boolp classical_sets.
+From mathcomp Require Import all_boot functions boolp classical_sets.
 From monae Require Import hierarchy.
 From FreerDPS Require Import mathcomp_extra init effect freer contract.
 
@@ -16,13 +16,15 @@ Unset Printing Implicit Defensive.
 (** To reason about impure computations, we introduce the “Hoare
     monad,” also called the “specification monad.” An instance of the
     specification monad is a couple of [pre] and [post] conditions,
-    such that [pre p σ] means the program specified by [p] can be
-    executed safely from a state [σ], and [post p σ x σ'] means the
-    execution of [p] from [σ] may compute a result [x] and bring the
-    system to a state [σ'].
+    such that [pre p T] means the program specified by [p] can be
+    executed safely from a state [T], and [post p T x T'] means the
+    execution of [p] from [T] may compute a result [x] and bring the
+    system to a state [T'].
 
     We equip this couple of predicate with a [bind] function to
     sequentially compose specifications. *)
+
+Local Open Scope classical_set_scope.
 
 (* model *)
 Module Hoare.
@@ -35,20 +37,18 @@ Arguments mk_hoare {T U} (pre post).
 Arguments pre {T U} (_ _).
 Arguments post {T U} (_ _ _).
 
-Definition hoare_ret {Σ α} (x : α) : hoare Σ α :=
-  mk_hoare [set: Σ] (fun s y s' => x = y /\ s = s').
+Definition hoare_ret {T U} (x : U) : hoare T U :=
+  mk_hoare [set: T] (fun s y s' => (x = y) /\ (s = s')).
 
-Local Open Scope classical_set_scope.
-
-Definition hoare_bind {Σ α β}
-    (m : hoare Σ α) (k : α -> hoare Σ β) : hoare Σ β :=
+Definition hoare_bind {T U V}
+    (m : hoare T U) (k : U -> hoare T V) : hoare T V :=
   mk_hoare (fun s => pre m s /\ (forall x, post m s x `<=` pre (k x)))
            (fun s x s2 => exists y s', post m s y s' /\ post (k y) s' x s2).
 
 Section hm.
-Variable Σ : Type.
-Let ret := @hoare_ret Σ.
-Let bind := @hoare_bind Σ.
+Variable T : Type.
+Let ret := @hoare_ret T.
+Let bind := @hoare_bind T.
 
 Let right_neutral : BindLaws.right_neutral bind ret.
 Proof.
@@ -99,7 +99,7 @@ case: m => prA poA/=; congr mk_hoare.
   by under [in RHS]eq2_exists do rewrite andA.
 Qed.
 
-HB.instance Definition _ := isMonad_ret_bind.Build (hoare Σ)
+HB.instance Definition _ := isMonad_ret_bind.Build (hoare T)
   left_neutral right_neutral assoc.
 
 End hm.
@@ -184,7 +184,7 @@ Definition freer_to_hoare {M : freerMonad Fx} : M ~~> hoare T :=
 
 End hoare_of_contract.
 Arguments hoare_of_contract : simpl never.
-Arguments freer_to_hoare {Fx F _ M Ω} c {α} : rename, simpl never.
+Arguments freer_to_hoare {Fx F _ M S} c {U} : rename, simpl never.
 
 (** A Hoare triple can be interpreted from the program `p`
   * through the contract `c`.
@@ -335,18 +335,18 @@ Proof. exact: denote_preserves_invariant. Qed.
 
 Section contract_trigger_helpers.
 Context {Fx F : effect} `{F -< Fx} {M : freerMonad Fx}
-    (Ω : Type) (c : contract F Ω) {A : Type}.
+    (S : Type) (c : contract F S) {A : Type}.
 
-Lemma pre_to_hoare_triggerP (op : F A) (ω : Ω) :
-  pre (c |> (ptrigger op : M _)) ω <->
-  requirement c ω op.
+Lemma pre_to_hoare_triggerP (op : F A) (s : S) :
+  pre (c |> (ptrigger op : M _)) s <->
+  requirement c s op.
 Proof. by rewrite to_hoare_triggerE /= provided_callerP. Qed.
 
-Lemma post_to_hoare_triggerP (op : F A) (ω : Ω) (a : A) (ω' : Ω) :
+Lemma post_to_hoare_triggerP (op : F A) (s : S) (a : A) (s' : S) :
   post (c |> (ptrigger op : M _))
-    ω a ω' <->
-  ω' = state_update c ω op a /\
-  promise c ω op a.
+    s a s' <->
+  s' = state_update c s op a /\
+  promise c s op a.
 Proof. by rewrite to_hoare_triggerE /= provided_calleeP. Qed.
 
 End contract_trigger_helpers.
@@ -355,66 +355,66 @@ End contract_trigger_helpers.
 
 Section ToHoareSharedContractSection.
 Context {F G H : effect} `{F ;; G -<< H}
-    {M : freerMonad H} (Ω : Type) (ci : contract F Ω)
-    (cj : contract G Ω).
+    {M : freerMonad H} (S : Type) (ci : contract F S)
+    (cj : contract G S).
 
 Lemma pre_to_hoare_triggerL
-    {A : Type} (op : F A) (ω : Ω) :
-  requirement ci ω op ->
-  pre (ci -^- cj |> (ptrigger op : M _)) ω.
+    {A : Type} (op : F A) (s : S) :
+  requirement ci s op ->
+  pre (ci -^- cj |> (ptrigger op : M _)) s.
 Proof. by rewrite to_hoare_triggerE /= shared_left_callerP. Qed.
 
 Lemma pre_to_hoare_triggerR
-    {A : Type} (op : G A) (ω : Ω) :
-  requirement cj ω op ->
-  pre ((ci -^- cj) |> (ptrigger op : M _)) ω.
+    {A : Type} (op : G A) (s : S) :
+  requirement cj s op ->
+  pre ((ci -^- cj) |> (ptrigger op : M _)) s.
 Proof. by rewrite to_hoare_triggerE /= shared_right_callerP. Qed.
 
 Lemma post_to_hoare_triggerLP
-    {A : Type} (op : F A) (ω : Ω) (x : A) (ω' : Ω) :
-  post (ci -^- cj |> (ptrigger op : M _)) ω x ω' <->
-  ω' = state_update ci ω op x /\
-  promise ci ω op x.
+    {A : Type} (op : F A) (s : S) (x : A) (s' : S) :
+  post (ci -^- cj |> (ptrigger op : M _)) s x s' <->
+  s' = state_update ci s op x /\
+  promise ci s op x.
 Proof. by rewrite to_hoare_triggerE /= shared_left_calleeP. Qed.
 
 Lemma post_to_hoare_triggerRP
-    {A : Type} (op : G A) (ω : Ω) (x : A) (ω' : Ω) :
-  post (ci -^- cj |> (ptrigger op : M _)) ω x ω' <->
-  ω' = state_update cj ω op x /\
-  promise cj ω op x.
+    {A : Type} (op : G A) (s : S) (x : A) (s' : S) :
+  post (ci -^- cj |> (ptrigger op : M _)) s x s' <->
+  s' = state_update cj s op x /\
+  promise cj s op x.
 Proof. by rewrite to_hoare_triggerE /= shared_right_calleeP. Qed.
 End ToHoareSharedContractSection.
 
 
 Section ToHoareSharedContractSection.
 Context {F G H I : effect} `{F ;; G -<< H} `{H -< I}
-    {M : freerMonad I} (Ω : Type) (ci : contract F Ω)
-    (cj : contract G Ω).
+    {M : freerMonad I} (S : Type) (ci : contract F S)
+    (cj : contract G S).
 
 Lemma pre_to_hoare_trigger_injL
-    {A : Type} (op : F A) (ω : Ω) :
-  requirement ci ω op ->
-  pre (ci -^- cj |> (ptrigger op : M _)) ω.
+    {A : Type} (op : F A) (s : S) :
+  requirement ci s op ->
+  pre (ci -^- cj |> (ptrigger op : M _)) s.
 Proof. by rewrite to_hoare_triggerE /= shared_left_caller_injP. Qed.
 
 Lemma pre_to_hoare_trigger_injR
-    {A : Type} (op : G A) (ω : Ω) :
-  requirement cj ω op ->
-  pre ((ci -^- cj) |> (ptrigger op : M _)) ω.
+    {A : Type} (op : G A) (s : S) :
+  requirement cj s op ->
+  pre ((ci -^- cj) |> (ptrigger op : M _)) s.
 Proof. by rewrite to_hoare_triggerE /= shared_right_caller_injP. Qed.
 
 Lemma post_to_hoare_trigger_injLP
-    {A : Type} (op : F A) (ω : Ω) (x : A) (ω' : Ω) :
-  post ((ci -^- cj) |> (ptrigger op : M _)) ω x ω' <->
-  ω' = state_update ci ω op x /\
-  promise ci ω op x.
+    {A : Type} (op : F A) (s : S) (x : A) (s' : S) :
+  post ((ci -^- cj) |> (ptrigger op : M _)) s x s' <->
+  s' = state_update ci s op x /\
+  promise ci s op x.
 Proof. by rewrite to_hoare_triggerE /= shared_left_callee_injP. Qed.
 
 Lemma post_to_hoare_trigger_injRP
-    {A : Type} (op : G A) (ω : Ω) (x : A) (ω' : Ω) :
-  post ((ci -^- cj) |> (ptrigger op : M _)) ω x ω' <->
-  ω' = state_update cj ω op x /\
-  promise cj ω op x.
+    {A : Type} (op : G A) (s : S) (x : A) (s' : S) :
+  post ((ci -^- cj) |> (ptrigger op : M _)) s x s' <->
+  s' = state_update cj s op x /\
+  promise cj s op x.
 Proof. by rewrite to_hoare_triggerE /= shared_right_callee_injP. Qed.
 
 End ToHoareSharedContractSection.

@@ -66,12 +66,12 @@ Arguments promise [F T] (c _) [U] (_ _).
 Definition const_witness {F : effect} :=
   fun (u : unit) (α : Type) (e : F α) (x : α) => u.
 
-Definition no_requirement {F : effect} {Ω : Type}
-    (ω : Ω) (α : Type) (e : F α) : Prop :=
+Definition no_requirement {F : effect} {S : Type}
+    (s : S) (α : Type) (e : F α) : Prop :=
   True.
 
-Definition no_promise {F : effect} {Ω : Type}
-    (ω : Ω) (α : Type) (e : F α) (x : α) : Prop :=
+Definition no_promise {F : effect} {S : Type}
+    (s : S) (α : Type) (e : F α) (x : α) : Prop :=
   True.
 
 Definition no_contract (F : effect) : contract F unit :=
@@ -80,8 +80,8 @@ Definition no_contract (F : effect) : contract F unit :=
 (** A similar —and as simple— contract is the one that forbids the use of a
     given effect. *)
 
-Definition do_no_use {F : effect} {Ω : Type}
-    (ω : Ω) (α : Type) (e : F α) : Prop :=
+Definition do_no_use {F : effect} {S : Type}
+    (s : S) (α : Type) (e : F α) : Prop :=
   False.
 
 Definition forbid_specs (F : effect) : contract F unit :=
@@ -141,14 +141,14 @@ Definition contract_iso_rl {F : effect} {Ω1 Ω2 : Type}
 Arguments contract_iso_lr {F Ω1 Ω2 c1 c2} (equ ω1).
 Arguments contract_iso_rl {F Ω1 Ω2 c1 c2} (equ ω2).
 
-Lemma contract_equ_refl {F : effect} {Ω : Type} (c : contract F Ω)
+Lemma contract_equ_refl {F : effect} {S : Type} (c : contract F S)
   : contract_equ c c.
 
 Proof.
   apply mk_contract_equ with (f:=fun x => x) (g:=fun x => x); auto.
-  + now intros ω α p.
-  + now intros ω α p x.
-  + now intros ω α p x.
+  + now intros s α p.
+  + now intros s α p x.
+  + now intros s α p x.
 Defined.
 
 Lemma contract_equ_sym {F : effect} {Ω1 Ω2 : Type}
@@ -161,18 +161,18 @@ Proof.
   apply mk_contract_equ with (f:=g) (g:=f).
   + apply iso2.
   + apply iso1.
-  + intros ω α p.
-    transitivity (requirement c2 (f (g ω)) p).
+  + intros s α p.
+    transitivity (requirement c2 (f (g s)) p).
     ++ now rewrite iso1.
     ++ now symmetry.
-  + intros ω α p x.
-    transitivity (promise c2 (f (g ω)) p x).
+  + intros s α p x.
+    transitivity (promise c2 (f (g s)) p x).
     ++ now rewrite iso1.
     ++ now symmetry.
-  + intros ω α p x.
-    rewrite <- (iso2 (state_update c1 (g ω) p x)).
-    assert (equ : state_update c2 ω p x = f (state_update c1 (g ω) p x)). {
-      transitivity (state_update c2 (f (g ω)) p x).
+  + intros s α p x.
+    rewrite <- (iso2 (state_update c1 (g s) p x)).
+    assert (equ : state_update c2 s p x = f (state_update c1 (g s) p x)). {
+      transitivity (state_update c2 (f (g s)) p x).
       + now rewrite iso1.
       + now rewrite witness_equ.
     }
@@ -220,34 +220,34 @@ Defined.
 
 (* HB.lock  *)
 Definition gen_state_update {Fx F : effect} `{F -<? Fx}
-    {Ω α : Type} (c : contract F Ω)
-    (ω :  Ω) (e : Fx α) (x : α)
-  : Ω :=
-  if prj e is Some e then state_update c ω e x else ω.
+    {S α : Type} (c : contract F S)
+    (s :  S) (e : Fx α) (x : α)
+  : S :=
+  if prj e is Some e then state_update c s e x else s.
 Arguments gen_state_update : simpl never.
 
 Definition gen_requirement {Fx F : effect} `{F -<? Fx}
-    {Ω α : Type} (c : contract F Ω)
-    (ω :  Ω) (e : Fx α)
+    {S α : Type} (c : contract F S)
+    (s :  S) (e : Fx α)
   : Prop :=
-  if prj e is Some e then requirement c ω e else True.
+  if prj e is Some e then requirement c s e else True.
 
 Definition gen_promise {Fx F : effect} `{F -<? Fx}
-    {Ω α : Type} (c : contract F Ω)
-    (ω :  Ω) (e : Fx α) (x : α)
+    {S α : Type} (c : contract F S)
+    (s :  S) (e : Fx α) (x : α)
   : Prop :=
-  if prj e is Some e then promise c ω e x else True.
+  if prj e is Some e then promise c s e x else True.
 
 Definition contractprod {Fx F E : effect} `{F -< Fx, E -< Fx}
     {ΩF ΩE : Type}
     (ci : contract F ΩF) (cj : contract E ΩE)
   : contract Fx (ΩF * ΩE) :=
-  {| state_update := fun (ω : ΩF * ΩE) (α : Type) (e : Fx α) (x : α) =>
-                         (gen_state_update ci (fst ω) e x, gen_state_update cj (snd ω) e x)
-  ;  requirement := fun (ω : ΩF * ΩE) (α : Type) (e : Fx α) =>
-                       gen_requirement ci (fst ω) e /\ gen_requirement cj (snd ω) e
-  ;  promise := fun (ω : ΩF * ΩE) (α : Type) (e : Fx α) (x : α) =>
-                   gen_promise ci (fst ω) e x /\ gen_promise cj (snd ω) e x
+  {| state_update := fun (s : ΩF * ΩE) (α : Type) (e : Fx α) (x : α) =>
+                         (gen_state_update ci (fst s) e x, gen_state_update cj (snd s) e x)
+  ;  requirement := fun (s : ΩF * ΩE) (α : Type) (e : Fx α) =>
+                       gen_requirement ci (fst s) e /\ gen_requirement cj (snd s) e
+  ;  promise := fun (s : ΩF * ΩE) (α : Type) (e : Fx α) (x : α) =>
+                   gen_promise ci (fst s) e x /\ gen_promise cj (snd s) e x
   |}.
 
 Infix "-*-" := contractprod (at level 20) : contract_scope .
@@ -257,23 +257,23 @@ Infix "-*-" := contractprod (at level 20) : contract_scope .
 Section s.
 Context {Fx : effect}.
 Definition sharedcontractprod {F E : effect} `{F ;; E -<< Fx}
-    {Ω : Type} (ci : contract F Ω) (cj : contract E Ω)
-  : contract Fx Ω :=
+    {S : Type} (ci : contract F S) (cj : contract E S)
+  : contract Fx S :=
   {|
   state_update :=
-    fun (ω : Ω) (α : Type) (e : Fx α) (x : α) =>
+    fun (s : S) (α : Type) (e : Fx α) (x : α) =>
       (* we need to check [F] before [E] because [sharedcontractprod]
          will be right associative *)
       match prj (F:=F) e with
-      | Some e => state_update ci ω e x
-      | _ => if prj (F:=E) e is Some e then state_update cj ω e x else ω
+      | Some e => state_update ci s e x
+      | _ => if prj (F:=E) e is Some e then state_update cj s e x else s
       end;
   requirement :=
-    fun (ω : Ω) (α : Type) (e : Fx α) =>
-      gen_requirement ci ω e /\ gen_requirement cj ω e;
+    fun (s : S) (α : Type) (e : Fx α) =>
+      gen_requirement ci s e /\ gen_requirement cj s e;
   promise :=
-    fun (ω : Ω) (α : Type) (e : Fx α) (x : α) =>
-      gen_promise ci ω e x /\ gen_promise cj ω e x
+    fun (s : S) (α : Type) (e : Fx α) (x : α) =>
+      gen_promise ci s e x /\ gen_promise cj s e x
   |}.
 
 End s.

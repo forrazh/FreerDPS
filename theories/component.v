@@ -29,14 +29,14 @@ Definition component (F E : effect) `{M : freerMonad E} : Type :=
   F ~~> M.
 
 Definition correct_component {Ex E F : effect} `{E -<? Ex} {M : freerMonad Ex}
-  {ΩF ΩE : Type}
-    (c : component F Ex) (cF : contract F ΩF)
-    (cE : contract E ΩE) (pred : ΩF -> ΩE -> Prop) :
+  {SF SE : Type}
+    (c : component F Ex) (cF : contract F SF)
+    (cE : contract E SE) (pred : SF -> SE -> Prop) :
   Prop :=
-  forall (ωF : ΩF) (ωE : ΩE) (init : pred ωF ωE) (α : Type)
-      (op : F α) (o_caller : requirement cF ωF op),
-    pre (cE |> c α op) ωE /\
-    forall (x : α) (ωE' : ΩE),
-      post (cE |> (c α op : M _)) ωE x ωE' ->
-      promise cF ωF op x /\
-      pred (state_update cF ωF op x) ωE'.
+  forall (sF : SF) (sE : SE) (init : pred sF sE) (T : Type)
+      (op : F T) (o_caller : requirement cF sF op),
+    pre (cE |> c T op) sE /\
+    forall (x : T) (sE' : SE),
+      post (cE |> (c T op : M _)) sE x sE' ->
+      promise cF sF op x /\
+      pred (state_update cF sF op x) sE'.
