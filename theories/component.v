@@ -5,6 +5,7 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 From FreerDPS Require Import init effect freer contract hoare.
+From monae Require Import hierarchy.
 
 (** * Definition *)
 
@@ -25,7 +26,7 @@ From FreerDPS Require Import init effect freer contract hoare.
     maps primitives of [F] to impure computations using [E]. *)
 
 Definition component (F E : effect) `{M : freerMonad E} : Type :=
-  forall (α : Type), F α -> M α.
+  F ~~> M.
 
 Definition correct_component {Ex E F : effect} `{E -<? Ex} {M : freerMonad Ex}
   {ΩF ΩE : Type}
