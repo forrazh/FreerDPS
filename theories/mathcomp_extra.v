@@ -26,10 +26,10 @@
 From mathcomp Require Import ssreflect boolp.
 
 Lemma eq4_exists T S R N
-  (U V : forall (x : T) (y : S x) (z : R x y), N x y z -> Prop) :
-  (forall x y z n, U x y z n = V x y z n) ->
-  (exists x y z n, U x y z n) = (exists x y z n, V x y z n).
-Proof. by move=> UV; apply/eq3_exists => x y z; exact/eq_exists. Qed.
+  (U V : forall (t : T) (y : S t) (z : R t y), N t y z -> Prop) :
+  (forall t y z n, U t y z n = V t y z n) ->
+  (exists t y z n, U t y z n) = (exists t y z n, V t y z n).
+Proof. by move=> UV; apply/eq3_exists => t y z; exact/eq_exists. Qed.
 
 Lemma andTP (P : Prop) : (True /\ P) = P.
 Proof. by apply/propext; split => // -[]. Qed.

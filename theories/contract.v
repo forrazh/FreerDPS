@@ -64,14 +64,14 @@ Arguments promise [F T] (c _) [U] (_ _).
     these primitives. *)
 
 Definition const_witness {F : effect} :=
-  fun (u : unit) (T : Type) (e : F T) (x : T) => u.
+  fun (u : unit) (T : Type) (cmd : F T) (t : T) => u.
 
 Definition no_requirement {F : effect} {S : Type}
-    (s : S) (T : Type) (e : F T) : Prop :=
+    (s : S) (T : Type) (cmd : F T) : Prop :=
   True.
 
 Definition no_promise {F : effect} {S : Type}
-    (s : S) (T : Type) (e : F T) (x : T) : Prop :=
+    (s : S) (T : Type) (cmd : F T) (t : T) : Prop :=
   True.
 
 Definition no_contract (F : effect) : contract F unit :=
@@ -81,7 +81,7 @@ Definition no_contract (F : effect) : contract F unit :=
     given effect. *)
 
 Definition do_no_use {F : effect} {S : Type}
-    (s : S) (T : Type) (e : F T) : Prop :=
+    (s : S) (T : Type) (cmd : F T) : Prop :=
   False.
 
 Definition forbid_specs (F : effect) : contract F unit :=
@@ -101,62 +101,61 @@ Definition forbid_specs (F : effect) : contract F unit :=
 
 Definition gen_state_update {Fx F : effect} `{F -<? Fx}
     {S T : Type} (c : contract F S)
-    (s :  S) (e : Fx T) (x : T)
+    (s :  S) (cmd : Fx T) (t : T)
   : S :=
-  if prj e is Some e then state_update c s e x else s.
+  if prj cmd is Some cmd then state_update c s cmd t else s.
 Arguments gen_state_update : simpl never.
 
 Definition gen_requirement {Fx F : effect} `{F -<? Fx}
     {S T : Type} (c : contract F S)
-    (s :  S) (e : Fx T)
+    (s :  S) (cmd : Fx T)
   : Prop :=
-  if prj e is Some e then requirement c s e else True.
+  if prj cmd is Some cmd then requirement c s cmd else True.
 
 Definition gen_promise {Fx F : effect} `{F -<? Fx}
     {S T : Type} (c : contract F S)
-    (s :  S) (e : Fx T) (x : T)
+    (s :  S) (cmd : Fx T) (t : T)
   : Prop :=
-  if prj e is Some e then promise c s e x else True.
+  if prj cmd is Some cmd then promise c s cmd t else True.
 
 Definition contractprod {Fx F E : effect} `{F -< Fx, E -< Fx}
     {ΩF ΩE : Type}
     (ci : contract F ΩF) (cj : contract E ΩE)
   : contract Fx (ΩF * ΩE) :=
-  {| state_update := fun (s : ΩF * ΩE) (T : Type) (e : Fx T) (x : T) =>
-                         (gen_state_update ci (fst s) e x, gen_state_update cj (snd s) e x)
-  ;  requirement := fun (s : ΩF * ΩE) (T : Type) (e : Fx T) =>
-                       gen_requirement ci (fst s) e /\ gen_requirement cj (snd s) e
-  ;  promise := fun (s : ΩF * ΩE) (T : Type) (e : Fx T) (x : T) =>
-                   gen_promise ci (fst s) e x /\ gen_promise cj (snd s) e x
+  {| state_update := fun (s : ΩF * ΩE) (T : Type) (cmd : Fx T) (t : T) =>
+                         (gen_state_update ci (fst s) cmd t,
+                          gen_state_update cj (snd s) cmd t)
+  ;  requirement := fun (s : ΩF * ΩE) (T : Type) (cmd : Fx T) =>
+                       gen_requirement ci (fst s) cmd /\
+                       gen_requirement cj (snd s) cmd
+  ;  promise := fun (s : ΩF * ΩE) (T : Type) (cmd : Fx T) (t : T) =>
+                   gen_promise ci (fst s) cmd t /\ gen_promise cj (snd s) cmd t
   |}.
 
 Infix "-*-" := contractprod (at level 20) : contract_scope .
 
 (** We also introduce a second composition operator which shares the
     witness state among its two operands. *)
-Section s.
-Context {Fx : effect}.
-Definition sharedcontractprod {F E : effect} `{F ;; E -<< Fx}
+Definition sharedcontractprod {Fx F E : effect} `{F ;; E -<< Fx}
     {S : Type} (ci : contract F S) (cj : contract E S)
   : contract Fx S :=
   {|
   state_update :=
-    fun (s : S) (T : Type) (e : Fx T) (x : T) =>
+    fun (s : S) (T : Type) (cmd : Fx T) (t : T) =>
       (* we need to check [F] before [E] because [sharedcontractprod]
          will be right associative *)
-      match prj (F:=F) e with
-      | Some e => state_update ci s e x
-      | _ => if prj (F:=E) e is Some e then state_update cj s e x else s
+      match prj (F:=F) cmd with
+      | Some cmd => state_update ci s cmd t
+      | _ => if prj (F:=E) cmd is Some cmd then state_update cj s cmd t else s
       end;
   requirement :=
-    fun (s : S) (T : Type) (e : Fx T) =>
-      gen_requirement ci s e /\ gen_requirement cj s e;
+    fun (s : S) (T : Type) (cmd : Fx T) =>
+      gen_requirement ci s cmd /\ gen_requirement cj s cmd;
   promise :=
-    fun (s : S) (T : Type) (e : Fx T) (x : T) =>
-      gen_promise ci s e x /\ gen_promise cj s e x
+    fun (s : S) (T : Type) (cmd : Fx T) (t : T) =>
+      gen_promise ci s cmd t /\ gen_promise cj s cmd t
   |}.
 
-End s.
 Infix "-^-" := sharedcontractprod (at level 20, right associativity) : contract_scope.
 (** * Contract By Example *)
 
@@ -168,8 +167,8 @@ Infix "-^-" := sharedcontractprod (at level 20, right associativity) : contract_
     s) s], and the witness will be updated after each [Put] call. *)
 
 Definition store_update (S : Type) :=
-  fun (s : S) (T : Type) (e : STORE S T) (_ : T) =>
-    match e with
+  fun (s : S) (T : Type) (cmd : STORE S T) (_ : T) =>
+    match cmd with
     | Get => s
     | Put s' => s'
     end.
@@ -229,19 +228,6 @@ Lemma provided_callerP :
 Proof.
 by rewrite /gen_requirement !injK_Some.
 Qed.
-
-Lemma provided_bind_caller :
-  (promise c s cmd x ->
-    requirement c (state_update c s cmd x) cmd') ->
-  gen_promise c s (inj cmd) x ->
-  gen_requirement c
-    (gen_state_update c s (inj cmd) x)
-    (inj cmd').
-Proof.
-rewrite /gen_state_update /gen_promise.
-by rewrite /gen_requirement !injK_Some.
-Qed.
-
 
 Lemma provided_calleeP :
   (s' = gen_state_update c s (inj cmd) x /\ gen_promise c s (inj cmd) x )

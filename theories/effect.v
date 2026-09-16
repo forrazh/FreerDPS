@@ -52,7 +52,7 @@ Notation "F -<? Fx" := (MayProvide Fx F)
 Class Provide (Fx F : effect) : Type :=
   { may_prov :: F -<? Fx ;
     inj : F ~~> Fx ;
-    injK_Some {A} : forall e : F A, may_prov.(prj) (inj _ e) = Some e }.
+    injK_Some {A} : forall cmd : F A, may_prov.(prj) (inj _ cmd) = Some cmd }.
 Arguments inj {_ _ _ _} _.
 
 Notation "F -< Fx" := (Provide Fx F)
@@ -68,13 +68,13 @@ Instance default_MayProvide (F E : effect) : (E -<? F) |1000 :=
 
 (** It is expected that, for an effect composite [Fx] which provides [F] and
     may provide [E], [inj] and [proj] do not mix up [F] and [E]
-    primitives. That is, injecting a primitive [e] of [F] inside [Fx], then
+    primitives. That is, injecting a primitive [cmd] of [F] inside [Fx], then
     projecting the resulting primitive into [E] returns [None] as long as [F]
     and [E] are two different effects. *)
 
 (* F -< Fx/G *)
 Class Distinguish (Fx F E : effect) `{F -< Fx} `{E -<? Fx} : Prop :=
-  { injK_None : forall {A} (e: F A), prj (inj e) = None }.
+  { injK_None : forall {A} (cmd: F A), prj (inj cmd) = None }.
 
 Class StrictProvide2 (Fx F1 F2 : effect)
   : Type := {
@@ -106,11 +106,11 @@ Notation "F1 ;; F2 -<< Fx" := (StrictProvide2 Fx F1 F2 ) (at level 50, no associ
     effect composite. *)
 
 Inductive eplus (F E : effect) (T : Type) :=
-| in_left (e : F T) : eplus F E T
-| in_right (e : E T) : eplus F E T.
+| in_left (cmd : F T) : eplus F E T
+| in_right (cmd : E T) : eplus F E T.
 
-Arguments in_left [F E T] (e).
-Arguments in_right [F E T] (e).
+Arguments in_left [F E T] (cmd).
+Arguments in_right [F E T] (cmd).
 
 Register eplus as freespec.core.eplus.type.
 Register in_left as freespec.core.eplus.in_left.
@@ -140,29 +140,29 @@ with_state true (with_state false get)
     will return false (that is, the variable in the inner store). *)
 
 Instance refl_MayProvide (F : effect) : F -<? F :=
-  { prj := fun _ e => Some e }.
+  { prj := fun _ cmd => Some cmd }.
 
 Program Instance refl_Provide (F : effect) : F -< F :=
-  { inj := fun (a : Type) (e : F a) => e }.
+  { inj := fun (a : Type) (cmd : F a) => cmd }.
 Next Obligation. by move=> */=. Qed.
 
 Instance eplus_left_MayProvide (Fx F E : effect) `{F -<? Fx}
   : F -<? (Fx + E) :=
-  { prj := fun A e => if e is in_left e then prj e else None }.
+  { prj := fun A cmd => if cmd is in_left cmd then prj cmd else None }.
 
 Program Instance eplus_left_Provide (Fx F E : effect) `{F -< Fx}
   : F -< (Fx + E) :=
-  { inj := fun (a : Type) (e : F a) => in_left (inj e)
+  { inj := fun (a : Type) (cmd : F a) => in_left (inj cmd)
   }.
 Next Obligation. by move=> */=; rewrite injK_Some. Qed.
 
 Instance eplus_right_MayProvide (F Ex E : effect) `{E -<? Ex}
   : E -<? (F + Ex) :=
-  { prj := fun _ e => if e is in_right e then prj e else None }.
+  { prj := fun _ cmd => if cmd is in_right cmd then prj cmd else None }.
 
 Program Instance eplus_right_Provide (F Ex E : effect) `{E -< Ex}
   : E -< (F + Ex) :=
-  { inj := fun _ e => in_right (inj e) }.
+  { inj := fun _ cmd => in_right (inj cmd) }.
 Next Obligation. by move=> */=; rewrite injK_Some. Qed.
 
 (** By default, Coq's inference algorithm for type classe instances inference is
@@ -244,11 +244,11 @@ Local Definition injT (FX Fx F : effect) `{F -< Fx} `{H' : Fx -< FX} :=
   fun (A : Type) (f : F A) => H'.(inj) (H.(inj) f).
 Local Lemma injK_SomeT (FX Fx F : effect) `{F -< Fx}
     `{H' : Fx -< FX} :
-  forall A e,
+  forall A cmd,
     (@may_provideT FX Fx F H.(may_prov) H'.(may_prov)).(prj)
-      (@injT FX Fx F H H' A e) = Some e.
+      (@injT FX Fx F H H' A cmd) = Some cmd.
 Proof.
-by move=> A e /=; rewrite !injK_Some.
+by move=> A cmd /=; rewrite !injK_Some.
 Qed.
 
 Definition provideT (FX Fx F : effect) `{F -< Fx} `{H' : Fx -< FX}
