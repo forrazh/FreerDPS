@@ -7,8 +7,6 @@
 From HB Require Import structures.
 From mathcomp Require Import all_boot classical_sets boolp.
 From monae Require Import hierarchy.
-(* WARNING: Move this import to its MathComp counterpart. *)
-From Stdlib Require Import Arith.
 From FreerDPS Require Import all_freerdps.
 
 (* DOORS == TODO *)
@@ -49,8 +47,8 @@ Definition opposite_door d : door :=
 
 Definition controller {Fx : effect} `{DOORS -< Fx, STORE nat -< Fx}
     {M : freerMonad Fx} : component (M := M) CONTROLLER Fx :=
-  fun _ op =>
-    match op with
+  fun _ cmd =>
+    match cmd with
     | Tick =>
       iget >>= fun cpt =>
       when (15 < cpt)%N $
@@ -77,18 +75,18 @@ Definition door_state d : state -> bool :=
   | right => snd
   end.
 
-Definition toggle d (t : state) : state :=
+Definition toggle d (s : state) : state :=
   match d with
-  | left => (~~ t.1, t.2)
-  | right => (t.1, ~~ t.2)
+  | left => (~~ s.1, s.2)
+  | right => (s.1, ~~ s.2)
   end.
 
-Lemma tog_equ_1 d (ω : state) :
-  door_state d (toggle d ω) = ~~ door_state d ω.
+Lemma tog_equ_1 d (s : state) :
+  door_state d (toggle d s) = ~~ door_state d s.
 Proof. by case: d. Qed.
 
-Lemma tog_equ_2 d (ω : state) :
-  door_state (opposite_door d) (toggle d ω) = door_state (opposite_door d) ω.
+Lemma tog_equ_2 d (s : state) :
+  door_state (opposite_door d) (toggle d s) = door_state (opposite_door d) s.
 Proof. by case: d. Qed.
 
 Opaque toggle.
@@ -111,8 +109,8 @@ Definition doors_witness_update s (U : Type) (c : DOORS U) : state :=
   if c is Toggle d then toggle d s else s.
 
 Definition doors_requirement s : forall U, DOORS U -> Prop :=
-  fun _ op =>
-    match op with
+  fun _ cmd =>
+    match cmd with
     | CheckOpen _ => True
     | Toggle d => door_state (opposite_door d) s -> door_state d s
     end.
@@ -132,8 +130,8 @@ false true  true
 *)
 
 Definition doors_promise s : forall U, DOORS U -> U -> Prop :=
-  fun U op =>
-    match op in DOORS _ with
+  fun U cmd =>
+    match cmd in DOORS _ with
     | CheckOpen d => fun b => door_state d s = b
     | Toggle _ => fun _ => True
     end.
@@ -145,7 +143,7 @@ it is false only when the state of a door that we check is not u
 
 Definition doors_c : contract DOORS state :=
   make_contract
-   (fun t u c _ => doors_witness_update t u c)
+   (fun s U cmd _ => doors_witness_update s U cmd)
    doors_requirement
    doors_promise.
 
@@ -153,9 +151,9 @@ End contract.
 
 Local Open Scope classical_set_scope.
 
-Remark one_door_safe_all_doors_safe (ω : state) d
-    (safe : (~~ door_state d ω) || (~~ door_state (opposite_door d) ω)) :
-  forall d',(~~ door_state d' ω) || (~~ door_state (opposite_door d') ω).
+Remark one_door_safe_all_doors_safe (s : state) d
+    (safe : (~~ door_state d s) || (~~ door_state (opposite_door d) s)) :
+  forall d',(~~ door_state d' s) || (~~ door_state (opposite_door d') s).
 Proof.
 by move=> d'; move: d d' safe => [|] [|]//=; rewrite orbC.
 Qed.
@@ -166,28 +164,33 @@ Definition not_both_open s :=
 Section RespectfulAndRunLemmas.
 Context {Fx : effect} `{DOORS -< Fx} {M : freerMonad Fx}.
 
-(** Closing a door [d] in any system [ω] is always a respectful operation. *)
-Lemma close_door_respectful d : pre (doors_c |> (close_door d : M _)) = [set: _].
+(** Closing a door [d] in any system [s] is always a respectful operation. *)
+Lemma close_door_respectful d :
+  pre (doors_c |> (close_door d : M _)) = [set: _].
 Proof.
-rewrite /close_door -subTset=> hω _.
+rewrite /close_door -subTset=> s _.
 rewrite freer_to_hoare_bindE/=; split.
   by rewrite to_hoare_triggerE /= provided_callerP.
-case=> w'; rewrite pre_to_hoare_whenP // !to_hoare_triggerE.
-by case=> ->; apply: provided_bind_caller=> /=.
+case=> w'; rewrite pre_to_hoare_whenP // !to_hoare_triggerE /=.
+rewrite provided_calleeP provided_callerP /=.
+by case=> -> ->.
 Qed.
 
-Lemma open_door_respectful (ω : state) d (safe : ~~ door_state (opposite_door d) ω) :
-  pre (doors_c |> (open_door d : M _)) ω.
+Lemma open_door_respectful (s : state) d
+    (safe : ~~ door_state (opposite_door d) s) :
+  pre (doors_c |> (open_door d : M _)) s.
 Proof.
 rewrite /open_door freer_to_hoare_bindE; split.
   by rewrite pre_to_hoare_triggerP.
-case=> w'; rewrite pre_to_hoare_whenP // !to_hoare_triggerE.
-by case=> ->; apply: provided_bind_caller; move: safe=> /= /negPf ->.
+case=> w'; rewrite pre_to_hoare_whenP // !to_hoare_triggerE /=.
+rewrite provided_calleeP provided_callerP /=.
+case=> -> ->.
+by move: safe=> /= /negPf ->.
 Qed.
 
-Lemma close_door_run (ω : state) d (ω' : state) (x : unit)
-    (run : post (doors_c |> (close_door d : M _)) ω x ω') :
-  ~~ door_state d ω'.
+Lemma close_door_run (s : state) d (s' : state) (x : unit)
+    (run : post (doors_c |> (close_door d : M _)) s x s') :
+  ~~ door_state d s'.
 Proof.
 move: run; rewrite /close_door freer_to_hoare_bindE.
 move=> [opened [w] []].
@@ -203,24 +206,24 @@ Opaque Nat.ltb.
 Opaque door_state.
 
 Lemma doors_trigger_preserves_safe
-    {a : Type} (op : Fx a) (ω : state) (x : a) (ω' : state) :
-  pre (doors_c |> (ptrigger op : M _)) ω ->
-  post (doors_c |> (ptrigger op : M _)) ω x ω' ->
-  not_both_open ω -> not_both_open ω'.
+    {a : Type} (cmd : Fx a) (s : state) (x : a) (s' : state) :
+  pre (doors_c |> (ptrigger cmd : M _)) s ->
+  post (doors_c |> (ptrigger cmd : M _)) s x s' ->
+  not_both_open s -> not_both_open s'.
 Proof.
 rewrite to_hoare_triggerE /=.
 rewrite /gen_requirement /gen_state_update /gen_promise.
 case: prj=> [door_op |_ [-> _ //]] /=.
 move: door_op x; case=> d /= [] caller [-> _] _ //.
-apply: (one_door_safe_all_doors_safe (toggle d ω) d).
+apply: (one_door_safe_all_doors_safe (toggle d s) d).
 move: caller.
 rewrite tog_equ_1 tog_equ_2 negbK.
 case: (door_state (opposite_door _)) => /=; rewrite ?orbF ?orbT//.
 exact.
 Qed.
 
-Lemma doors_handler_preserves_safe {a : Type} (op : Fx a) :
-  preserves_invariant not_both_open (hoare_of_contract doors_c op).
+Lemma doors_handler_preserves_safe {a : Type} (cmd : Fx a) :
+  preserves_invariant not_both_open (hoare_of_contract doors_c cmd).
 Proof.
 move=> witness result witness' hpre hpost.
 apply: doors_trigger_preserves_safe;
@@ -247,11 +250,11 @@ by apply: to_hoare_preserves_invariant=> *;
 Qed.
 
 Lemma respectful_run_inv {A : Type} (p : M A)
-    (ω : state) (safe : not_both_open ω)
-    (a : A) (ω' : state)
-    (hpre : pre (doors_c |> p) ω)
-    (hpost : post (doors_c |> p) ω a ω') :
-  not_both_open ω'.
+    (s : state) (safe : not_both_open s)
+    (a : A) (s' : state)
+    (hpre : pre (doors_c |> p) s)
+    (hpost : post (doors_c |> p) s a s') :
+  not_both_open s'.
 Proof. by move: hpre hpost safe; exact: doors_run_preserves_safe. Qed.
 End InvariantRunLemmas.
 
@@ -260,10 +263,10 @@ Section controller_s.
 Context {Fx : effect} `{DOORS ;; (STORE nat) -<< Fx}
   {M : inductiveFreerMonad Fx}.
 
-Lemma controller_pre {A : Type} (op : CONTROLLER A) (ω : state) :
-  pre (doors_c |> controller (M := M) A op) ω.
+Lemma controller_pre {A : Type} (cmd : CONTROLLER A) (s : state) :
+  pre (doors_c |> controller (M := M) A cmd) s.
 Proof.
-case: op => [| d].
+case: cmd => [| d].
 - rewrite freer_to_hoare_bindE; split =>[|cpt w].
   + rewrite to_hoare_triggerE.
     exact: distinguished_caller.
@@ -288,10 +291,10 @@ Theorem controller_correct :
   correct_component controller (M := M)
     (no_contract CONTROLLER) doors_c (fun=> not_both_open).
 Proof.
-move=> ? ω ? ? op _; split=> [| ? ? hpost].
+move=> ? s ? ? cmd _; split=> [| ? ? hpost].
   exact: controller_pre.
 split=> //.
-have hpre := controller_pre op ω; move: hpre hpost.
+have hpre := controller_pre cmd s; move: hpre hpost.
 exact: respectful_run_inv.
 Qed.
 

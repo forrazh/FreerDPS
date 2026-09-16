@@ -38,8 +38,8 @@ Definition effect := Type -> Type.
 Declare Scope effect_scope.
 Bind Scope effect_scope with effect.
 
-(** Given [F : effect], a term of type [F α] identifies a primitive of [F]
-    expected to produce a result of type [α]. *)
+(** Given [F : effect], a term of type [F T] identifies a primitive of [F]
+    expected to produce a result of type [T]. *)
 
 (** * Polymorphic Effect Composites *)
 Class MayProvide (Fx F : effect) : Type :=
@@ -105,12 +105,12 @@ Notation "F1 ;; F2 -<< Fx" := (StrictProvide2 Fx F1 F2 ) (at level 50, no associ
     [eplus] can be used to build _concrete_ (as opposed to polymorphic)
     effect composite. *)
 
-Inductive eplus (F E : effect) (α : Type) :=
-| in_left (e : F α) : eplus F E α
-| in_right (e : E α) : eplus F E α.
+Inductive eplus (F E : effect) (T : Type) :=
+| in_left (e : F T) : eplus F E T
+| in_right (e : E T) : eplus F E T.
 
-Arguments in_left [F E α] (e).
-Arguments in_right [F E α] (e).
+Arguments in_left [F E T] (e).
+Arguments in_right [F E T] (e).
 
 Register eplus as freespec.core.eplus.type.
 Register in_left as freespec.core.eplus.in_left.
@@ -128,7 +128,7 @@ Infix "+" := eplus : effect_scope.
     The main use case for [eplus] is to locally provide an additional
     effect. For instance, we can consider a [with_state] function which would
     locally give access to the [STORE] effect, that is [with_state : forall
-    Fx s α, s -> freer (Fx + STORE s) α -> freer Fx α]. In such a case, the
+    Fx s T, s -> freer (Fx + STORE s) T -> freer Fx T]. In such a case, the
     effect made locally available shall be the right operand of [eplus]. This
     way, functions such as [with_state] are reentrant. If we take an example,
     the following impure computation:
@@ -278,7 +278,7 @@ Instance distinguish_provideT
     @Distinguish FX F G
       (@provideT FX Fx F pf outer)
       (@provideT FX Fx G pg outer).(may_prov).
-Proof. by constructor=> A op /=; rewrite !injK_Some injK_None. Defined.
+Proof. by constructor=> A cmd /=; rewrite !injK_Some injK_None. Defined.
 
 (** This one is not an instance because the typeclass
   * resolver would just loop wildly otherwise *)

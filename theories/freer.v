@@ -39,16 +39,16 @@ Module FreerMonadModel.
 Section freer.
 Inductive freer (F : effect) (A : Type) :=
 | pure (x : A) : freer F A
-| impure {B} (op : F B) (f : B -> freer F A) : freer F A.
+| impure {B} (cmd : F B) (f : B -> freer F A) : freer F A.
 
 Arguments pure [F A] (x).
-Arguments impure [F A B] (op f).
+Arguments impure [F A B] (cmd f).
 
 Fixpoint freer_bind (F : effect) {A B} (p : freer F A) (f : A -> freer F B)
     : freer F B :=
   match p with
   | pure x => f x
-  | impure Y op g => impure op (fun x => freer_bind (g x) f)
+  | impure Y cmd g => impure cmd (fun x => freer_bind (g x) f)
   end.
 
 Declare Scope freer_scope.
@@ -66,7 +66,7 @@ Let left_neutral : BindLaws.left_neutral bind ret.
 Proof. by []. Qed.
 
 Let right_neutral : BindLaws.right_neutral bind ret.
-Proof. by move=> T; elim => //b op f ih/=; congr impure; exact/funext. Qed.
+Proof. by move=> T; elim => //b cmd f ih/=; congr impure; exact/funext. Qed.
 
 Let assoc : BindLaws.associative bind.
 Proof. by move=> A B C + f g; elim=>//= *; congr impure; exact/funext. Qed.
@@ -85,7 +85,7 @@ HB.instance Definition _ := @isMonad_ret_bind.Build acto ret bind
 
     To complete these two monadic operations, we introduce the [request]
     function, whose purpose is to define an freer computation that uses a given
-    primitive [op] from an effect [F], and returns its result.  [request] does
+    primitive [cmd] from an effect [F], and returns its result.  [request] does
     not parameterize the [freer] monad with [F] directly, but rather with a
     generic effect [Fx].  [Fx] is constrained with the [-<] notation, so
     that it has to provide at least [F]'s primitives.  *)
@@ -101,13 +101,13 @@ HB.mixin Record isMonadFreer (F : effect) (M : Type -> Type) of Monad M := {
     denote N h X (Ret x) = Ret x ;
   denote_bind : forall (N : monad) (h : F ~~> N) X Y m (f : X -> M Y),
     denote N h Y (m >>= f) = denote N h X m >>= (denote N h Y \o f) ;
-  denote_trigger : forall (N : monad) (h : F ~~> N) X (op : F X),
-    denote N h X (trigger X op) = h X op ;
+  denote_trigger : forall (N : monad) (h : F ~~> N) X (cmd : F X),
+    denote N h X (trigger X cmd) = h X cmd ;
   denote_unique : forall (N : monad) (h : F ~~> N) (denote' : M ~~> N),
       (forall X (x : X), denote' X (ret X x) = Ret x) ->
       (forall X Y (m : M X) (f : X -> M Y), denote' Y (m >>= f) =
          denote' X m >>= (denote' Y \o f)) ->
-      (forall X (op : F X), denote' X (trigger X op) = h X op) ->
+      (forall X (cmd : F X), denote' X (trigger X cmd) = h X cmd) ->
     forall X (m : M X), denote' X m = denote N h X m }.
 
 #[short(type=freerMonad)]
@@ -123,14 +123,14 @@ Import FreerMonadModel.
 
 Notation acto := (@freer F).
 
-Definition trigger_effect : F ~~> acto := fun A op =>
-  impure (inj op) (@pure _ _).
+Definition trigger_effect : F ~~> acto := fun A cmd =>
+  impure (inj cmd) (@pure _ _).
 
 Definition dnt (M : monad) (h : F ~~> M) : acto ~~> M :=
   fix aux a (p : acto a) :=
     match p with
     | pure x => Ret x
-    | impure Y op f => h _ op >>= fun x => aux a (f x)
+    | impure Y cmd f => h _ cmd >>= fun x => aux a (f x)
     end.
 
 Let dnt_ret (cm : monad) (h : F ~~> cm) X (x : X) :
@@ -150,8 +150,8 @@ Proof.
     exact/boolp.funext/H.
 Qed.
 
-Let dnt_trigger (cm : monad) (h : F ~~> cm) X (op : F X) :
-  dnt h (trigger_effect op) = h X op.
+Let dnt_trigger (cm : monad) (h : F ~~> cm) X (cmd : F X) :
+  dnt h (trigger_effect cmd) = h X cmd.
 Proof. by rewrite /dnt /trigger_effect/= bindmret. Qed.
 
 Let dnt_unique : forall (cm : monad) (h : F ~~> cm)
@@ -159,8 +159,8 @@ Let dnt_unique : forall (cm : monad) (h : F ~~> cm)
   (forall X (x : X), h' X (ret X x) = @hierarchy.ret cm X x) ->
   (forall X Y (m : acto X) (f : X -> acto Y),
     h' Y (m >>= f) = h' X m >>= (fun x => h' Y (f x))) ->
-  (forall X (op : F X),
-    h' X (trigger_effect op) = h X op) ->
+  (forall X (cmd : F X),
+    h' X (trigger_effect cmd) = h X cmd) ->
   forall X (m : acto X), h' X m = dnt h m.
 Proof.
     move=>cm h h' dret' dbind' dtrigger' X m.
@@ -184,9 +184,9 @@ HB.mixin Record isMonadFreerInductive
     (F : effect) (M : UU0 -> UU0) of MonadFreer F M := {
   f_ind : forall (P : forall A : UU0, (M A -> Prop)),
     (forall (A : UU0) (x : A), P A (Ret x)) ->
-    (forall (A B : UU0) (op : F A) (k : A -> M B),
+    (forall (A B : UU0) (cmd : F A) (k : A -> M B),
       (forall x : A, P B (k x)) ->
-      P B (trigger A op >>= k)) ->
+      P B (trigger A cmd >>= k)) ->
     forall (A : UU0) (p : M A), P A p
 }.
 
@@ -205,9 +205,9 @@ Notation acto := (@freer F).
 
 Let freer_induction : forall (P : forall A : UU0, acto A -> Prop),
   (forall (A : UU0) (x : A), P A (Ret x)) ->
-  (forall (A B : UU0) (op : F A) (k : A -> acto B),
+  (forall (A B : UU0) (cmd : F A) (k : A -> acto B),
     (forall x : A, P B (k x)) ->
-    P B (trigger A op >>= k)) ->
+    P B (trigger A cmd >>= k)) ->
   forall (A : UU0) (p : acto A), P A p.
 Proof.
 by move=> P + + A p; elim: p=> //= ??? ih ? H';apply/H'=>?; exact: ih.
@@ -227,12 +227,12 @@ Lemma denote_if : forall (F : effect) (M : freerMonad F) (cm : monad)
 Proof. by move=> ? ? ? ? ? ? ?; case. Qed.
 
 Lemma denote_when_trigger (Fx : effect) (M : freerMonad Fx) (cm : monad)
-    (h : Fx ~~> cm) (A X : Type) (guard : A -> bool) (op : Fx X) :
+    (h : Fx ~~> cm) (A X : Type) (guard : A -> bool) (cmd : Fx X) :
   denote cm h unit \o
-      (fun x => when (guard x) (trigger X op : M X)) =
+      (fun x => when (guard x) (trigger X cmd : M X)) =
     fun x =>
       if guard x then
-        h X op >>= (denote cm h unit \o fun=> (skip : M unit))
+        h X cmd >>= (denote cm h unit \o fun=> (skip : M unit))
       else denote cm h unit (skip : M unit).
 Proof.
 by apply/funext=> x; rewrite compE denote_if;
@@ -248,7 +248,7 @@ Lemma denote_ind {Fx : effect} {M : inductiveFreerMonad Fx}
       P A h ->
       (forall x : A, P B (k x)) ->
       P B (h >>= k)) ->
-    (forall (A : UU0) (op : Fx A), P A (handler A op)) ->
+    (forall (A : UU0) (cmd : Fx A), P A (handler A cmd)) ->
     forall (A : UU0) (p : M A), P A (denote N handler A p).
 Proof.
 move=> ?? P? Hb *;
@@ -259,7 +259,7 @@ apply: (f_ind (fun X => P X \o (denote _ _ X))) => *;
 Qed.
 
 Definition ptrigger {Fx F : effect} `{F -< Fx} {M : freerMonad Fx} : F ~~> M :=
-  fun a op => trigger a (inj op).
+  fun a cmd => trigger a (inj cmd).
 Arguments ptrigger {_ _ _ _ _} _.
 
 Definition iget {S} {Fx : effect} `{STORE S -< Fx} {M : freerMonad Fx}
