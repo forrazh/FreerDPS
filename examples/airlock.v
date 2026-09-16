@@ -75,10 +75,10 @@ Definition door_state d : state -> bool :=
   | right => snd
   end.
 
-Definition toggle d (t : state) : state :=
+Definition toggle d (s : state) : state :=
   match d with
-  | left => (~~ t.1, t.2)
-  | right => (t.1, ~~ t.2)
+  | left => (~~ s.1, s.2)
+  | right => (s.1, ~~ s.2)
   end.
 
 Lemma tog_equ_1 d (s : state) :
@@ -143,7 +143,7 @@ it is false only when the state of a door that we check is not u
 
 Definition doors_c : contract DOORS state :=
   make_contract
-   (fun t u c _ => doors_witness_update t u c)
+   (fun s U cmd _ => doors_witness_update s U cmd)
    doors_requirement
    doors_promise.
 
@@ -167,7 +167,7 @@ Context {Fx : effect} `{DOORS -< Fx} {M : freerMonad Fx}.
 (** Closing a door [d] in any system [s] is always a respectful operation. *)
 Lemma close_door_respectful d : pre (doors_c |> (close_door d : M _)) = [set: _].
 Proof.
-rewrite /close_door -subTset=> hω _.
+rewrite /close_door -subTset=> s _.
 rewrite freer_to_hoare_bindE/=; split.
   by rewrite to_hoare_triggerE /= provided_callerP.
 case=> w'; rewrite pre_to_hoare_whenP // !to_hoare_triggerE.

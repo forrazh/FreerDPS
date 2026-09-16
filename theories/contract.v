@@ -64,14 +64,14 @@ Arguments promise [F T] (c _) [U] (_ _).
     these primitives. *)
 
 Definition const_witness {F : effect} :=
-  fun (u : unit) (α : Type) (e : F α) (x : α) => u.
+  fun (u : unit) (T : Type) (e : F T) (x : T) => u.
 
 Definition no_requirement {F : effect} {S : Type}
-    (s : S) (α : Type) (e : F α) : Prop :=
+    (s : S) (T : Type) (e : F T) : Prop :=
   True.
 
 Definition no_promise {F : effect} {S : Type}
-    (s : S) (α : Type) (e : F α) (x : α) : Prop :=
+    (s : S) (T : Type) (e : F T) (x : T) : Prop :=
   True.
 
 Definition no_contract (F : effect) : contract F unit :=
@@ -81,7 +81,7 @@ Definition no_contract (F : effect) : contract F unit :=
     given effect. *)
 
 Definition do_no_use {F : effect} {S : Type}
-    (s : S) (α : Type) (e : F α) : Prop :=
+    (s : S) (T : Type) (e : F T) : Prop :=
   False.
 
 Definition forbid_specs (F : effect) : contract F unit :=
@@ -89,125 +89,6 @@ Definition forbid_specs (F : effect) : contract F unit :=
    ; requirement := do_no_use
    ; promise := no_promise
    |}.
-
-(** * Contract Equivalence *)
-
-Definition contract_caller_equ {F : effect} {Ω1 Ω2 : Type}
-    (c1 : contract F Ω1) (c2 : contract F Ω2)
-    (f : Ω1 -> Ω2)
-  : Prop :=
-  forall ω1 a (p : F a),
-    requirement c1 ω1 p <-> requirement c2 (f ω1) p.
-
-Definition contract_callee_equ {F : effect} {Ω1 Ω2 : Type}
-    (c1 : contract F Ω1) (c2 : contract F Ω2)
-    (f : Ω1 -> Ω2)
-  : Prop :=
-  forall ω1 a (p : F a) x,
-    promise c1 ω1 p x <-> promise c2 (f ω1) p x.
-
-Definition contract_witness_equ {F : effect} {Ω1 Ω2 : Type}
-    (c1 : contract F Ω1) (c2 : contract F Ω2)
-    (f : Ω1 -> Ω2)
-  : Prop :=
-  forall ω1 a (p : F a) x,
-    f (state_update c1 ω1 p x) = state_update c2 (f ω1) p x.
-
-Inductive contract_equ {F : effect} {Ω1 Ω2 : Type}
-    (c1 : contract F Ω1) (c2 : contract F Ω2) : Type :=
-| mk_contract_equ (f : Ω1 -> Ω2) (g : Ω2 -> Ω1)
-    (iso1 : forall x, f (g x) = x) (iso2 : forall x, g (f x) = x)
-    (caller_equ : contract_caller_equ c1 c2 f)
-    (callee_equ : contract_callee_equ c1 c2 f)
-    (witness_equ : contract_witness_equ c1 c2 f)
-  : contract_equ c1 c2.
-
-Definition contract_iso_lr {F : effect} {Ω1 Ω2 : Type}
-    (c1 : contract F Ω1) (c2 : contract F Ω2)
-    (equ : contract_equ c1 c2) (ω1 : Ω1)
-  : Ω2 :=
-  match equ with
-  | @mk_contract_equ _ _ _ _ _ f _ _ _ _ _ _ => f ω1
-  end.
-
-Definition contract_iso_rl {F : effect} {Ω1 Ω2 : Type}
-    (c1 : contract F Ω1) (c2 : contract F Ω2)
-    (equ : contract_equ c1 c2) (ω2 : Ω2)
-  : Ω1 :=
-  match equ with
-  | @mk_contract_equ _ _ _ _ _ _ g _ _ _ _ _ => g ω2
-  end.
-
-Arguments contract_iso_lr {F Ω1 Ω2 c1 c2} (equ ω1).
-Arguments contract_iso_rl {F Ω1 Ω2 c1 c2} (equ ω2).
-
-Lemma contract_equ_refl {F : effect} {S : Type} (c : contract F S)
-  : contract_equ c c.
-
-Proof.
-  apply mk_contract_equ with (f:=fun x => x) (g:=fun x => x); auto.
-  + now intros s α p.
-  + now intros s α p x.
-  + now intros s α p x.
-Defined.
-
-Lemma contract_equ_sym {F : effect} {Ω1 Ω2 : Type}
-    (c1 : contract F Ω1) (c2 : contract F Ω2)
-   (equ : contract_equ c1 c2)
-  : contract_equ c2 c1.
-
-Proof.
-  induction equ.
-  apply mk_contract_equ with (f:=g) (g:=f).
-  + apply iso2.
-  + apply iso1.
-  + intros s α p.
-    transitivity (requirement c2 (f (g s)) p).
-    ++ now rewrite iso1.
-    ++ now symmetry.
-  + intros s α p x.
-    transitivity (promise c2 (f (g s)) p x).
-    ++ now rewrite iso1.
-    ++ now symmetry.
-  + intros s α p x.
-    rewrite <- (iso2 (state_update c1 (g s) p x)).
-    assert (equ : state_update c2 s p x = f (state_update c1 (g s) p x)). {
-      transitivity (state_update c2 (f (g s)) p x).
-      + now rewrite iso1.
-      + now rewrite witness_equ.
-    }
-    now rewrite equ.
-Defined.
-
-Lemma contract_equ_trans {F : effect} {Ω1 Ω2 Ω3 : Type}
-    (c1 : contract F Ω1) (c2 : contract F Ω2)
-    (c3 : contract F Ω3)
-    (is_equ12 : contract_equ c1 c2)
-    (is_equ23 : contract_equ c2 c3)
-  : contract_equ c1 c3.
-
-Proof.
-  destruct is_equ12 as [f12 g21 isofg12 isogf12 caller_equ12 callee_equ12 witness_equ12].
-  destruct is_equ23 as [f23 g32 isofg23 isogf23 caller_equ23 callee_equ23 witness_equ23].
-  apply mk_contract_equ
-    with (f:=fun x => f23 (f12 x)) (g:=fun x => g21 (g32 x)).
-  + setoid_rewrite isofg12.
-    now setoid_rewrite isofg23.
-  + setoid_rewrite isogf23.
-    now setoid_rewrite isogf12.
-  + intros ω1 α p.
-    transitivity (requirement c2 (f12 ω1) p);
-      [ now apply caller_equ12
-      | now apply caller_equ23 ].
-  + intros ω1 α p x.
-    transitivity (promise c2 (f12 ω1) p x); [ now apply callee_equ12
-                                                      | now apply callee_equ23 ].
-  + intros ω1 α p x.
-    rewrite <- witness_equ23.
-    assert (equ : f12 (state_update c1 ω1 p x) = state_update c2 (f12 ω1) p x)
-      by now rewrite <- witness_equ12.
-    now rewrite equ.
-Defined.
 
 (** * Composing Contracts *)
 
@@ -218,23 +99,22 @@ Defined.
     [ci : contract F ΩF] and [cj : contract E ΩE], such that [contractprod ci cj] in a
     contract for [F + E]. *)
 
-(* HB.lock  *)
 Definition gen_state_update {Fx F : effect} `{F -<? Fx}
-    {S α : Type} (c : contract F S)
-    (s :  S) (e : Fx α) (x : α)
+    {S T : Type} (c : contract F S)
+    (s :  S) (e : Fx T) (x : T)
   : S :=
   if prj e is Some e then state_update c s e x else s.
 Arguments gen_state_update : simpl never.
 
 Definition gen_requirement {Fx F : effect} `{F -<? Fx}
-    {S α : Type} (c : contract F S)
-    (s :  S) (e : Fx α)
+    {S T : Type} (c : contract F S)
+    (s :  S) (e : Fx T)
   : Prop :=
   if prj e is Some e then requirement c s e else True.
 
 Definition gen_promise {Fx F : effect} `{F -<? Fx}
-    {S α : Type} (c : contract F S)
-    (s :  S) (e : Fx α) (x : α)
+    {S T : Type} (c : contract F S)
+    (s :  S) (e : Fx T) (x : T)
   : Prop :=
   if prj e is Some e then promise c s e x else True.
 
@@ -242,11 +122,11 @@ Definition contractprod {Fx F E : effect} `{F -< Fx, E -< Fx}
     {ΩF ΩE : Type}
     (ci : contract F ΩF) (cj : contract E ΩE)
   : contract Fx (ΩF * ΩE) :=
-  {| state_update := fun (s : ΩF * ΩE) (α : Type) (e : Fx α) (x : α) =>
+  {| state_update := fun (s : ΩF * ΩE) (T : Type) (e : Fx T) (x : T) =>
                          (gen_state_update ci (fst s) e x, gen_state_update cj (snd s) e x)
-  ;  requirement := fun (s : ΩF * ΩE) (α : Type) (e : Fx α) =>
+  ;  requirement := fun (s : ΩF * ΩE) (T : Type) (e : Fx T) =>
                        gen_requirement ci (fst s) e /\ gen_requirement cj (snd s) e
-  ;  promise := fun (s : ΩF * ΩE) (α : Type) (e : Fx α) (x : α) =>
+  ;  promise := fun (s : ΩF * ΩE) (T : Type) (e : Fx T) (x : T) =>
                    gen_promise ci (fst s) e x /\ gen_promise cj (snd s) e x
   |}.
 
@@ -261,7 +141,7 @@ Definition sharedcontractprod {F E : effect} `{F ;; E -<< Fx}
   : contract Fx S :=
   {|
   state_update :=
-    fun (s : S) (α : Type) (e : Fx α) (x : α) =>
+    fun (s : S) (T : Type) (e : Fx T) (x : T) =>
       (* we need to check [F] before [E] because [sharedcontractprod]
          will be right associative *)
       match prj (F:=F) e with
@@ -269,10 +149,10 @@ Definition sharedcontractprod {F E : effect} `{F ;; E -<< Fx}
       | _ => if prj (F:=E) e is Some e then state_update cj s e x else s
       end;
   requirement :=
-    fun (s : S) (α : Type) (e : Fx α) =>
+    fun (s : S) (T : Type) (e : Fx T) =>
       gen_requirement ci s e /\ gen_requirement cj s e;
   promise :=
-    fun (s : S) (α : Type) (e : Fx α) (x : α) =>
+    fun (s : S) (T : Type) (e : Fx T) (x : T) =>
       gen_promise ci s e x /\ gen_promise cj s e x
   |}.
 
@@ -287,11 +167,11 @@ Infix "-^-" := sharedcontractprod (at level 20, right associativity) : contract_
     variable.  Therefore, the contract for [STORE s] may be [specs (STORE
     s) s], and the witness will be updated after each [Put] call. *)
 
-Definition store_update (s : Type) :=
-  fun (x : s) (α : Type) (e : STORE s α) (_ : α) =>
+Definition store_update (S : Type) :=
+  fun (s : S) (T : Type) (e : STORE S T) (_ : T) =>
     match e with
-    | Get => x
-    | Put x' => x'
+    | Get => s
+    | Put s' => s'
     end.
 
 (** Assuming the mutable variable is being initialized prior to any impure
@@ -304,20 +184,20 @@ Definition store_update (s : Type) :=
     obligations about the result of [Put] (which belongs to [unit] anyway, so
     there is not much to tell). *)
 
-Definition o_callee_store (s : Type) (x : s) :
-    forall α, STORE s α -> α -> Prop :=
-  fun α op =>
-    match op in STORE _ α return α -> Prop with
+Definition o_callee_store (S : Type) (x : S) :
+    forall T, STORE S T -> T -> Prop :=
+  fun T op =>
+    match op in STORE _ T return T -> Prop with
     | Get => fun x' => x = x'
     | Put _ => fun _ => True
     end.
 
 (** The actual contract can therefore be defined as follows: *)
 
-Definition store_specs (s : Type) : contract (STORE s) s :=
-  {| state_update := store_update s
+Definition store_specs (S : Type) : contract (STORE S) S :=
+  {| state_update := store_update S
   ;  requirement := no_requirement
-  ;  promise := o_callee_store s
+  ;  promise := o_callee_store S
   |}.
 
 (** Now, as we briefly mentionned, this contract allows for reasoning about an
@@ -337,25 +217,25 @@ Definition store_specs (s : Type) : contract (STORE s) s :=
 
 
 Section contract_helpers.
-Context {Fx F : effect} `{F -< Fx} {W X Y : Type}
-    (c : contract F W) (w w' : W) (op : F X) (op' : F Y)
+Context {Fx F : effect} `{F -< Fx} {S X Y : Type}
+    (c : contract F S) (s s' : S) (op : F X) (op' : F Y)
     (x : X) (concl : Prop).
 
 Local Notation inj := (inj (Fx:=Fx)).
 
 Lemma provided_callerP :
-  gen_requirement c w (inj op)
-  <-> requirement c w op.
+  gen_requirement c s (inj op)
+  <-> requirement c s op.
 Proof.
 by rewrite /gen_requirement !injK_Some.
 Qed.
 
 Lemma provided_bind_caller :
-  (promise c w op x ->
-    requirement c (state_update c w op x) op') ->
-  gen_promise c w (inj op) x ->
+  (promise c s op x ->
+    requirement c (state_update c s op x) op') ->
+  gen_promise c s (inj op) x ->
   gen_requirement c
-    (gen_state_update c w (inj op) x)
+    (gen_state_update c s (inj op) x)
     (inj op').
 Proof.
 rewrite /gen_state_update /gen_promise.
@@ -364,9 +244,9 @@ Qed.
 
 
 Lemma provided_calleeP :
-  (w' = gen_state_update c w (inj op) x
-  /\ gen_promise c w (inj op) x )
-  <-> (w' = state_update c w op x /\ promise c w op x) .
+  (s' = gen_state_update c s (inj op) x
+  /\ gen_promise c s (inj op) x )
+  <-> (s' = state_update c s op x /\ promise c s op x) .
 Proof.
 by split; rewrite /gen_promise /gen_state_update !injK_Some.
 Qed.
@@ -376,20 +256,20 @@ End contract_helpers.
 Section contract_distinguish_helpers.
 Context {Fx F G : effect} `{F -<? Fx} `{G -< Fx}
     `{Distinguish Fx G F}
-    {W X : Type} (c : contract F W) (w w' : W) (op : G X) (x : X).
+    {S X : Type} (c : contract F S) (s s' : S) (op : G X) (x : X).
 
 Local Notation inj := (inj (Fx:=Fx)).
 
 Lemma distinguished_caller :
-  gen_requirement c w (inj op).
+  gen_requirement c s (inj op).
 Proof.
 by rewrite /gen_requirement injK_None.
 Qed.
 
 Lemma distinguished_callee :
-  (w' = gen_state_update c w (inj op) x /\
-    gen_promise c w (inj op) x) <->
-  w' = w.
+  (s' = gen_state_update c s (inj op) x /\
+    gen_promise c s (inj op) x) <->
+  s' = s.
 Proof.
 rewrite /gen_state_update /gen_promise injK_None.
 by split=> [[-> _] | ->].
@@ -399,106 +279,106 @@ End contract_distinguish_helpers.
 
 Section shared_contract_helpers.
 Context {Fx F G : effect}.
-Context `{S: F;; G -<< Fx}
-    {W X : Type} (ci : contract F W) (cj : contract G W)
-    (w w' : W) (x : X).
+Context `{F;; G -<< Fx}
+    {S X : Type} (ci : contract F S) (cj : contract G S)
+    (s s' : S) (x : X).
 
 Local Notation inj := (inj (Fx:=Fx)).
 
 Lemma shared_left_callerP (op : F X) :
   gen_requirement
-    (ci -^- cj) w (inj op)
-  <-> requirement ci w op.
+    (ci -^- cj) s (inj op)
+  <-> requirement ci s op.
 Proof.
 split.
-- Set Printing Implicit. by case=> + _; rewrite provided_callerP.
+- by case=> + _; rewrite provided_callerP.
 - move=> caller; split.
   + rewrite provided_callerP; exact: caller.
-  + by rewrite /gen_requirement (@injK_None Fx F G).
+  + by rewrite /gen_requirement injK_None.
 Qed.
 
 Lemma shared_right_callerP (op : G X) :
   gen_requirement (Fx := Fx)
-    (ci -^- cj) w (inj op)
-  <-> requirement cj w op.
+    (ci -^- cj) s (inj op)
+  <-> requirement cj s op.
 Proof.
 split.
 - by case=> _; rewrite provided_callerP.
 - move=> caller; split.
-  + by rewrite /gen_requirement (@injK_None Fx G F).
+  + by rewrite /gen_requirement injK_None.
   + rewrite provided_callerP; exact: caller.
 Qed.
 
 Lemma shared_left_calleeP (op : F X) :
-  (w' = gen_state_update (Fx := Fx)
-      (ci -^- cj) w
+  (s' = gen_state_update (Fx := Fx)
+      (ci -^- cj) s
       (inj op) x /\
     gen_promise (Fx := Fx)
-      (ci -^- cj) w
+      (ci -^- cj) s
       (inj op) x) <->
-  w' = state_update ci w op x /\ promise ci w op x.
+  s' = state_update ci s op x /\ promise ci s op x.
 Proof.
 rewrite /gen_state_update /gen_promise /=.
 rewrite /sharedcontractprod /= /gen_promise.
-rewrite (@injK_Some Fx F) (@injK_None Fx F G).
+rewrite injK_Some injK_None.
 by tauto.
 Qed.
 
 Lemma shared_right_calleeP (op : G X) :
-  (w' = gen_state_update (Fx := Fx)
-      (ci -^- cj) w
+  (s' = gen_state_update (Fx := Fx)
+      (ci -^- cj) s
       (inj op) x /\
     gen_promise (Fx := Fx)
-      (ci -^- cj) w
+      (ci -^- cj) s
       (inj op) x) <->
-  w' = state_update cj w op x /\ promise cj w op x.
+  s' = state_update cj s op x /\ promise cj s op x.
 Proof.
 rewrite /gen_state_update /gen_promise /=.
 rewrite /sharedcontractprod /= /gen_promise.
-rewrite (@injK_None Fx G F) (@injK_Some Fx G).
+rewrite injK_None injK_Some.
 by tauto.
 Qed.
 End shared_contract_helpers.
 
 Section shared_contract_inj_helpers.
 Context {H Fx F G : effect} `{F;; G-<<Fx, Fx -< H}
-    {W X : Type} (ci : contract F W) (cj : contract G W)
-    (w w' : W) (x : X).
+    {S X : Type} (ci : contract F S) (cj : contract G S)
+    (s s' : S) (x : X).
 
 Local Notation inj := (inj (Fx:=Fx)).
 
 Lemma shared_left_caller_injP (op : F X) :
   gen_requirement
-    (sharedcontractprod (Fx:=Fx) ci cj) w (effect.injT H Fx F _ op)
-  <-> requirement ci w op.
+    (sharedcontractprod (Fx:=Fx) ci cj) s (effect.injT H Fx F _ op)
+  <-> requirement ci s op.
 Proof.
 split; rewrite provided_callerP /= provided_callerP.
 - by case=> + _.
 - move=> caller; split.
   + exact: caller.
-  + by rewrite /gen_requirement (@injK_None Fx F G).
+  + by rewrite /gen_requirement injK_None.
 Qed.
 
 Lemma shared_right_caller_injP (op : G X) :
   gen_requirement
-    (ci -^- cj) w (effect.injT H Fx G _ op)
-  <-> requirement cj w op.
+    (ci -^- cj) s (effect.injT H Fx G _ op)
+  <-> requirement cj s op.
 Proof.
 split; rewrite provided_callerP /= provided_callerP.
 - by case=> _.
 - move=> caller; split.
-  + by rewrite /gen_requirement (@injK_None Fx G F).
+  + by rewrite /gen_requirement injK_None.
   + exact: caller.
 Qed.
 
 Lemma shared_left_callee_injP (op : F X) :
-  (w' = gen_state_update
-      (ci -^- cj) w
+  (s' = gen_state_update
+      (ci -^- cj) s
       (effect.injT H Fx F _ op) x /\
     gen_promise
-      (ci -^- cj) w
+      (ci -^- cj) s
       (effect.injT H Fx F _ op) x) <->
-  w' = state_update ci w op x /\ promise ci w op x.
+  s' = state_update ci s op x /\ promise ci s op x.
 Proof.
 rewrite /gen_state_update /gen_promise /=.
 rewrite /sharedcontractprod /= /gen_promise.
@@ -507,13 +387,13 @@ by tauto.
 Qed.
 
 Lemma shared_right_callee_injP (op : G X) :
-  (w' = gen_state_update
-      (ci -^- cj) w
+  (s' = gen_state_update
+      (ci -^- cj) s
       (effect.injT H Fx G _ op) x /\
     gen_promise
-      (ci -^- cj) w
+      (ci -^- cj) s
       (effect.injT H Fx G _ op) x) <->
-  w' = state_update cj w op x /\ promise cj w op x.
+  s' = state_update cj s op x /\ promise cj s op x.
 Proof.
 rewrite /gen_state_update /gen_promise /=.
 rewrite /sharedcontractprod /= /gen_promise.
