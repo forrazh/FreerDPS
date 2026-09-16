@@ -278,7 +278,7 @@ Instance distinguish_provideT
     @Distinguish FX F G
       (@provideT FX Fx F pf outer)
       (@provideT FX Fx G pg outer).(may_prov).
-Proof. by constructor=> A op /=; rewrite !injK_Some injK_None. Defined.
+Proof. by constructor=> A cmd /=; rewrite !injK_Some injK_None. Defined.
 
 (** This one is not an instance because the typeclass
   * resolver would just loop wildly otherwise *)

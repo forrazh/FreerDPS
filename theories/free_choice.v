@@ -43,7 +43,7 @@ Section exact_denotation.
 Context {R : realType} {pM : probMonad R}.
 
 Definition denote_flipeffect : FlipEff ~~> pM :=
-  fun X op => let: flipe p := op in bcoin p.
+  fun X cmd => let: flipe p := cmd in bcoin p.
 
 Lemma denote_flipeffectE p :
   denote_flipeffect _ (flipe p) = bcoin p.

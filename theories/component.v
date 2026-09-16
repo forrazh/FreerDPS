@@ -34,9 +34,9 @@ Definition correct_component {Ex E F : effect} `{E -<? Ex} {M : freerMonad Ex}
     (cE : contract E SE) (pred : SF -> SE -> Prop) :
   Prop :=
   forall (sF : SF) (sE : SE) (init : pred sF sE) (T : Type)
-      (op : F T) (o_caller : requirement cF sF op),
-    pre (cE |> c T op) sE /\
+      (cmd : F T) (o_caller : requirement cF sF cmd),
+    pre (cE |> c T cmd) sE /\
     forall (x : T) (sE' : SE),
-      post (cE |> (c T op : M _)) sE x sE' ->
-      promise cF sF op x /\
-      pred (state_update cF sF op x) sE'.
+      post (cE |> (c T cmd : M _)) sE x sE' ->
+      promise cF sF cmd x /\
+      pred (state_update cF sF cmd x) sE'.

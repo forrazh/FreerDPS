@@ -154,8 +154,8 @@ Qed.
 
 Lemma denote_preserves_invariant {Fx : effect} {M : inductiveFreerMonad Fx}
   {S : UU0} (invariant : set S) (handler : Fx ~~> hoare S) (A : UU0) (p : M A) :
-  (forall (X : Type) (op : Fx X),
-    preserves_invariant invariant (handler _ op)) ->
+  (forall (X : Type) (cmd : Fx X),
+    preserves_invariant invariant (handler _ cmd)) ->
   preserves_invariant invariant
     (denote (hoare S) handler A p).
 Proof.
@@ -220,8 +220,8 @@ Section GenericToHoareSection.
 Context {Fx F : effect} `{F -<? Fx} {M : freerMonad Fx}
     (S : Type) (c : contract F S).
 
-Lemma to_hoare_triggerE (a : Type) (op : Fx a) :
-  (c |> (trigger a op : M _)) = hoare_of_contract c op.
+Lemma to_hoare_triggerE (a : Type) (cmd : Fx a) :
+  (c |> (trigger a cmd : M _)) = hoare_of_contract c cmd.
 Proof. exact: denote_trigger. Qed.
 
 Lemma freer_to_hoare_bindE {a b : Type} (p : M a) (f : a -> M b) :
@@ -276,58 +276,11 @@ End WhenFacts.
 
 End GenericToHoareSection.
 
-Section SharedBindHelpers.
-Context {Fx F G : effect} `{F ;; G -<< Fx}
-    {S : Type} (ci : contract F S) (cj : contract G S)
-    {M : freerMonad Fx}.
-
-Lemma pre_to_hoare_shared_left_bind {A B : Type}
-    (s : S) (op : F A) (k : A -> M B) :
-  requirement ci s op ->
-  (forall x,
-    promise ci s op x ->
-    pre ((sharedcontractprod (Fx := Fx) ci cj) |> k x)
-      (state_update ci s op x)) ->
-  pre ((sharedcontractprod (Fx := Fx) ci cj) |>
-    (ptrigger op >>= k)) s.
-Proof.
-move=> caller suffix.
-rewrite freer_to_hoare_bindE/=; split.
-  rewrite to_hoare_triggerE /=.
-  by rewrite shared_left_callerP.
-move=> a.
-rewrite to_hoare_triggerE /= => s'.
-rewrite shared_left_calleeP => -[-> ?].
-exact: suffix.
-Qed.
-
-Lemma pre_to_hoare_shared_right_bind {A B : Type}
-    (s : S) (op : G A) (k : A -> M B) :
-  requirement cj s op ->
-  (forall x,
-    promise cj s op x ->
-    pre ((sharedcontractprod (Fx := Fx) ci cj) |> k x)
-      (state_update cj s op x)) ->
-  pre ((sharedcontractprod (Fx := Fx) ci cj) |>
-    (ptrigger op >>= k)) s.
-Proof.
-move=> caller suffix.
-rewrite freer_to_hoare_bindE/=; split.
-  rewrite to_hoare_triggerE /=.
-  by rewrite shared_right_callerP.
-move=> a.
-rewrite to_hoare_triggerE /= => s'.
-rewrite shared_right_calleeP => -[-> ?].
-exact: suffix.
-Qed.
-
-End SharedBindHelpers.
-
 Lemma to_hoare_preserves_invariant {Fx F : effect} `{F -<? Fx}
   {M : inductiveFreerMonad Fx} {S : UU0}
   (invariant : set S) (c : contract F S)
-  (handler_preserves : forall (A : UU0) (op : Fx A),
-    preserves_invariant invariant (hoare_of_contract c op)) (A : UU0) (p : M A) :
+  (handler_preserves : forall (A : UU0) (cmd : Fx A),
+    preserves_invariant invariant (hoare_of_contract c cmd)) (A : UU0) (p : M A) :
   preserves_invariant invariant (c |> p).
 Proof. exact: denote_preserves_invariant. Qed.
 
@@ -337,87 +290,19 @@ Section contract_trigger_helpers.
 Context {Fx F : effect} `{F -< Fx} {M : freerMonad Fx}
     (S : Type) (c : contract F S) {A : Type}.
 
-Lemma pre_to_hoare_triggerP (op : F A) (s : S) :
-  pre (c |> (ptrigger op : M _)) s <->
-  requirement c s op.
+Lemma pre_to_hoare_triggerP (cmd : F A) (s : S) :
+  pre (c |> (ptrigger cmd : M _)) s <->
+  requirement c s cmd.
 Proof. by rewrite to_hoare_triggerE /= provided_callerP. Qed.
 
-Lemma post_to_hoare_triggerP (op : F A) (s : S) (a : A) (s' : S) :
-  post (c |> (ptrigger op : M _))
+Lemma post_to_hoare_triggerP (cmd : F A) (s : S) (a : A) (s' : S) :
+  post (c |> (ptrigger cmd : M _))
     s a s' <->
-  s' = state_update c s op a /\
-  promise c s op a.
+  s' = state_update c s cmd a /\
+  promise c s cmd a.
 Proof. by rewrite to_hoare_triggerE /= provided_calleeP. Qed.
 
 End contract_trigger_helpers.
-
-(** ** Shared Contract Trigger Views *)
-
-Section ToHoareSharedContractSection.
-Context {F G H : effect} `{F ;; G -<< H}
-    {M : freerMonad H} (S : Type) (ci : contract F S)
-    (cj : contract G S).
-
-Lemma pre_to_hoare_triggerL
-    {A : Type} (op : F A) (s : S) :
-  requirement ci s op ->
-  pre (ci -^- cj |> (ptrigger op : M _)) s.
-Proof. by rewrite to_hoare_triggerE /= shared_left_callerP. Qed.
-
-Lemma pre_to_hoare_triggerR
-    {A : Type} (op : G A) (s : S) :
-  requirement cj s op ->
-  pre ((ci -^- cj) |> (ptrigger op : M _)) s.
-Proof. by rewrite to_hoare_triggerE /= shared_right_callerP. Qed.
-
-Lemma post_to_hoare_triggerLP
-    {A : Type} (op : F A) (s : S) (x : A) (s' : S) :
-  post (ci -^- cj |> (ptrigger op : M _)) s x s' <->
-  s' = state_update ci s op x /\
-  promise ci s op x.
-Proof. by rewrite to_hoare_triggerE /= shared_left_calleeP. Qed.
-
-Lemma post_to_hoare_triggerRP
-    {A : Type} (op : G A) (s : S) (x : A) (s' : S) :
-  post (ci -^- cj |> (ptrigger op : M _)) s x s' <->
-  s' = state_update cj s op x /\
-  promise cj s op x.
-Proof. by rewrite to_hoare_triggerE /= shared_right_calleeP. Qed.
-End ToHoareSharedContractSection.
-
-
-Section ToHoareSharedContractSection.
-Context {F G H I : effect} `{F ;; G -<< H} `{H -< I}
-    {M : freerMonad I} (S : Type) (ci : contract F S)
-    (cj : contract G S).
-
-Lemma pre_to_hoare_trigger_injL
-    {A : Type} (op : F A) (s : S) :
-  requirement ci s op ->
-  pre (ci -^- cj |> (ptrigger op : M _)) s.
-Proof. by rewrite to_hoare_triggerE /= shared_left_caller_injP. Qed.
-
-Lemma pre_to_hoare_trigger_injR
-    {A : Type} (op : G A) (s : S) :
-  requirement cj s op ->
-  pre ((ci -^- cj) |> (ptrigger op : M _)) s.
-Proof. by rewrite to_hoare_triggerE /= shared_right_caller_injP. Qed.
-
-Lemma post_to_hoare_trigger_injLP
-    {A : Type} (op : F A) (s : S) (x : A) (s' : S) :
-  post ((ci -^- cj) |> (ptrigger op : M _)) s x s' <->
-  s' = state_update ci s op x /\
-  promise ci s op x.
-Proof. by rewrite to_hoare_triggerE /= shared_left_callee_injP. Qed.
-
-Lemma post_to_hoare_trigger_injRP
-    {A : Type} (op : G A) (s : S) (x : A) (s' : S) :
-  post ((ci -^- cj) |> (ptrigger op : M _)) s x s' <->
-  s' = state_update cj s op x /\
-  promise cj s op x.
-Proof. by rewrite to_hoare_triggerE /= shared_right_callee_injP. Qed.
-
-End ToHoareSharedContractSection.
 
 (* Frame rule machinery *)
 Module frame_rule.
@@ -433,7 +318,7 @@ Fixpoint sem {Fx F : effect} `{F -< Fx} {M : freerMonad Fx} {A}
   match m with
   | ret A a => Ret a
   | bind A B m f => sem m >>= (sem \o f)
-  | trigger A op => ptrigger op
+  | trigger A cmd => ptrigger cmd
   end.
 
 Notation freerSyntax := fSyntax.
@@ -461,7 +346,7 @@ Lemma freer_contract_left (m : M U) :
 Proof.
 rewrite /freer_to_hoare.
 case=> syntax; elim: syntax m=>
-    [X x m <- | X Y prefix IHprefix suffix IHsuffix m <- | X op m <-] /=.
+    [X x m <- | X Y prefix IHprefix suffix IHsuffix m <- | X cmd m <-] /=.
 - by rewrite !denote_ret.
 - rewrite !denote_bind.
   under eq_bind=> x do rewrite !compE (IHsuffix x) //=.
@@ -479,7 +364,7 @@ Lemma freer_contract_right (m : M U) :
 Proof.
 rewrite /freer_to_hoare.
 case=> syntax; elim: syntax m=>
-    [X x m <- | X Y prefix IHprefix suffix IHsuffix m <- | X op m <-] /=.
+    [X x m <- | X Y prefix IHprefix suffix IHsuffix m <- | X cmd m <-] /=.
 - by rewrite !denote_ret.
 - rewrite !denote_bind.
   under eq_bind=> x do rewrite !compE (IHsuffix x) //=.

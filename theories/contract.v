@@ -186,8 +186,8 @@ Definition store_update (S : Type) :=
 
 Definition o_callee_store (S : Type) (x : S) :
     forall T, STORE S T -> T -> Prop :=
-  fun T op =>
-    match op in STORE _ T return T -> Prop with
+  fun T cmd =>
+    match cmd in STORE _ T return T -> Prop with
     | Get => fun x' => x = x'
     | Put _ => fun _ => True
     end.
@@ -218,25 +218,25 @@ Definition store_specs (S : Type) : contract (STORE S) S :=
 
 Section contract_helpers.
 Context {Fx F : effect} `{F -< Fx} {S X Y : Type}
-    (c : contract F S) (s s' : S) (op : F X) (op' : F Y)
+    (c : contract F S) (s s' : S) (cmd : F X) (cmd' : F Y)
     (x : X) (concl : Prop).
 
 Local Notation inj := (inj (Fx:=Fx)).
 
 Lemma provided_callerP :
-  gen_requirement c s (inj op)
-  <-> requirement c s op.
+  gen_requirement c s (inj cmd)
+  <-> requirement c s cmd.
 Proof.
 by rewrite /gen_requirement !injK_Some.
 Qed.
 
 Lemma provided_bind_caller :
-  (promise c s op x ->
-    requirement c (state_update c s op x) op') ->
-  gen_promise c s (inj op) x ->
+  (promise c s cmd x ->
+    requirement c (state_update c s cmd x) cmd') ->
+  gen_promise c s (inj cmd) x ->
   gen_requirement c
-    (gen_state_update c s (inj op) x)
-    (inj op').
+    (gen_state_update c s (inj cmd) x)
+    (inj cmd').
 Proof.
 rewrite /gen_state_update /gen_promise.
 by rewrite /gen_requirement !injK_Some.
@@ -244,9 +244,8 @@ Qed.
 
 
 Lemma provided_calleeP :
-  (s' = gen_state_update c s (inj op) x
-  /\ gen_promise c s (inj op) x )
-  <-> (s' = state_update c s op x /\ promise c s op x) .
+  (s' = gen_state_update c s (inj cmd) x /\ gen_promise c s (inj cmd) x )
+  <-> (s' = state_update c s cmd x /\ promise c s cmd x) .
 Proof.
 by split; rewrite /gen_promise /gen_state_update !injK_Some.
 Qed.
@@ -256,20 +255,19 @@ End contract_helpers.
 Section contract_distinguish_helpers.
 Context {Fx F G : effect} `{F -<? Fx} `{G -< Fx}
     `{Distinguish Fx G F}
-    {S X : Type} (c : contract F S) (s s' : S) (op : G X) (x : X).
+    {S X : Type} (c : contract F S) (s s' : S) (cmd : G X) (x : X).
 
 Local Notation inj := (inj (Fx:=Fx)).
 
 Lemma distinguished_caller :
-  gen_requirement c s (inj op).
+  gen_requirement c s (inj cmd).
 Proof.
 by rewrite /gen_requirement injK_None.
 Qed.
 
 Lemma distinguished_callee :
-  (s' = gen_state_update c s (inj op) x /\
-    gen_promise c s (inj op) x) <->
-  s' = s.
+  (s' = gen_state_update c s (inj cmd) x /\ gen_promise c s (inj cmd) x)
+  <-> s' = s.
 Proof.
 rewrite /gen_state_update /gen_promise injK_None.
 by split=> [[-> _] | ->].
@@ -285,10 +283,9 @@ Context `{F;; G -<< Fx}
 
 Local Notation inj := (inj (Fx:=Fx)).
 
-Lemma shared_left_callerP (op : F X) :
-  gen_requirement
-    (ci -^- cj) s (inj op)
-  <-> requirement ci s op.
+Lemma shared_left_callerP (cmd : F X) :
+  gen_requirement (ci -^- cj) s (inj cmd)
+  <-> requirement ci s cmd.
 Proof.
 split.
 - by case=> + _; rewrite provided_callerP.
@@ -297,10 +294,9 @@ split.
   + by rewrite /gen_requirement injK_None.
 Qed.
 
-Lemma shared_right_callerP (op : G X) :
-  gen_requirement (Fx := Fx)
-    (ci -^- cj) s (inj op)
-  <-> requirement cj s op.
+Lemma shared_right_callerP (cmd : G X) :
+  gen_requirement (ci -^- cj) s (inj cmd)
+  <-> requirement cj s cmd.
 Proof.
 split.
 - by case=> _; rewrite provided_callerP.
@@ -309,14 +305,10 @@ split.
   + rewrite provided_callerP; exact: caller.
 Qed.
 
-Lemma shared_left_calleeP (op : F X) :
-  (s' = gen_state_update (Fx := Fx)
-      (ci -^- cj) s
-      (inj op) x /\
-    gen_promise (Fx := Fx)
-      (ci -^- cj) s
-      (inj op) x) <->
-  s' = state_update ci s op x /\ promise ci s op x.
+Lemma shared_left_calleeP (cmd : F X) :
+  (s' = gen_state_update (ci -^- cj) s (inj cmd) x
+    /\ gen_promise (ci -^- cj) s (inj cmd) x)
+  <-> s' = state_update ci s cmd x /\ promise ci s cmd x.
 Proof.
 rewrite /gen_state_update /gen_promise /=.
 rewrite /sharedcontractprod /= /gen_promise.
@@ -324,14 +316,10 @@ rewrite injK_Some injK_None.
 by tauto.
 Qed.
 
-Lemma shared_right_calleeP (op : G X) :
-  (s' = gen_state_update (Fx := Fx)
-      (ci -^- cj) s
-      (inj op) x /\
-    gen_promise (Fx := Fx)
-      (ci -^- cj) s
-      (inj op) x) <->
-  s' = state_update cj s op x /\ promise cj s op x.
+Lemma shared_right_calleeP (cmd : G X) :
+  (s' = gen_state_update (ci -^- cj) s (inj cmd) x
+    /\ gen_promise (ci -^- cj) s (inj cmd) x)
+  <->  s' = state_update cj s cmd x /\ promise cj s cmd x.
 Proof.
 rewrite /gen_state_update /gen_promise /=.
 rewrite /sharedcontractprod /= /gen_promise.
@@ -347,10 +335,9 @@ Context {H Fx F G : effect} `{F;; G-<<Fx, Fx -< H}
 
 Local Notation inj := (inj (Fx:=Fx)).
 
-Lemma shared_left_caller_injP (op : F X) :
-  gen_requirement
-    (sharedcontractprod (Fx:=Fx) ci cj) s (effect.injT H Fx F _ op)
-  <-> requirement ci s op.
+Lemma shared_left_caller_injP (cmd : F X) :
+  gen_requirement (ci -^- cj) s (effect.injT H Fx F _ cmd)
+    <-> requirement ci s cmd.
 Proof.
 split; rewrite provided_callerP /= provided_callerP.
 - by case=> + _.
@@ -359,10 +346,9 @@ split; rewrite provided_callerP /= provided_callerP.
   + by rewrite /gen_requirement injK_None.
 Qed.
 
-Lemma shared_right_caller_injP (op : G X) :
-  gen_requirement
-    (ci -^- cj) s (effect.injT H Fx G _ op)
-  <-> requirement cj s op.
+Lemma shared_right_caller_injP (cmd : G X) :
+  gen_requirement (ci -^- cj) s (effect.injT H Fx G _ cmd)
+    <-> requirement cj s cmd.
 Proof.
 split; rewrite provided_callerP /= provided_callerP.
 - by case=> _.
@@ -371,14 +357,10 @@ split; rewrite provided_callerP /= provided_callerP.
   + exact: caller.
 Qed.
 
-Lemma shared_left_callee_injP (op : F X) :
-  (s' = gen_state_update
-      (ci -^- cj) s
-      (effect.injT H Fx F _ op) x /\
-    gen_promise
-      (ci -^- cj) s
-      (effect.injT H Fx F _ op) x) <->
-  s' = state_update ci s op x /\ promise ci s op x.
+Lemma shared_left_callee_injP (cmd : F X) :
+  (s' = gen_state_update (ci -^- cj) s (effect.injT H Fx F _ cmd) x
+    /\ gen_promise (ci -^- cj) s (effect.injT H Fx F _ cmd) x)
+  <-> s' = state_update ci s cmd x /\ promise ci s cmd x.
 Proof.
 rewrite /gen_state_update /gen_promise /=.
 rewrite /sharedcontractprod /= /gen_promise.
@@ -386,14 +368,10 @@ rewrite !injK_Some injK_None.
 by tauto.
 Qed.
 
-Lemma shared_right_callee_injP (op : G X) :
-  (s' = gen_state_update
-      (ci -^- cj) s
-      (effect.injT H Fx G _ op) x /\
-    gen_promise
-      (ci -^- cj) s
-      (effect.injT H Fx G _ op) x) <->
-  s' = state_update cj s op x /\ promise cj s op x.
+Lemma shared_right_callee_injP (cmd : G X) :
+  (s' = gen_state_update (ci -^- cj) s (effect.injT H Fx G _ cmd) x
+    /\ gen_promise (ci -^- cj) s (effect.injT H Fx G _ cmd) x)
+  <-> s' = state_update cj s cmd x /\ promise cj s cmd x.
 Proof.
 rewrite /gen_state_update /gen_promise /=.
 rewrite /sharedcontractprod /= /gen_promise.
