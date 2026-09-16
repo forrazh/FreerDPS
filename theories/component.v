@@ -36,7 +36,7 @@ Definition correct_component {Ex E F : effect} `{E -<? Ex} {M : freerMonad Ex}
   forall (sF : SF) (sE : SE) (init : pred sF sE) (T : Type)
       (cmd : F T) (o_caller : requirement cF sF cmd),
     pre (cE |> c T cmd) sE /\
-    forall (x : T) (sE' : SE),
-      post (cE |> (c T cmd : M _)) sE x sE' ->
-      promise cF sF cmd x /\
-      pred (state_update cF sF cmd x) sE'.
+    forall (t : T) (sE' : SE),
+      post (cE |> (c T cmd : M _)) sE t sE' ->
+      promise cF sF cmd t /\
+      pred (state_update cF sF cmd t) sE'.
