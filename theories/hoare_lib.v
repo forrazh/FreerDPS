@@ -7,8 +7,7 @@
 From HB Require Import structures.
 From mathcomp Require Import ssreflect ssrfun functions boolp classical_sets.
 From monae Require Import hierarchy.
-From FreerDPS Require Import mathcomp_extra init effect freer contract.
-From FreerDPS Require Export hoare.
+From FreerDPS Require Import mathcomp_extra init effect freer contract hoare.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

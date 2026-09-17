@@ -4,7 +4,7 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
-From FreerDPS Require Import init effect freer contract hoare.
+From FreerDPS Require Import init effect freer contract hoare hoare_lib.
 From monae Require Import hierarchy.
 
 (** * Definition *)
@@ -34,7 +34,7 @@ Definition correct_component {Ex E F : effect} `{E -<? Ex} {M : freerMonad Ex}
     (cE : contract E SE) (pred : SF -> SE -> Prop) :
   Prop :=
   forall (sF : SF) (sE : SE) (init : pred sF sE) (T : Type)
-      (cmd : F T) (o_caller : requirement cF sF cmd),
+      (cmd : F T) (req : requirement cF sF cmd),
     pre (cE |> c T cmd) sE /\
     forall (t : T) (sE' : SE),
       post (cE |> (c T cmd : M _)) sE t sE' ->
