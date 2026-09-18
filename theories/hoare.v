@@ -7,7 +7,7 @@
 From HB Require Import structures.
 From mathcomp Require Import all_boot functions boolp classical_sets.
 From monae Require Import hierarchy.
-From FreerDPS Require Import mathcomp_extra init effect freer contract.
+From FreerDPS Require Import mathcomp_extra.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -25,28 +25,102 @@ Unset Printing Implicit Defensive.
     sequentially compose specifications. *)
 
 Local Open Scope classical_set_scope.
-
+Local Open Scope monae_scope.
 (* model *)
 Module Hoare.
+(* Section tmp. *)
 
-Record hoare (T U : Type) : Type := mk_hoare {
+(* Context {T : UU0} {M : stateMonad T} {U : UU0}. *)
+
+(* Variable triple :
+  forall U : UU0, *)
+
+(* Definition Pre := set T. *)
+(* Definition Post (U : UU0) := T -> U -> set T. *)
+(* Program Definition HoareState (pre : Pre) {U : UU0} (post : Post U) : UU0 *)
+(* := *)
+  (* {m : M U | *)
+    (* forall initial, pre initial -> *)
+      (* triple (fun s => s = initial) m (post initial)}. *)
+
+(* Definition top := fun x:T => True. *)
+
+(* Program Definition re (U : UU0) *)
+(* : forall x , @HoareState top U (fun i y f => i = f /\ y = x ) := _. *)
+(* Next Obligation. move=>A a /=. apply: (proj1_sig). apply: Ret. Qed. *)
+
+(* Check HoareState. *)
+(* End tmp. *)
+
+
+
+Record hoare T U : Type := mk_hoare {
   pre : set T ;
+  (* prog : M U  ; *)
   post : T -> U -> set T }.
+(* End tmph. *)
 
-Arguments mk_hoare {T U} (pre post).
-Arguments pre {T U} (_ _).
-Arguments post {T U} (_ _ _).
 
-Definition hoare_ret {T U} (x : U) : hoare T U :=
+
+Arguments mk_hoare {T  U} (pre post).
+Arguments pre {T  U} (_ _).
+(* Arguments prog {T M U} _. *)
+Arguments post {T  U} (_ _ _).
+HB.about stateRunMonad.
+
+
+(* Section tmp.  *)
+(* Context T U {M : stateMonad T} (triple : set T -> M U -> (U -> set T) -> Prop). *)
+Definition hoare_ret {T} {U : UU0} (x : U) : @hoare T U :=
   mk_hoare [set: T] (fun s y s' => (x = y) /\ (s = s')).
 
-Definition hoare_bind {T U V}
-    (m : hoare T U) (k : U -> hoare T V) : hoare T V :=
-  mk_hoare (fun s => pre m s /\ (forall x, post m s x `<=` pre (k x)))
-           (fun s x s2 => exists y s', post m s y s' /\ post (k y) s' x s2).
+Definition hoare_bind {T} {U V}
+    (m : hoare T U) (k : U -> hoare T V) : hoare T V := mk_hoare
+    (fun s => pre m s /\ (forall x, post m s x `<=` pre (k x)))
+    (fun s x s2 => exists y s', post m s y s' /\ post (k y) s' x s2).
+
+Inductive valid_hoare {T : UU0} {N : monad} {M: stateRunMonad T N} {U : UU0}
+    (h : hoare T U) (m : M U) : Prop :=
+| correct_hoare : (forall s, pre h s ->
+  (forall a s', (runStateT m s = Ret (a, s')) -> post h s a s')) ->
+  valid_hoare h m.
+
+Notation "{{ pre }} prog {{ post }}" := (valid_hoare (@mk_hoare _ _ pre post) prog)
+  (at level 90,
+   format "'[' '[' {{  pre  }}  ']' '/ ' '['  prog ']' '['  {{  post  }} ']' ']'")
+.
+Check correct_hoare.
+Check forall x, pre (hoare_ret x).
+
+Section tmp.
+Hypothesis injective_return : forall (M : monad) (C : Type) (x1 x2 : C),
+  Ret x1 = (Ret x2 :> M C) -> x1 = x2.
+
+Lemma valid_ret {T: UU0} {U : UU0} {N : monad} {M : stateRunMonad T N} (x : U)
+  : @valid_hoare T N M U (@hoare_ret T U x) (Ret x).
+apply: correct_hoare => //=.
+move=> s P u s'.
+HB.about stateRunMonad.
+rewrite runStateTret /==> Hret.
+by have [] := @injective_return N (U * T) (x,s) (u,s') Hret.
+Qed.
+
+Lemma valid_bind {T: UU0} {U V : UU0} {N : monad} {M : stateRunMonad T N}
+  (h : hoare T U) ( m : M U) (h' : U -> hoare T V) (k : U -> M V)
+  : @valid_hoare T N M V (hoare_bind h h' ) (m >>= k).
+Proof.
+apply: correct_hoare=> //=.
+move=> s [Hpr Hpo] v s'.
+Search runStateT.
+rewrite runStateTbind /=.
+(* case: (runStateT m s). *)
+(* exists . *)
+Admitted.
+End tmp.
 
 Section hm.
-Variable T : Type.
+Context (T : UU0).
+ (* {M : stateMonad T}. *)
 Let ret := @hoare_ret T.
 Let bind := @hoare_bind T.
 
@@ -55,6 +129,7 @@ Proof.
 move=> A [pr po].
 rewrite /bind /ret /hoare_bind /hoare_ret/=; congr mk_hoare.
 - by apply/seteqP; split => // s [].
+(* - exact: bindmret. *)
 - apply/eq3_fun => s a s''.
   under eq2_exists do rewrite andA.
   by rewrite ex2C ex2_eqr ex_eqr.
@@ -69,6 +144,7 @@ move fa : (f a) => [pr po]; congr mk_hoare.
 - apply/funext=> s; rewrite andTP; apply/propext; split.
   + by move=> /(_ a s); rewrite fa/=; exact.
   + by move=> prs _ _ [<- <-]; rewrite fa.
+(* - by rewrite bindretf fa. *)
 - apply/eq3_fun => s b s'.
   under eq2_exists do rewrite andC andA.
   rewrite ex2C.
@@ -89,6 +165,7 @@ case: m => prA poA/=; congr mk_hoare.
       by split=> // a s1 /poApre[].
     move=> b s1 [x [s2]] [] /poApre [fxs2] /[swap] s2bs1.
     exact.
+(* - exact: bindA. *)
 - apply: eq3_fun => s c s1.
   under eq2_exists do rewrite -ex_andl.
   rewrite ex3C; apply: eq_exists => a.
@@ -110,274 +187,222 @@ End Hoare.
 
 (** Easier to had future laws from there. *)
 (*
-HB.mixin Record isMonadHoare (S : Type)
-    (M : Type -> Type) of Monad M := {}.
+HB.mixin Record isMonadHoare (S : Type) (ST : stateMonad S)
+    (M : Type -> Type) of Monad M := {
+      ht : forall (A: UU0) (m : M A), Prop ;
+      ht_bind (A B : UU0) (m : M A) (k : A -> M B) :
+        ht _ m -> (forall x, ht _ (k x)) -> ht _ (m >>= k) ;
+
+      wp: forall (A: UU0) (m : M A) (Q : A -> set S), set S ;
+
+      wp_ret : forall (A: UU0) (a : A) (Q : A -> set S), wp A (Ret a) Q = Q a;
+      wp_bind : forall (A B : UU0) (m : M A) (k : A -> M B) (Q : B -> set S),
+        wp _ (m >>= k) Q = wp _ m (fun x s=> wp _ (k x) Q s)
+    }.
 
 #[short(type=hoareMonad)]
-HB.structure Definition MonadHoare (S : Type) :=
-  {M of isMonadHoare S M &}.
-*)
-
+HB.structure Definition MonadHoare (S : Type) (ST : stateMonad S) :=
+  {M of isMonadHoare S ST M &}. *)
 
 HB.export Hoare.
+From monae Require Import monad_model monad_transformer.
 
-(*HB.instance Definition _ (S : Type) :=
-  isMonadHoare.Build S (hoare S).*)
+Module TestM.
+Section st.
 
-(** ** Invariant Preservation *)
+Context {S : UU0}.
 
-Definition preserves_invariant {S A}
-    (invariant : set S) (h : hoare S A) :=
-  forall state result state',
-    pre h state ->
-    post h state result state' ->
-    invariant state ->
-    invariant state'.
+Let N : monad := option_monad.
+Definition M : stateMonad S := [the stateMonad S of stateT S N].
+(* Notation ms := (StateMonad.acto S). *)
 
-Lemma preserves_invariant_ret {S A}
-    (invariant : set S) (result : A) :
-  preserves_invariant invariant (@ret (hoare S) A result).
-Proof. by move=>???? [_ <-]. Qed.
+HB.about stateRunMonad.
+Notation hs := (hoare S).
 
-Lemma preserves_invariant_bind {S A B} (invariant : set S)
-    (h : hoare S A) (k : A -> hoare S B) :
-  preserves_invariant invariant h ->
-  (forall result, preserves_invariant invariant (k result)) ->
-  preserves_invariant invariant (h >>= k).
+(* Definition ht *)
+  (* (A : Type) (h: hs A) (m: M A) : Prop := valid_hoare h m. *)
+
+Definition wp (A : UU0) (h: hs A) (m: M A) (Q : A -> set S) : set S
+ :=
+fun s=> match runStateT m s with
+| inr (a, s') => post h s a s' -> Q a s'
+| inl _ => True
+end.
+
+(* fun s=> match prog m s with *)
+(* | (a, s')=> Q a s' *)
+(* end. *)
+
+(* Lemma ht_bind (A B : UU0) (m : hs A) (k : A -> hs B) (p: M A) :
+  ht m -> (forall x, ht (k x)) -> ht (m >>= k).
 Proof.
-move=> h_preserves k_preserves ??? [h_pre k_pre] [? [? [h_post k_post]]] Hsafe.
-apply: k_preserves.
-- exact/k_pre/h_post.
-- exact: k_post.
-by move: h_pre h_post Hsafe; exact: h_preserves.
+move=> Hm Hk s; move: Hm.
+case: m s=> /= pr pg po s + [Hpr Hpo]=> /(_ s Hpr) /=.
+rewrite state_bindE /comp /uncurry.
+case: (pg s) => a s' Hm.
+move: Hpo=> /(_ a s' Hm) Hpo.
+move: Hk=> /(_ a s' Hpo).
+case: (prog (k a)) => Hprk Hpg Hpok /=.
+by exists a, s'.
+Qed. *)
+
+(* Lemma wp_ret (A : UU0) (x : A) (Q : A -> S -> Prop) : *)
+  (* wp (Ret x) Q = Q x. *)
+(* Proof. done. Qed. *)
+(*  *)
+(* Lemma wp_bind (A B : UU0) (m : hs A) (k : A -> hs B) *)
+    (* (Q : B -> S -> Prop) : *)
+  (* wp (m >>= k) Q = wp m (fun x s => wp (k x) Q s). *)
+(* Proof. *)
+(* rewrite /wp; apply: funext=>s /=. *)
+(* rewrite state_bindE /comp /uncurry. *)
+(* by case : prog. *)
+(* Qed. *)
+(*  *)
+(* HB.about isMonadHoare.Build. *)
+(*  *)
+(* HB.instance Definition _ := isMonadHoare.Build S ms hs ht_bind wp_ret wp_bind. *)
+End st.
+End TestM.
+Export TestM.
+(* machinery to reason about WP / SP *)
+(* if I remember correctly, we need the consequence rules:
+- a weaken law and
+- a strengthen law *)
+(* Section hoare_state. *)
+(* Context {S : UU0} {M : stateMonad S}.
+Definition top : set S := fun s => True.
+Definition hget : hoare M S := {{top}} get {{ fun s x s' => s = s' /\ x = s}}.
+Definition hput (x : S) : hoare M unit := {{top}} put x {{fun _ _ f => f = x}}.
+End hoare_state.
+
+(* Section hoare_acto. *)
+Context {S : UU0}.
+Notation ms := (StateMonad.acto S).
+Notation hs := (hoare ms).
+
+
+Context {A : UU0}.
+Lemma consq {P P' : set S} (c : ms A ) {Q Q' : S -> A -> set S} :
+(forall i, P' i -> P i) -> (forall i x f , Q i x f -> Q' i x f ) ->
+ ht ({{P}} c {{Q}}) -> ht ({{P'}} c {{Q'}}).
+Proof.
+move=> str wkn + s /= pr=> /(_ s) /=.
+move: str=>/(_ s pr) str /(_ str).
+by case: c; exact: wkn.
 Qed.
 
-Lemma denote_preserves_invariant {Fx : effect} {M : inductiveFreerMonad Fx}
-  {S : UU0} (invariant : set S) (handler : Fx ~~> hoare S) (A : UU0) (p : M A) :
-  (forall (X : Type) (cmd : Fx X),
-    preserves_invariant invariant (handler _ cmd)) ->
-  preserves_invariant invariant
-    (denote (hoare S) handler A p).
+Lemma weaken {P : set S} (m : hs A) :
+ht m -> (forall s, P s -> pre m s) -> ht ({{ P }} prog m {{ post m }}).
 Proof.
-move=> H s a s'.
-apply: (@denote_ind _ _ _ _  (fun X => preserves_invariant invariant)).
-- move=> X x.
-  exact: preserves_invariant_ret.
-- move=> X Y h k h_preserves k_preserves.
-  exact: preserves_invariant_bind h_preserves k_preserves.
-- exact: H.
+move=> Hm Hp.
+apply: consq.
+- exact: Hp.
+- move=> s a s'; exact.
+- exact: Hm.
 Qed.
 
-Section hoare_of_contract.
-Context {Fx F : effect} `{F -<? Fx} (S : Type) (c : contract F S).
-
-Local Open Scope classical_set_scope.
-
-Definition hoare_of_contract : Fx ~~> hoare S :=
-  fun U cmd => mk_hoare
-    (gen_requirement c ^~ cmd)
-    (fun s (x : U) s' => s' = gen_state_update c s cmd x /\
-                         gen_promise c s cmd x).
-
-Definition freer_to_hoare {M : freerMonad Fx} : M ~~> hoare S :=
-  denote _ hoare_of_contract.
-
-End hoare_of_contract.
-Arguments hoare_of_contract : simpl never.
-Arguments freer_to_hoare {Fx F _ M S} c {U} : rename, simpl never.
-
-(** A Hoare triple can be interpreted from the program `p`
-  * through the contract `c`.
-  *)
-Notation "c |> p" := (@freer_to_hoare _ _ _ _ c _ _ p)
-  (at level 60, no associativity).
-
-Section freer_to_hoare_lemmas.
-Context {Fx F : effect} `{F -<? Fx} {M : freerMonad Fx}
-    (S : Type) (c : contract F S).
-
-Local Open Scope classical_set_scope.
-
-Lemma pre_ret {U : Type} (u : U) : pre (c |> (Ret u : M _)) = [set: S].
-Proof. by rewrite /freer_to_hoare denote_ret. Qed.
-
-Lemma pre_skip : pre (c |> (skip : M _)) = [set: S].
-Proof. by rewrite pre_ret. Qed.
-
-Lemma post_ret {U : Type} (u v : U) (s s' : S) :
-  post (c |> (Ret u : M _)) s v s' <-> u = v /\ s = s'.
-Proof. by rewrite /freer_to_hoare denote_ret. Qed.
-
-Lemma post_skip (s s' : S) (x : unit) :
-  post (c |> (skip : M _)) s x s' <-> s = s'.
+Lemma strengthen (m : hs A)
+(Q : S -> A -> S -> Prop) :
+ht m -> (forall s a s', post m s a s' -> Q s a s') -> ht ({{ pre m }} prog m {{ Q }}).
 Proof.
-by rewrite /freer_to_hoare/= post_ret; split=> [[]//|<-]; case: x.
+move=> Hm Hp.
+apply: consq.
+- move=> s Hpr. exact: Hpr.
+- exact: Hp.
+- exact: Hm.
 Qed.
 
-End freer_to_hoare_lemmas.
+Lemma wp_precondition (m : hs A) (Q : A -> S -> Prop) :
+ht ({{fun s=> wp m (post m s) s }} prog m {{ post m }}).
+Proof. done. Qed.
 
-Section GenericToHoareSection.
-Context {Fx F : effect} `{F -<? Fx} {M : freerMonad Fx}
-    (S : Type) (c : contract F S).
+Lemma wp_weakest (m : hs A) :
+ht m -> forall s, pre m s -> wp m (post m s) s .
+Proof. done. Qed.
 
-Lemma to_hoare_triggerE (a : Type) (cmd : Fx a) :
-  (c |> (trigger a cmd : M _)) = hoare_of_contract c cmd.
-Proof. exact: denote_trigger. Qed.
+Lemma wp_get (Q : S -> S -> Prop) :
+  wp (hget) Q = (fun s => Q s s).
+Proof. done. Qed.
 
-Lemma freer_to_hoare_bindE {a b : Type} (p : M a) (f : a -> M b) :
-  c |> (p >>= f) = (c |> p) >>= fun x => (c |> (f x)).
-Proof. exact: denote_bind. Qed.
+Lemma wp_put (s' : S) (Q : unit -> S -> Prop) :
+  wp (hput s') Q = (fun _ => Q tt s').
+Proof. done. Qed.
 
-Section BindFacts.
-Context {A B : Type} (p : M A) (f : A -> M B).
+Definition incr : hoare (StateMonad.acto nat) nat := (hget >>= fun s=> hput (s + 1) >> hget). *)
+(* End hoare_acto. *)
 
-Lemma pre_bindmskip : pre (c |> p >> skip) = pre (c |> p).
-Proof.
-apply/funext => s; rewrite freer_to_hoare_bindE.
-apply/propext; split=> [[]//|cps/=]; split => //.
-by rewrite pre_skip.
-Qed.
+From FreerDPS Require Import effect freer contract.
 
-Lemma post_bindmskip s s' u (x : unit) :
-  post (c |> p) s u s' -> post (c |> p >> skip) s x s'.
-Proof.
-move=> tut'; rewrite freer_to_hoare_bindE/=.
-by exists u, s'; split => //; rewrite post_skip.
-Qed.
+HB.mixin Record isContractSpecifier (S : Type) {Fx F : effect} `{F -<? Fx}
+    (M : Type -> Type) of MonadState S M := {
+      state_of_contract : forall (c : contract F S), Fx ~~> M ;
+      (* hoare_of_contract : forall (c : contract F S), Fx ~~> M *)
+    }.
 
-End BindFacts.
+#[short(type=specMonad)]
+HB.structure Definition MonadSpec (S : Type) {Fx F : effect} `{Hf: F -<? Fx} :=
+  {M of isContractSpecifier S Fx F Hf M &}.
 
-Section WhenFacts.
-Context {U : Type} (p : M U).
+  (* -------------------------------------------------------------------------- *)
 
-Lemma pre_to_hoare_whenP b (s : S) :
-  pre (c |> when b p) s <-> if b then pre (c |> p) s else True.
-Proof. by case: b => /=; [rewrite pre_bindmskip|rewrite pre_skip]. Qed.
 
-Lemma post_to_hoare_whenP b (s : S) (x : unit) (s' : S) :
-  post (c |> when b p) s x s' <->
-  if b
-  then exists y, post (c |> p) s y s'
-  else s' = s.
-Proof.
-case: x.
-case: b => /=; last by rewrite post_skip; split => /esym.
-split.
-  rewrite freer_to_hoare_bindE/= => -[u' [t2 [H1 H2]]].
-  exists u'.
-  by move: H2; rewrite post_skip => <-.
-move=> [u tut'].
-rewrite freer_to_hoare_bindE/=.
-exists u, s'; split => //.
-by rewrite post_skip.
-Qed.
+Module Tust.
+Section tmp.
+Context {S : UU0} {Fx F : effect} `{F -<? Fx}.
+Notation ms := (StateMonad.acto S).
+Notation hs := (hoare ms).
 
-End WhenFacts.
+Definition soc : forall (c : contract F S), Fx ~~> ms.
+move=> c A cmd s.
+apply: (_, _).
+- admit.
+- apply: gen_state_update.
+  + apply: H.
+  + apply: c.
+  + apply: s.
+  - apply: cmd.
 
-End GenericToHoareSection.
+Check gen_state_update.
+Admitted.
 
-Lemma to_hoare_preserves_invariant {Fx F : effect} `{F -<? Fx}
-  {M : inductiveFreerMonad Fx} {S : UU0}
-  (invariant : set S) (c : contract F S)
-  (handler_preserves : forall (A : UU0) (cmd : Fx A),
-    preserves_invariant invariant (hoare_of_contract c cmd)) (A : UU0) (p : M A) :
-  preserves_invariant invariant (c |> p).
-Proof. exact: denote_preserves_invariant. Qed.
+HB.instance Definition _ := isContractSpecifier.Build S Fx F H ms soc.
+End tmp.
+End Tust.
+Export Tust.
+(* -------------------------------------------------------------------------- *)
+(* -------------------------------------------------------------------------- *)
+(* -------------------------------------------------------------------------- *)
+(* -------------------------------------------------------------------------- *)
+(* -------------------------------------------------------------------------- *)
+HB.about stateMonad.
+Section tmp.
+Context {S : UU0}.
+(* Notation ms := (StateMonad.acto S). *)
 
-(** ** Trigger Views *)
+(* Definition hoare_of_contract {Fx F : effect} `{H: F -<? Fx} {MS : specMonad S H}  (c : contract F S) : Fx ~~> hoare MS
+  := fun U cmd =>
+  {{gen_requirement c ^~ cmd}}
+    state_of_contract c _ cmd
+  {{fun s u s' => s' = gen_state_update c s cmd u /\ gen_promise c s cmd u}}. *)
 
-Section contract_trigger_helpers.
-Context {Fx F : effect} `{F -< Fx} {M : freerMonad Fx}
-    (S : Type) (c : contract F S) {A : Type}.
+Axiom state_update' : forall [F : effect] [T : UU0],
+contract F T -> T -> forall [U : UU0] {M : stateMonad T}, F U -> U -> M U.
+Definition gen_state_update' {S} (M : stateMonad S) {X : UU0} {Fx F : effect} `{F -<? Fx}
+    (c : contract F S)
+    (s : S) (cmd : Fx X) (x : X)
+  : M X :=
+  if prj cmd is Some cmd then state_update' c s cmd x else Ret x.
+Section hoare_freer.
 
-Lemma pre_to_hoare_triggerP (cmd : F A) (s : S) :
-  pre (c |> (ptrigger cmd : M _)) s <->
-  requirement c s cmd.
-Proof. by rewrite to_hoare_triggerE /= provided_callerP. Qed.
+Check make_contract.
 
-Lemma post_to_hoare_triggerP (cmd : F A) (s : S) (a : A) (s' : S) :
-  post (c |> (ptrigger cmd : M _))
-    s a s' <->
-  s' = state_update c s cmd a /\
-  promise c s cmd a.
-Proof. by rewrite to_hoare_triggerE /= provided_calleeP. Qed.
 
-End contract_trigger_helpers.
+Context {Fx F : effect} `{F -<? Fx} (T : Type) (c : contract F T).
+Context {M : stateMonad T}.
+Notation ms := (StateMonad.acto T).
+Notation hs := (hoare ms).
+Print store_update .
 
-(* Frame rule machinery *)
-Module frame_rule.
-Module Export SyntaxFreer.
+Arguments gen_state_update' : simpl never.
 
-Inductive fSyntax {F : effect} : Type -> Type :=
-| ret : forall A, A -> fSyntax A
-| bind : forall B A, fSyntax B -> (B -> fSyntax A) -> fSyntax A
-| trigger : forall A, F A -> fSyntax A.
-
-Fixpoint sem {Fx F : effect} `{F -< Fx} {M : freerMonad Fx} {A}
-    (m : @fSyntax F A) : M A :=
-  match m with
-  | ret A a => Ret a
-  | bind A B m f => sem m >>= (sem \o f)
-  | trigger A cmd => ptrigger cmd
-  end.
-
-Notation freerSyntax := fSyntax.
-Notation frRet := ret.
-Notation frBind := bind.
-Notation frTrigger := trigger.
-Notation freerSem := sem.
-End SyntaxFreer.
-
-(** A witness records that a program uses only one of the two effects. *)
-Section split_effects.
-Context {Fx F G : effect} `{F ;; G -<< Fx}.
-Context {M : freerMonad Fx} {A : UU0}.
-
-Definition provideLeft_isFreer (n : M A) := {m | freerSem (F := F) m = n}.
-Definition provideRight_isFreer (n : M A) := {m | freerSem (F := G) m = n}.
-End split_effects.
-
-Section contract_correspondance.
-Context {Fx F G : effect} `{F ;; G -<< Fx} {M : freerMonad Fx}
-  {T U : UU0} (cf : contract F T) (cg : contract G T).
-
-Lemma freer_contract_left (m : M U) :
-  provideLeft_isFreer m -> (cf -^- cg |> m) = (cf |> m).
-Proof.
-rewrite /freer_to_hoare.
-case=> syntax; elim: syntax m=>
-    [X x m <- | X Y prefix IHprefix suffix IHsuffix m <- | X cmd m <-] /=.
-- by rewrite !denote_ret.
-- rewrite !denote_bind.
-  under eq_bind=> x do rewrite !compE (IHsuffix x) //=.
-  by rewrite IHprefix.
-- rewrite !denote_trigger /hoare_of_contract /sharedcontractprod /=.
-  rewrite /gen_state_update /gen_requirement /gen_promise /=.
-  rewrite injK_Some injK_None.
-  congr mk_hoare.
-  + by apply/funext=> s; rewrite andPT.
-  + by apply/eq3_fun=> s b s'; rewrite andPT.
-Qed.
-
-Lemma freer_contract_right (m : M U) :
-  provideRight_isFreer m -> (cf -^- cg |> m) = (cg |> m).
-Proof.
-rewrite /freer_to_hoare.
-case=> syntax; elim: syntax m=>
-    [X x m <- | X Y prefix IHprefix suffix IHsuffix m <- | X cmd m <-] /=.
-- by rewrite !denote_ret.
-- rewrite !denote_bind.
-  under eq_bind=> x do rewrite !compE (IHsuffix x) //=.
-  by rewrite IHprefix.
-- rewrite !denote_trigger /hoare_of_contract /sharedcontractprod /=.
-  rewrite /gen_state_update /gen_requirement /gen_promise /=.
-  rewrite injK_Some injK_None.
-  congr mk_hoare.
-  + by apply/funext=> s; rewrite andTP.
-  + by apply/eq3_fun=> s b s'; rewrite andTP.
-Qed.
-
-End contract_correspondance.
-End frame_rule.
-
-Export frame_rule.
