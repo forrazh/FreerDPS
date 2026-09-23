@@ -62,11 +62,6 @@ Definition controller {Fx : effect} `{DOORS -< Fx, STORE nat -< Fx}
     end.
 End DoorsControllerM.
 
-(*  *)
-Definition server_comp {Fx : effect} `{client_api -< Fx} {M : freerMonad Fx} :
-  component (M := M) server_api Fx.
-
-
 (** * Verifying the Airlock Controller *)
 
 Definition open := true.

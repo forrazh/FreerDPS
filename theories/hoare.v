@@ -111,7 +111,6 @@ Lemma valid_bind {T: UU0} {U V : UU0} {N : monad} {M : stateRunMonad T N}
 Proof.
 apply: correct_hoare=> //=.
 move=> s [Hpr Hpo] v s'.
-Search runStateT.
 rewrite runStateTbind /=.
 (* case: (runStateT m s). *)
 (* exists . *)
@@ -269,6 +268,7 @@ Export TestM.
 (* if I remember correctly, we need the consequence rules:
 - a weaken law and
 - a strengthen law *)
+(* Right now, all of this is commented because we try to extract this as laws or a record, for more modularity, *)
 (* Section hoare_state. *)
 (* Context {S : UU0} {M : stateMonad S}.
 Definition top : set S := fun s => True.
@@ -353,6 +353,7 @@ Context {S : UU0} {Fx F : effect} `{F -<? Fx}.
 Notation ms := (StateMonad.acto S).
 Notation hs := (hoare ms).
 
+(* This doesn't work right now because we need to create an A from nothing. *)
 Definition soc : forall (c : contract F S), Fx ~~> ms.
 move=> c A cmd s.
 apply: (_, _).
@@ -406,3 +407,5 @@ Print store_update .
 
 Arguments gen_state_update' : simpl never.
 
+End hoare_freer.
+End tmp.
