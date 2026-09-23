@@ -1,4 +1,4 @@
-From mathcomp Require Import all_boot interval_inference.
+From mathcomp Require Import boot interval_inference.
 From mathcomp Require Import ssrnum ssralg reals.
 From infotheo Require Import realType_ext.
 From monae Require Import preamble hierarchy.

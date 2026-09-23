@@ -4,7 +4,7 @@
 
 (* Copyright (C) 2018–2020 ANSSI *)
 Local Close Scope nat_scope.
-From mathcomp Require Import all_boot all_order.
+From mathcomp Require Import boot order.
 From mathcomp Require Import boolp functions.
 From monae Require Import hierarchy.
 From FreerDPS Require Import init effect.
@@ -56,7 +56,7 @@ Bind Scope freer_scope with freer.
 Delimit Scope freer_scope with freer.
 
 Context (F : effect).
-Notation acto := (@freer F).
+Abbreviation acto := (@freer F).
 
 Let ret : idfun ~~> acto := fun x => @pure F x.
 
@@ -121,7 +121,7 @@ Variable F : effect.
 
 Import FreerMonadModel.
 
-Notation acto := (@freer F).
+Abbreviation acto := (@freer F).
 
 Definition trigger_effect : F ~~> acto := fun A cmd =>
   impure (inj cmd) (@pure _ _).
@@ -201,7 +201,7 @@ Variable F : effect.
 
 Import FreerMonadModel.
 
-Notation acto := (@freer F).
+Abbreviation acto := (@freer F).
 
 Let freer_induction : forall (P : forall A : UU0, acto A -> Prop),
   (forall (A : UU0) (x : A), P A (Ret x)) ->

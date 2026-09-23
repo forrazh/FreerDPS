@@ -220,7 +220,7 @@ Context {Fx F : effect} `{F -< Fx} {S X Y : Type}
     (c : contract F S) (s s' : S) (cmd : F X) (cmd' : F Y)
     (x : X) (concl : Prop).
 
-Local Notation inj := (inj (Fx:=Fx)).
+Local Abbreviation inj := (inj (Fx:=Fx)).
 
 Lemma provided_callerP :
   gen_requirement c s (inj cmd)
@@ -243,7 +243,7 @@ Context {Fx F G : effect} `{F -<? Fx} `{G -< Fx}
     `{Distinguish Fx G F}
     {S X : Type} (c : contract F S) (s s' : S) (cmd : G X) (x : X).
 
-Local Notation inj := (inj (Fx:=Fx)).
+Local Abbreviation inj := (inj (Fx:=Fx)).
 
 Lemma distinguished_caller :
   gen_requirement c s (inj cmd).
@@ -267,7 +267,7 @@ Context `{F;; G -<< Fx}
     {S X : Type} (ci : contract F S) (cj : contract G S)
     (s s' : S) (x : X).
 
-Local Notation inj := (inj (Fx:=Fx)).
+Local Abbreviation inj := (inj (Fx:=Fx)).
 
 Lemma shared_left_callerP (cmd : F X) :
   gen_requirement (ci -^- cj) s (inj cmd)
@@ -319,7 +319,7 @@ Context {H Fx F G : effect} `{F;; G-<<Fx, Fx -< H}
     {S X : Type} (ci : contract F S) (cj : contract G S)
     (s s' : S) (x : X).
 
-Local Notation inj := (inj (Fx:=Fx)).
+Local Abbreviation inj := (inj (Fx:=Fx)).
 
 Lemma shared_left_caller_injP (cmd : F X) :
   gen_requirement (ci -^- cj) s (effect.injT H Fx F _ cmd)
