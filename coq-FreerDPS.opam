@@ -22,7 +22,7 @@ depends: [
   "coq" 
   "rocq-mathcomp-ssreflect" {>= "2.6.0"}
   "rocq-mathcomp-analysis" {>= "1.18.0"}
-  "rocq-monae" {= "0.9.3"}
+  "rocq-monae" {= "0.9.3" | = "dev"}
 ]
 
 tags: [

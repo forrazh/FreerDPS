@@ -53,7 +53,7 @@ dependencies:
     [MathComp Analysis](https://github.com/math-comp/analysis)
 - opam:
     name: rocq-monae
-    version: '{= "0.9.3"}'
+    version: '{= "0.9.3" | = "dev"}'
   description: |-
     Monae
 ---
