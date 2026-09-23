@@ -24,10 +24,9 @@ This work has been accepted for presentation to [COMPAS26](https://2026.compas-c
 - Additional dependencies:
   - [MathComp](https://math-comp.github.io)
   - [MathComp Analysis](https://github.com/math-comp/analysis)
-  - [MathComp Algebra Tactics](https://github.com/math-comp/algebra-tactics)
   - Monae
 - Related publication(s):
-  - []()
+  - []() 
 
 ## Building and installation instructions
 
@@ -48,6 +47,9 @@ git clone https://github.com/FreerDPS/FreerDPS.git
 cd FreerDPS
 opam repo add rocq-released https://rocq-prover.org/opam/released
 opam install --deps-only .
-make   # or make -j <number-of-cores-on-your-machine>
+make   # or make -j <number-of-cores-on-your-machine> 
 make install
 ```
+
+
+

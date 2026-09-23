@@ -1,4 +1,4 @@
-From mathcomp Require Import all_boot all_order all_algebra interval_inference.
+From mathcomp Require Import boot order algebra interval_inference.
 From mathcomp Require Import boolp reals.
 From infotheo Require Import realType_ext.
 From monae Require Import preamble hierarchy.

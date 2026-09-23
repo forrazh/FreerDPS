@@ -5,7 +5,7 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 From HB Require Import structures.
-From mathcomp Require Import all_boot functions boolp classical_sets.
+From mathcomp Require Import boot functions boolp classical_sets.
 From monae Require Import hierarchy.
 From FreerDPS Require Import mathcomp_extra init effect freer contract.
 
@@ -321,11 +321,11 @@ Fixpoint sem {Fx F : effect} `{F -< Fx} {M : freerMonad Fx} {A}
   | trigger A cmd => ptrigger cmd
   end.
 
-Notation freerSyntax := fSyntax.
-Notation frRet := ret.
-Notation frBind := bind.
-Notation frTrigger := trigger.
-Notation freerSem := sem.
+Abbreviation freerSyntax := fSyntax.
+Abbreviation frRet := ret.
+Abbreviation frBind := bind.
+Abbreviation frTrigger := trigger.
+Abbreviation freerSem := sem.
 End SyntaxFreer.
 
 (** A witness records that a program uses only one of the two effects. *)

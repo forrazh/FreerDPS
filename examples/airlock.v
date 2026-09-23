@@ -5,7 +5,7 @@
 (* Copyright (C) 2018–2020 ANSSI *)
 
 From HB Require Import structures.
-From mathcomp Require Import all_boot classical_sets boolp.
+From mathcomp Require Import boot classical_sets boolp.
 From monae Require Import hierarchy.
 From FreerDPS Require Import all_freerdps.
 
