@@ -325,7 +325,7 @@ Abbreviation freerSyntax := fSyntax.
 Abbreviation frRet := ret.
 Abbreviation frBind := bind.
 Abbreviation frTrigger := trigger.
-Abbreviation freerSem := sem.
+Abbreviation freerSem := fSem.
 End SyntaxFreer.
 
 (** A witness records that a program uses only one of the two effects. *)
