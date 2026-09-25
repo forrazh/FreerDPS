@@ -291,7 +291,7 @@ Theorem controller_correct :
   correct_component controller (M := M)
     (no_contract CONTROLLER) doors_c (fun=> not_both_open).
 Proof.
-move=> ? s ? ? cmd _; split=> [| ? ? hpost].
+move=> ? s ? cmd ? _; split=> [| ? ? hpost].
   exact: controller_pre.
 split=> //.
 have hpre := controller_pre cmd s; move: hpre hpost.

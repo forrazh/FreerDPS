@@ -16,7 +16,7 @@ Unset Printing Implicit Defensive.
 (** ** Invariant Preservation *)
 
 Definition preserves_invariant {S A}
-    (invariant : set S) (h : hoare S A) :=
+    (invariant : set S) (h : prepost S A) :=
   forall state result state',
     pre h state ->
     post h state result state' ->
@@ -25,11 +25,11 @@ Definition preserves_invariant {S A}
 
 Lemma preserves_invariant_ret {S A}
     (invariant : set S) (result : A) :
-  preserves_invariant invariant (@ret (hoare S) A result).
+  preserves_invariant invariant (@ret (prepost S) A result).
 Proof. by move=>???? [_ <-]. Qed.
 
 Lemma preserves_invariant_bind {S A B} (invariant : set S)
-    (h : hoare S A) (k : A -> hoare S B) :
+    (h : prepost S A) (k : A -> prepost S B) :
   preserves_invariant invariant h ->
   (forall result, preserves_invariant invariant (k result)) ->
   preserves_invariant invariant (h >>= k).
@@ -42,11 +42,11 @@ by move: h_pre h_post Hsafe; exact: h_preserves.
 Qed.
 
 Lemma denote_preserves_invariant {Fx : effect} {M : inductiveFreerMonad Fx}
-  {S : UU0} (invariant : set S) (handler : Fx ~~> hoare S) (A : UU0) (p : M A) :
+  {S : UU0} (invariant : set S) (handler : Fx ~~> prepost S) (A : UU0) (p : M A) :
   (forall (X : Type) (op : Fx X),
     preserves_invariant invariant (handler _ op)) ->
   preserves_invariant invariant
-    (denote (hoare S) handler A p).
+    (denote (prepost S) handler A p).
 Proof.
 move=> H s a s'.
 apply: (@denote_ind _ _ _ _  (fun X => preserves_invariant invariant)).
@@ -62,13 +62,13 @@ Context {Fx F : effect} `{F -<? Fx} (T : Type) (c : contract F T).
 
 Local Open Scope classical_set_scope.
 
-Definition hoare_of_contract : Fx ~~> hoare T :=
-  fun U cmd => mk_hoare
+Definition hoare_of_contract : Fx ~~> prepost T :=
+  fun U cmd => mk_prepost
     (gen_requirement c ^~ cmd)
     (fun t (x : U) t' => t' = gen_state_update c t cmd x /\
                          gen_promise c t cmd x).
 
-Definition freer_to_hoare {M : freerMonad Fx} : M ~~> hoare T :=
+Definition freer_to_hoare {M : freerMonad Fx} : M ~~> prepost T :=
   denote _ hoare_of_contract.
 
 End hoare_of_contract.
@@ -358,7 +358,7 @@ case=> syntax; elim: syntax m=>
 - rewrite !denote_trigger /hoare_of_contract /sharedcontractprod /=.
   rewrite /gen_state_update /gen_requirement /gen_promise /=.
   rewrite injK_Some injK_None.
-  congr mk_hoare.
+  congr mk_prepost.
   + by apply/funext=> s; rewrite andPT.
   + by apply/eq3_fun=> s b s'; rewrite andPT.
 Qed.
@@ -376,7 +376,7 @@ case=> syntax; elim: syntax m=>
 - rewrite !denote_trigger /hoare_of_contract /sharedcontractprod /=.
   rewrite /gen_state_update /gen_requirement /gen_promise /=.
   rewrite injK_Some injK_None.
-  congr mk_hoare.
+  congr mk_prepost.
   + by apply/funext=> s; rewrite andTP.
   + by apply/eq3_fun=> s b s'; rewrite andTP.
 Qed.
