@@ -313,11 +313,11 @@ Inductive fSyntax {F : effect} : Type -> Type :=
 | bind : forall B A, fSyntax B -> (B -> fSyntax A) -> fSyntax A
 | trigger : forall A, F A -> fSyntax A.
 
-Fixpoint sem {Fx F : effect} `{F -< Fx} {M : freerMonad Fx} {A}
+Fixpoint fSem {Fx F : effect} `{F -< Fx} {M : freerMonad Fx} {A}
     (m : @fSyntax F A) : M A :=
   match m with
   | ret A a => Ret a
-  | bind A B m f => sem m >>= (sem \o f)
+  | bind A B m f => fSem m >>= (fSem \o f)
   | trigger A cmd => ptrigger cmd
   end.
 
@@ -325,16 +325,15 @@ Abbreviation freerSyntax := fSyntax.
 Abbreviation frRet := ret.
 Abbreviation frBind := bind.
 Abbreviation frTrigger := trigger.
-Abbreviation freerSem := sem.
+Abbreviation freerSem := fSem.
 End SyntaxFreer.
 
 (** A witness records that a program uses only one of the two effects. *)
 Section split_effects.
-Context {Fx F G : effect} `{F ;; G -<< Fx}.
+Context {Fx F : effect} `{F -< Fx}.
 Context {M : freerMonad Fx} {A : UU0}.
 
-Definition provideLeft_isFreer (n : M A) := {m | freerSem (F := F) m = n}.
-Definition provideRight_isFreer (n : M A) := {m | freerSem (F := G) m = n}.
+Definition providesOnlyF (n : M A) := {m | freerSem (F := F) m = n}.
 End split_effects.
 
 Section contract_correspondance.
@@ -342,7 +341,7 @@ Context {Fx F G : effect} `{F ;; G -<< Fx} {M : freerMonad Fx}
   {T U : UU0} (cf : contract F T) (cg : contract G T).
 
 Lemma freer_contract_left (m : M U) :
-  provideLeft_isFreer m -> (cf -^- cg |> m) = (cf |> m).
+  providesOnlyF (F:=F) m -> (cf -^- cg |> m) = (cf |> m).
 Proof.
 rewrite /freer_to_hoare.
 case=> syntax; elim: syntax m=>
@@ -360,7 +359,7 @@ case=> syntax; elim: syntax m=>
 Qed.
 
 Lemma freer_contract_right (m : M U) :
-  provideRight_isFreer m -> (cf -^- cg |> m) = (cg |> m).
+  providesOnlyF (F:=G) m -> (cf -^- cg |> m) = (cg |> m).
 Proof.
 rewrite /freer_to_hoare.
 case=> syntax; elim: syntax m=>
@@ -378,6 +377,55 @@ case=> syntax; elim: syntax m=>
 Qed.
 
 End contract_correspondance.
-End frame_rule.
+Section syntax_inclusion.
+Context {Fx F G : effect} `{F -< G} `{G -< Fx}.
+Context {M : freerMonad Fx} {A : Type}.
 
+Lemma providesOnlyFT (m : M A) :
+  providesOnlyF (F:=F) m -> providesOnlyF (F:=G) m.
+Proof.
+case=> syntax <-.
+elim: syntax=>
+    [X x | X Y prefix [prefix' prefixE] suffix IHsuffix | X cmd].
+- by exists (frRet x).
+- exists (frBind prefix' (fun x=> sval (IHsuffix x))).
+  rewrite /= prefixE.
+  congr (_ >>= _).
+  apply: boolp.funext=> x.
+  exact: svalP (IHsuffix x).
+- by exists (frTrigger (inj cmd)).
+Qed.
+End syntax_inclusion.
+Section lift_shared_contract.
+Context {Fx Fg F G : effect} `{F ;; G -<< Fg} `{Fg -< Fx}.
+Context {M : freerMonad Fx} {T U : Type}.
+Variables (cf : contract F T) (cg : contract G T).
+
+Lemma freer_contract_prodT (m : M U) :
+  ((cf -^- cg : contract Fg T) |> m) =
+  ((cf -^- cg : contract Fx T) |> m).
+Proof.
+rewrite /freer_to_hoare.
+congr (denote _ _ U m).
+apply: functional_extensionality_dep=> A.
+apply: boolp.funext=> cmd.
+rewrite /hoare_of_contract /sharedcontractprod /gen_requirement
+   /gen_state_update /gen_promise /=.
+case: (prj cmd)=> [op|] //=.
+congr mk_hoare.
+- by apply/funext=> s; apply: propext; tauto.
+by apply/eq3_fun=> s x s'; apply: propext; tauto.
+Qed.
+End lift_shared_contract.
+
+#[export] Hint Extern 0 (providesOnlyF _) =>
+  multimatch goal with
+  | inner : ?F -< ?Fx |- @providesOnlyF _ ?Fx _ _ _ _ =>
+      solve [by apply: (providesOnlyFT (F:=F))]
+  | inner : ?F;;?G -<< ?Fx
+      |- @providesOnlyF _ ?Fx _ _ _ _ =>
+      solve [by apply: (providesOnlyFT (F:=F))
+            | by apply: (providesOnlyFT (F:=G))]
+  end : core.
+End frame_rule.
 Export frame_rule.
