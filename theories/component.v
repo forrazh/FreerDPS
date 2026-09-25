@@ -1,42 +1,41 @@
-(* This Source Code Form is subject to the terms of the Mozilla Public
+(* This Source Code Fiorm is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. *)
 
 (* Copyright (C) 2018–2020 ANSSI *)
 
-From FreerDPS Require Import init effect freer contract hoare.
+From FreerDPS Require Import init effect freer contract hoare hoare_lib.
 From monae Require Import hierarchy.
 
 (** * Definition *)
 
-(** In FreeSpec, a _component_ is an entity which exposes an effect [F],
-    and uses primitives of an effect [E] to compute the results of primitives
-    of [F].  Besides, a component is likely to carry its own internal state (of
+(** In FireeSpec, a _component_ is an entity which exposes an effect [Fi],
+    and uses primitives of an effect [Fo] to compute the results of primitives
+    of [Fi].  Besides, a component is likely to carry its own internal state (of
     type [s]).
 
 <<
-                           F +-------------------+      E
+                           Fi +-------------------+      Fo
                            | |                   |      |
-                   +------>| | c : component F E |----->|
+                   +------>| | c : component Fi Fo |----->|
                            | |                   |      |
                              +-------------------+
 >>
 
-    Thus, a component [c : component F E] is a polymorphic function which
-    maps primitives of [F] to impure computations using [E]. *)
+    Thus, a component [c : component Fi Fo] is a polymorphic function which
+    maps primitives of [Fi] to impure computations using [Fo]. *)
 
-Definition component (F E : effect) `{M : freerMonad E} : Type :=
-  F ~~> M.
+Definition component (Fi Fo : effect) `{M : freerMonad Fo} : Type :=
+  Fi ~~> M.
 
-Definition correct_component {Ex E F : effect} `{E -<? Ex} {M : freerMonad Ex}
-  {SF SE : Type}
-    (c : component F Ex) (cF : contract F SF)
-    (cE : contract E SE) (pred : SF -> SE -> Prop) :
-  Prop :=
-  forall (sF : SF) (sE : SE) (init : pred sF sE) (T : Type)
-      (cmd : F T) (o_caller : requirement cF sF cmd),
-    pre (cE |> c T cmd) sE /\
-    forall (t : T) (sE' : SE),
-      post (cE |> (c T cmd : M _)) sE t sE' ->
-      promise cF sF cmd t /\
-      pred (state_update cF sF cmd t) sE'.
+Definition correct_component {Fx Fi Fo : effect} `{Fo -<? Fx}
+  {M : freerMonad Fx} (cmp : component Fi Fx)
+  {SFi SFo} (cFi : contract Fi SFi) (cFo : contract Fo SFo)
+  (r : SFi -> SFo -> Prop) : Prop :=
+forall (sFi : SFi) (sFo : SFo) T (cmd : Fi T),
+  r sFi sFo -> requirement cFi sFi cmd ->
+  pre (cFo |> cmp T cmd) sFo /\
+  forall (t : T) (sFo' : SFo),
+    post (cFo |> (cmp T cmd : M _)) sFo t sFo' ->
+    promise cFi sFi cmd t /\
+    r (state_update cFi sFi cmd t) sFo'.
