@@ -49,30 +49,29 @@ Arguments S_p : simpl never.
 End server_program.
 End PingPongM.
 
-Module Import PingSyntax.
+Module Export PingSyntax.
 Section syntax.
-Context {ProtoF : effect}.
-Context `{client_api ;; server_api -<< ProtoF}.
+Context {ProtoF : effect} {Hc: client_api -< ProtoF} {Hs: server_api -< ProtoF}.
 Context {M : freerMonad ProtoF}.
-
-Lemma syn_send : provideLeft_isFreer (M := M) send.
+Check @providesOnlyF.
+Lemma syn_send : providesOnlyF (H:=Hc) (M := M) send.
 Proof. by exists (frTrigger (SEND Ping)). Qed.
 
-Lemma syn_wait : provideLeft_isFreer (M := M) wait.
+Lemma syn_wait : providesOnlyF (H:=Hc) (M := M) wait.
 Proof. by exists (frTrigger (inj $ WAIT)). Qed.
 
-Lemma syn_c : provideLeft_isFreer (M := M) C.
+Lemma syn_c : providesOnlyF (F:=client_api) (M := M) C.
 Proof.
 by exists (frBind (frTrigger (SEND Ping)) (fun=> frTrigger WAIT)).
 Qed.
 
-Lemma syn_reply : provideRight_isFreer (M := M) reply.
+Lemma syn_reply : providesOnlyF (F:=server_api) (M := M) reply.
 Proof. by exists (frTrigger (RPLY Pong)). Qed.
 
-Lemma syn_recv : provideRight_isFreer (M := M) recv.
+Lemma syn_recv : providesOnlyF (F:=server_api) (M := M) recv.
 Proof. by exists (frTrigger RECV). Qed.
 
-Lemma syn_s_p : provideRight_isFreer (M := M) S_p.
+Lemma syn_s_p : providesOnlyF (F:=server_api) (M := M) S_p.
 Proof.
 exists
   (frBind (frTrigger RECV)
@@ -84,20 +83,19 @@ rewrite /= /S_p.
 congr (recv >>= _).
 by apply: boolp.funext=> -[[] |].
 Qed.
-
 End syntax.
 
-#[export] Hint Extern 0 (provideLeft_isFreer send) =>
+#[export] Hint Extern 0 (providesOnlyF send) =>
   solve [exact: syn_send] : core.
-#[export] Hint Extern 0 (provideLeft_isFreer wait) =>
+#[export] Hint Extern 0 (providesOnlyF wait) =>
   solve [exact: syn_wait] : core.
-#[export] Hint Extern 0 (provideLeft_isFreer C) =>
+#[export] Hint Extern 0 (providesOnlyF C) =>
   solve [exact: syn_c] : core.
-#[export] Hint Extern 0 (provideRight_isFreer reply) =>
+#[export] Hint Extern 0 (providesOnlyF reply) =>
   solve [exact: syn_reply] : core.
-#[export] Hint Extern 0 (provideRight_isFreer recv) =>
+#[export] Hint Extern 0 (providesOnlyF recv) =>
   solve [exact: syn_recv] : core.
-#[export] Hint Extern 0 (provideRight_isFreer S_p) =>
+#[export] Hint Extern 0 (providesOnlyF S_p) =>
   solve [exact: syn_s_p] : core.
 
 End PingSyntax.
@@ -309,7 +307,7 @@ match cmd with
 | RECV => receive_from_client ns
 end.
 
-Definition s_requirment (ns : net_state) : forall X, server_api X -> Prop :=
+Definition s_requirement (ns : net_state) : forall X, server_api X -> Prop :=
   fun X cmd =>
 match cmd with
 | RPLY _ => True
@@ -333,7 +331,7 @@ end.
 
 
 Definition server_c : contract server_api net_state :=
-  make_contract s_step s_requirment s_promise.
+  make_contract s_step s_requirement s_promise.
 
 Section server_respectful_and_run_lemmas.
 Context {Fx : effect} `{server_api -< Fx} {M : freerMonad Fx}.
@@ -457,7 +455,8 @@ Lemma protocol_run_inv (n n' : net_state) (result : outcome) :
    protocol_inv n'.
 Proof.
 move=> [s0 c0]; rewrite /= bindA.
-rewrite freer_to_hoare_bindE freer_contract_left //;
+rewrite freer_to_hoare_bindE.
+rewrite freer_contract_left //;
   case=>[[]] [[s1 c1]] [].
 move/send_run=> /= [] -> ->.
 rewrite freer_to_hoare_bindE freer_contract_right // s0 c0 WillDeliver;
