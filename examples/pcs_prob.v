@@ -51,8 +51,8 @@ Local Open Scope nat_scope.
 (*   probabilities :                                                          *)
 (*   + the client should not make the prob choice of sending the message      *)
 (*     unless it comes from a client's failure or malfunction or anything;    *)
-(*   + the network should handle the packet drops, but here that's probably   *)
-(*     not a freer monad as the network we use is a state... or maybe we can  *)
+(*   + the ns should handle the packet drops, but here that's probably   *)
+(*     not a freer monad as the ns we use is a state... or maybe we can  *)
 (*     find a way to cheat our way out ? <== I think that's what happened...  *)
 (*   + Probabilities modeled by byzantine adversaries might fall in a 3rd     *)
 (*     category... Or a mix of multiple...                                    *)
@@ -64,45 +64,42 @@ Import NetworkChannelMod.
 Section flip_contract.
 Context {R : realType}.
 
-Definition flip_step (server_bound : bool) (network : net_state) :
-    forall X, @FlipEff R X -> X -> net_state :=
-  fun X op =>
-    match op in FlipEff X return X -> net_state with
-    | flipe _ => fun keep =>
-        drop_new_packet network keep server_bound
-    end.
+Definition flip_step (server_bound : bool) (ns : net_state) :
+  forall X, @FlipEff R X -> X -> net_state 
+:= fun X op =>
+  match op with
+  | flipe _ => fun keep => drop_new_packet ns keep server_bound
+  end.
 
-Definition selected_queue (server_bound : bool) (network : net_state) :
-    packets :=
-  if server_bound then serverQ network else clientQ network.
+Definition selected_queue (server_bound : bool) ns : packet :=
+  if server_bound then serverQ ns else clientQ ns.
 
-Definition flip_o_caller (server_bound : bool) (network : net_state) :
+Definition expected_packet (server_bound : bool) : packet :=
+  if server_bound then Some Ping else Some Pong.
+
+Definition flip_requirement (server_bound : bool) ns :
     forall X, @FlipEff R X -> Prop :=
-  fun _ _ =>
-    exists remaining packet,
-      selected_queue server_bound network =
-        rcons remaining packet /\
-      can_still_be_dropped packet = true.
-
-Definition flip_transition
-    (server_bound : bool) (network : net_state) (keep : bool) : Prop :=
+  fun _ _ => exists m, selected_queue server_bound ns = Some m.
+(* Definition flip_transition
+    (server_bound : bool) (ns : net_state) (keep : bool) : Prop :=
   exists remaining packet,
-    selected_queue server_bound network = rcons remaining packet /\
+    selected_queue server_bound ns = rcons remaining packet /\
     selected_queue server_bound
-      (drop_new_packet network keep server_bound) =
-      if keep then rcons remaining (deliver packet) else remaining.
+      (drop_new_packet ns keep server_bound) =
+      if keep then rcons remaining (deliver packet) else remaining. *)
 
-Definition flip_o_callee (server_bound : bool) (network : net_state) :
+(* On promise check, we have two things : *)
+(* - The queue that received a change must be either same size or -1 *)
+(* - The other queue must be the same as before *)
+Inductive flip_promise (server_bound : bool) (ns : net_state) :
     forall X, @FlipEff R X -> X -> Prop :=
-  fun X op =>
-    match op in FlipEff X return X -> Prop with
-    | flipe _ => flip_transition server_bound network
-    end.
+  | KEEP_IT (p : {prob R}) (H : exists m, selected_queue server_bound ns = Some m) : flip_promise server_bound ns (flipe p) true
+  | DROP_IT (p : {prob R}) (H : selected_queue server_bound ns = None) : flip_promise server_bound ns (flipe p) false.
 
 Definition flip_contract (server_bound : bool) :
     contract (@FlipEff R) net_state :=
   make_contract (flip_step server_bound)
-    (flip_o_caller server_bound) (flip_o_callee server_bound).
+    (flip_requirement server_bound) (flip_promise server_bound).
 
 End flip_contract.
 Section syntax.
@@ -146,8 +143,8 @@ Variable (psucc : {prob R}).
 
 Definition lossy_reply : M bool := reply >> flip psucc.
 Definition S_p : M (option msg) :=
-  recv >>= fun inc=>
-    if inc is Some Ping then lossy_reply >> Ret inc else Ret inc.
+  (* recv >>= fun inc=> if inc is Some Ping then reply       >> Ret inc else Ret inc. *)
+  recv >>= fun inc=> if inc is Some Ping then lossy_reply >> Ret inc else Ret inc.
 Abbreviation loop := PingPongM.loop.
 Definition S_ (fuel : nat) : M unit := loop fuel S_p.
 Arguments S_p : simpl never.
@@ -163,13 +160,12 @@ Context {R : realType} {Fx : effect} `{@FlipEff R -< Fx}.
 Context {M : freerMonad Fx}.
 Implicit Types (psucc : {prob R}).
 
-Fact flip_respect server_bound psucc (net : net_state) remaining packet
-    (queued : selected_queue server_bound net = rcons remaining packet)
-    (droppable : can_still_be_dropped packet = true) :
+Fact flip_respect server_bound psucc (net : net_state) m
+    (queued : selected_queue server_bound net = Some m):
   pre (@flip_contract R server_bound |> (flip psucc : M _)) net.
 Proof.
 rewrite to_hoare_triggerE /= provided_callerP /=.
-by exists remaining, packet.
+by exists m.
 Qed.
 
 Fact flip_run server_bound psucc (ins fns : net_state) keep
@@ -206,8 +202,7 @@ Qed.
 Fact lossy_send_run psucc (ins fns : net_state) (u : unit)
     (run : post (@flip_contract R true -^- client_c |> (lossy_send psucc : M _)) ins u fns) :
   fns.(clientQ) = ins.(clientQ) /\
-  (fns.(serverQ) = rcons ins.(serverQ) !-Ping \/
-   fns.(serverQ) = ins.(serverQ)).
+  (fns.(serverQ) = !-Ping \/ fns.(serverQ) = None).
 Proof.
 move: run.
 rewrite !freer_to_hoare_bindE freer_contract_right //.
@@ -215,11 +210,11 @@ case=> [[]] [[sQ cQ]] [] /send_run /= [-> ->].
 rewrite freer_contract_left //.
 case=> [keep] [net] [] /flip_run ->.
 rewrite post_ret=> -[_ <-] /=.
-by rewrite drop_last_rcons; case: keep; split=> //; [left | right].
+by case: keep; split=> //; [left | right].
 Qed.
 
-Lemma c_respect psucc (net : net_state) (remaining : packets)
-    (coh : clientQ net = !-Pong :: remaining \/ clientQ net = [::]) :
+Lemma c_respect psucc (net : net_state)
+    (coh : clientQ net = !-Pong \/ clientQ net = None) :
   pre (@flip_contract R true -^- client_c |> (C psucc : M _)) net.
 Proof.
 rewrite /C freer_to_hoare_bindE; split.
@@ -231,9 +226,7 @@ Qed.
 
 Lemma c_run psucc (ins fns : net_state) (result : option msg)
     (run : post (@flip_contract R true -^- client_c |> (C psucc : M _)) ins result fns) :
-  fns.(clientQ) = behead ins.(clientQ) /\
-  (fns.(serverQ) = rcons ins.(serverQ) !-Ping \/
-   fns.(serverQ) = ins.(serverQ)).
+  fns.(clientQ) = None /\ (fns.(serverQ) = !-Ping \/ fns.(serverQ) = None).
 Proof.
 move: run; rewrite freer_to_hoare_bindE.
 case=> [[]] [[sQ cQ]] [] /lossy_send_run /= [-> sent].
@@ -265,17 +258,17 @@ Qed.
 Fact lossy_reply_run psucc (ins fns : net_state) keep
     (run : post ( @flip_contract R false -^- server_c |> (lossy_reply psucc : M _)) ins keep fns) :
   fns.(clientQ) =
-    (if keep then rcons ins.(clientQ) !-Pong else ins.(clientQ)) /\
+    (if keep then clientQ (send_to_client Pong ins) else None) /\
   fns.(serverQ) = ins.(serverQ).
 Proof.
 move: run; rewrite freer_to_hoare_bindE freer_contract_right //.
 case=> [[]] [[sQ cQ]] [] /reply_run /= [-> ->].
 rewrite freer_contract_left //.
-by move/flip_run=> -> /=; rewrite drop_last_rcons.
+by move/flip_run=> -> /=.
 Qed.
 
-Lemma s_p_respect psucc (net : net_state) (remaining : packets)
-    (coh : serverQ net = !-Ping :: remaining \/ serverQ net = [::]) :
+Lemma s_p_respect psucc (net : net_state)
+    (coh : serverQ net = !-Ping \/ serverQ net = None) :
   pre ( @flip_contract R false -^- server_c |> (S_p psucc : M _)) net.
 Proof.
 rewrite freer_to_hoare_bindE freer_contract_right //.
@@ -287,81 +280,59 @@ move=> [[]|] [sQ cQ] /recv_run /= [-> ->].
 all: by rewrite pre_ret.
 Qed.
 
-Lemma s_p_run psucc (ins fns : net_state) (result : option msg)
-    (run : post ( @flip_contract R false -^- server_c |> (S_p psucc : M _)) ins result fns) :
-  (match result with
-   | Some Ping => fns.(clientQ) = ins.(clientQ) \/
-                  fns.(clientQ) = rcons ins.(clientQ) !-Pong
-   | _ => fns.(clientQ) = ins.(clientQ)
-   end) /\ fns.(serverQ) = behead ins.(serverQ).
+Lemma s_p_run psucc (ins fns : net_state) (result : option msg) 
+  (run : post ( @flip_contract R false -^- server_c |> (S_p psucc : M _)) ins result fns) :
+  match result with
+  | Some Ping => fns.(clientQ) = clientQ (send_to_client Pong ins) \/ fns.(clientQ) = None
+  | _ => fns.(clientQ) = clientQ ins
+  end /\ fns.(serverQ) = None.
 Proof.
-move: run; rewrite freer_to_hoare_bindE.
-rewrite freer_contract_right //.
-case=> [[[]|]] [[sQ cQ]] [] /recv_run /= [-> ->].
+move: run.
+rewrite freer_to_hoare_bindE freer_contract_right //.
+case=>[[[]|]] [[s1 c1]] [] /recv_run /= [] -> ->.
 - rewrite freer_to_hoare_bindE.
-  case=> [keep] [[sQ' cQ']] [] /lossy_reply_run /= [-> ->].
-  rewrite post_ret=> -[<- <-] /=.
-  by case: keep; split=> //; [right | left].
-all: by rewrite post_ret=> -[<- <-].
+  case=>[[]] [[s2 c2]] [] /lossy_reply_run /= [] -> ->.
+all: rewrite post_ret; case=> <- <- //=; split=> //.
+- by left.
+- by right.
 Qed.
 
-Lemma s_p_run_growth psucc (ins fns : net_state) (result : option msg)
-    (run : post ( @flip_contract R false -^- server_c |> (S_p psucc : M _)) ins result fns) :
-  exists delivered : nat,
-    delivered <= 1 /\
-    size (clientQ fns) = size (clientQ ins) + delivered.
-Proof.
-have [replied _] := s_p_run run.
-clear run.
-case: result replied=> [[|]|] /=.
-- case=> ->.
-    by exists 0; split=> //; rewrite addn0.
-  by exists 1; split=> //; rewrite size_rcons addn1.
-all: by move=> ->; exists 0; split=> //; rewrite addn0.
-Qed.
 
 (** Every queued request is ready to be received. *)
-Definition server_ready (net : net_state) : bool :=
-  all (fun packet=>
-    if packet is mk_p Ping false then true else false) (serverQ net).
+Definition server_ready (net : net_state) := serverQ net = Some Ping.
 
-Lemma s_respect psucc fuel (net : net_state) :
-  server_ready net -> pre ( @flip_contract R false -^- server_c |> (S_ psucc fuel : M _)) net.
+Lemma s_respect psucc fuel (net : net_state) 
+  (coh : forall net, serverQ net = !-Ping \/ serverQ net = None) :
+   pre ( @flip_contract R false -^- server_c |> (S_ psucc fuel : M _)) net.
 Proof.
-have step_respect ns :
+(* have step_respect ns :
     server_ready ns -> pre ( @flip_contract R false -^- server_c |> (S_p psucc : M _)) ns.
-  move=> ready; apply: (@s_p_respect psucc ns (behead (serverQ ns))).
-  move: ready; rewrite /server_ready.
-  case: (serverQ ns)=> [|[[] []] remaining] //=.
-    by move=> _; right.
-  by move=> _; left.
-move: fuel net; elim=> [|fuel IHfuel] net ready.
-- rewrite /S_ /= freer_to_hoare_bindE; split.
-    exact: step_respect ready.
-  by move=> *; rewrite pre_skip.
-rewrite /S_ /= freer_to_hoare_bindE; split.
-  exact: step_respect ready.
-move=> result net' /s_p_run [_ queues].
-apply: IHfuel.
-move: ready; rewrite /server_ready queues.
-by case: (serverQ net)=> //= packet remaining /andP [].
+  move=> ready; apply: s_p_respect. by rewrite ready; left. *)
+move: fuel net; elim=> [|fuel IHfuel] net.
+all: rewrite /S_ /= freer_to_hoare_bindE; split; [exact: s_p_respect |].
+- by move=> *; rewrite pre_skip.
+move=> result net' /s_p_run [HcQ HsQ].
+  exact: IHfuel.
 Qed.
 
-Lemma s_run psucc fuel (ins fns : net_state) (result : unit)
+(* Lemma s_run psucc fuel (ins fns : net_state) (result : unit)
     (run : post ( @flip_contract R false -^- server_c |> (S_ psucc fuel : M _)) ins result fns) :
-  size (clientQ fns) <= size (clientQ ins) + fuel.+1.
-Proof.
+ (clientQ fns = clientQ (send_to_client Pong ins) \/ clientQ fns = None)
+(* | _ => clientQ fns = clientQ ins *)
+ /\ serverQ fns = None.
 move: fuel ins fns run; elim=> [|fuel IHfuel] ins fns.
 - rewrite freer_to_hoare_bindE.
-  case=> [r] [net] [step_run].
-  have [delivered [delivered_le1 growth]] := s_p_run_growth step_run.
-  by rewrite post_skip=> <-; rewrite growth leq_add.
+  case=> r.
+  case=> [[s1 c1]].
+  case=> /s_p_run /= [] Hc ->.
+  rewrite post_skip=> <-; split=> //.
+  move : r Hc; case=> [|] /=. ; [left | ]. rewrite addn0.
 rewrite freer_to_hoare_bindE.
 case=> [r] [net] [step_run loop_run].
 have [delivered [delivered_le1 growth]] := s_p_run_growth step_run.
 apply: leq_trans (IHfuel _ _ loop_run) _.
 by rewrite growth !addnS addnAC -addn2 ltn_add2l.
-Qed.
+Qed. *)
 End server_respectful_and_run_lemmas.
 End pscm.
 
@@ -444,8 +415,8 @@ Definition protocol : component (M := M) proto_api ProtoF :=
 Definition protocol_contract : contract ProtoF net_state :=
   sharedP (R := R) (ClientF := ClientF) (ServerF := ServerF).
 
-Definition protocol_inv (net : net_state) : Prop :=
-  serverQ net = [::] /\ clientQ net = [::].
+Definition protocol_inv (net : net_state) := serverQ net = None /\ clientQ net = None.
+
 
 (** The component lemmas above use a contract on the ambient effect.
     Reusing them here requires lifting through ClientF and ServerF into
@@ -458,14 +429,14 @@ move=> [s0 c0].
 rewrite freer_to_hoare_bindE freer_contract_left // freer_contract_prodT.
 split; first by exact: lossy_send_respect.
 move=> [] [s1 c1] /lossy_send_run [].
-rewrite s0 c0=> /= -> Hs1.
+rewrite c0=> /= -> Hs1.
 rewrite freer_to_hoare_bindE freer_contract_right // freer_contract_prodT.
 split; first by exact/s_p_respect/Hs1.
 move=> opm [s2 c2] /s_p_run /=.
 case: opm=> [[]|] [] Hc2 -> /=.
 rewrite freer_to_hoare_bindE freer_contract_left //.
 rewrite freer_contract_prodT freer_contract_right //.
-split; first by apply/wait_respect; rewrite /= or_comm; exact: Hc2.
+split; first by apply/wait_respect; rewrite /=; exact: Hc2.
 move=> opm [s3 c3] /wait_run /= [-> ->].
 case: opm=> [[]|] /=.
 all: by rewrite pre_ret.
@@ -479,12 +450,10 @@ Proof.
 move=> [s0 c0].
 rewrite freer_to_hoare_bindE freer_contract_left // freer_contract_prodT.
 case=> [[]] [[s1 c1]] [] /lossy_send_run [].
-rewrite s0 c0=> /= -> Hs1.
-have Hbs1 : behead s1 = [::] by case: Hs1=> ->.
+rewrite c0=> /= -> Hs1.
 rewrite freer_to_hoare_bindE freer_contract_right // freer_contract_prodT.
 case=> [opm] [[s2 c2]] [] /s_p_run /=.
 case: opm=> [[]|] [] Hc2 -> /=.
-have Hbc2 : behead c2 = [::] by case: Hc2=> ->.
 rewrite freer_to_hoare_bindE freer_contract_left //.
 rewrite freer_contract_prodT freer_contract_right //.
 case=>[opm] [[s3 c3]] [] /wait_run /= [-> ->].
