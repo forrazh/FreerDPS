@@ -1,0 +1,28 @@
+-Q . AUChain
+
+-arg -w -arg -notation-overridden
+
+Protocol/Parameters.v
+Protocol/Blocks.v
+Protocol/Messages.v
+Protocol/BlockTree.v
+Protocol/LocalState.v
+Protocol/Protocol.v
+Protocol/StateMonad.v
+
+Model/MessageTuple.v
+Model/GlobalState.v
+Model/Network.v
+Model/Schedule.v
+
+Properties/MemEq.v
+Properties/SsrFacts.v
+Properties/TreeChain.v
+Properties/CG.v
+Properties/CQ.v
+Properties/CP.v
+
+Properties/Rstruct_topology.v
+Properties/sampling.v
+Properties/additional_lemmas.v
+Properties/PoSMain.v
