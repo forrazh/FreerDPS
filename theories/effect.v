@@ -84,12 +84,6 @@ Class StrictProvide2 (Fx F1 F2 : effect)
     d2 :: @Distinguish Fx F2 F1 p2 p1.(may_prov) ;
   }.
 
-(******************************************************************************
-  * Sadly, this can't be used to declare StrictProvide right now because      *
-  * for an unknown reason, this notation does not create the instances for    *
-  * prov/dist by itself.                                                      *
-  * TODO: Investigate why.                                                    *
-  *****************************************************************************)
 Notation "F1 ;; F2 -<< Fx" := (StrictProvide2 Fx F1 F2 ) (at level 50, no associativity): type_scope.
 
 #[global] Hint Mode MayProvide + + : typeclass_instances.

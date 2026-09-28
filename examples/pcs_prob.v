@@ -65,7 +65,7 @@ Section flip_contract.
 Context {R : realType}.
 
 Definition flip_step (server_bound : bool) (ns : net_state) :
-  forall X, @FlipEff R X -> X -> net_state 
+  forall X, @FlipEff R X -> X -> net_state
 := fun X op =>
   match op with
   | flipe _ => fun keep => drop_new_packet ns keep server_bound
@@ -79,21 +79,14 @@ Definition expected_packet (server_bound : bool) : packet :=
 
 Definition flip_requirement (server_bound : bool) ns :
     forall X, @FlipEff R X -> Prop :=
-  fun _ _ => exists m, selected_queue server_bound ns = Some m.
-(* Definition flip_transition
-    (server_bound : bool) (ns : net_state) (keep : bool) : Prop :=
-  exists remaining packet,
-    selected_queue server_bound ns = rcons remaining packet /\
-    selected_queue server_bound
-      (drop_new_packet ns keep server_bound) =
-      if keep then rcons remaining (deliver packet) else remaining. *)
+  fun _ _ => selected_queue server_bound ns = expected_packet server_bound.
 
 (* On promise check, we have two things : *)
 (* - The queue that received a change must be either same size or -1 *)
 (* - The other queue must be the same as before *)
 Inductive flip_promise (server_bound : bool) (ns : net_state) :
     forall X, @FlipEff R X -> X -> Prop :=
-  | KEEP_IT (p : {prob R}) (H : exists m, selected_queue server_bound ns = Some m) : flip_promise server_bound ns (flipe p) true
+  | KEEP_IT (p : {prob R}) (H : selected_queue server_bound ns = expected_packet server_bound) : flip_promise server_bound ns (flipe p) true
   | DROP_IT (p : {prob R}) (H : selected_queue server_bound ns = None) : flip_promise server_bound ns (flipe p) false.
 
 Definition flip_contract (server_bound : bool) :
@@ -160,12 +153,11 @@ Context {R : realType} {Fx : effect} `{@FlipEff R -< Fx}.
 Context {M : freerMonad Fx}.
 Implicit Types (psucc : {prob R}).
 
-Fact flip_respect server_bound psucc (net : net_state) m
-    (queued : selected_queue server_bound net = Some m):
+Fact flip_respect server_bound psucc (net : net_state)
+    (queued : selected_queue server_bound net = expected_packet server_bound):
   pre (@flip_contract R server_bound |> (flip psucc : M _)) net.
 Proof.
-rewrite to_hoare_triggerE /= provided_callerP /=.
-by exists m.
+by rewrite to_hoare_triggerE /= provided_callerP /= /flip_requirement.
 Qed.
 
 Fact flip_run server_bound psucc (ins fns : net_state) keep
@@ -280,7 +272,7 @@ move=> [[]|] [sQ cQ] /recv_run /= [-> ->].
 all: by rewrite pre_ret.
 Qed.
 
-Lemma s_p_run psucc (ins fns : net_state) (result : option msg) 
+Lemma s_p_run psucc (ins fns : net_state) (result : option msg)
   (run : post ( @flip_contract R false -^- server_c |> (S_p psucc : M _)) ins result fns) :
   match result with
   | Some Ping => fns.(clientQ) = clientQ (send_to_client Pong ins) \/ fns.(clientQ) = None
@@ -301,7 +293,7 @@ Qed.
 (** Every queued request is ready to be received. *)
 Definition server_ready (net : net_state) := serverQ net = Some Ping.
 
-Lemma s_respect psucc fuel (net : net_state) 
+Lemma s_respect psucc fuel (net : net_state)
   (coh : forall net, serverQ net = !-Ping \/ serverQ net = None) :
    pre ( @flip_contract R false -^- server_c |> (S_ psucc fuel : M _)) net.
 Proof.
