@@ -47,7 +47,7 @@ Local Open Scope nat_scope.
 (* *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ** *)
 (*                                                                            *)
 (* Inner feeling :                                                            *)
-(* - I think that their are two things (or maybe more) to take in account for *)
+(* - I think that there are two things (or maybe more) to take in account for *)
 (*   probabilities :                                                          *)
 (*   + the client should not make the prob choice of sending the message      *)
 (*     unless it comes from a client's failure or malfunction or anything;    *)
