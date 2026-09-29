@@ -182,22 +182,16 @@ Definition client_req ns : forall X, client_api X -> bool :=
     | WAIT => clientQ ns != Some Ping
     end.
 
-Definition c_promise ns :
-    forall X, client_api X -> X -> Prop :=
+Definition client_promise ns :
+    forall X, client_api X -> X -> bool :=
   fun X cmd =>
-    match cmd in client_api X return X -> Prop with
-    | SEND _ => fun _ => True
-    | WAIT => fun result =>
-                    match clientQ ns with
-                    | None => result = None
-                    | Some Pong => result = Some Pong
-                    | _ => False
-                    end
-          (* (result = Some Pong \/ result = None) *)
+    match cmd with
+    | SEND _ => fun _ => serverQ ns == Some Ping
+    | WAIT => fun result => result != Some Ping
     end.
 
 Definition client_c : contract client_api net_state :=
-  make_contract c_step client_req c_promise.
+  make_contract c_step client_req client_promise.
 
 
 Section client_respectful_and_run_lemmas.
@@ -364,9 +358,6 @@ Definition ping_protocol : component (M:=M) ping_round ProtoF :=
 
 Definition ping_contract : contract ProtoF net_state := client_c -^- server_c.
 Definition ping_inv (net : net_state) := serverQ net = None /\ clientQ net = None.
-(** This axiom is used here and only here because
-  * the packet drop is not a question yet *)
-(* Local Axiom WillDeliver : forall p, ?-p = !-p. *)
 
 Lemma pre_ping (net : net_state) :
   ping_inv net -> pre (ping_contract |> ping_protocol one_round) net.
@@ -438,5 +429,4 @@ For at most [n] attempts, with [q = (1 - p)^2]:
 P(n) = 1 - (1 - q)^n.
 >>
 *)
-
 

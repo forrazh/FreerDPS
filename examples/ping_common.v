@@ -56,7 +56,6 @@ End syntactic_sugar_for_probabilities.
 
 Section ping_pong_protocol.
 Context {R : realType} {M : monad} {transmit : {prob R} -> msg -> M (option msg)}.
-(* Variable transmit : {prob R} -> msg -> M (option msg). *)
 Implicit Types (m : msg) (psucc : {prob R}).
 
 Definition client_send (psucc: {prob R}) : M (option msg) := transmit psucc Ping.

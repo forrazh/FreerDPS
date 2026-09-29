@@ -39,7 +39,7 @@ Local Open Scope nat_scope.
 (* - Linking the probability to the channel directly                          *)
 (*   +-> This makes sense because the client should not know when sending or  *)
 (*   |   receiving that the message has been dropped. The actual mechanism    *)
-(*   |   should be built through another mechansim *)
+(*   |   should be built through another mechansim                            *)
 (*   +-> This works on a component and we currently have no way of linking    *)
 (*   |   two components together.                                             *)
 (*   +-> This could be an interesting research track though.                  *)
@@ -51,8 +51,8 @@ Local Open Scope nat_scope.
 (*   probabilities :                                                          *)
 (*   + the client should not make the prob choice of sending the message      *)
 (*     unless it comes from a client's failure or malfunction or anything;    *)
-(*   + the ns should handle the packet drops, but here that's probably   *)
-(*     not a freer monad as the ns we use is a state... or maybe we can  *)
+(*   + the ns should handle the packet drops, but here that's probably        *)
+(*     not a freer monad as the ns we use is a state... or maybe we can       *)
 (*     find a way to cheat our way out ? <== I think that's what happened...  *)
 (*   + Probabilities modeled by byzantine adversaries might fall in a 3rd     *)
 (*     category... Or a mix of multiple...                                    *)
@@ -220,7 +220,6 @@ Qed.
 Lemma post_c psucc (ins fns : net_state) (result : option msg)
     (run : post (@flip_contract R true -^- client_c |> (C psucc : M _)) ins result fns) :
   fns.(clientQ) = None /\ (fns.(serverQ) != Some Pong).
-  (* fns.(clientQ) = None /\ (fns.(serverQ) = Some Ping \/ fns.(serverQ) = None). *)
 Proof.
 move: run; rewrite freer_to_hoare_bindE.
 case=> [[]] [[sQ cQ]] [] /psend_run /= [-> sent].
@@ -231,7 +230,6 @@ Qed.
 End client_respectful_and_run_lemmas.
 End pccm.
 
-(** ** Server Specification *)
 
 Module pscm.
 Section server_respectful_and_run_lemmas.
@@ -392,9 +390,6 @@ Definition protocol_contract : contract ProtoF net_state :=
 
 Definition protocol_inv (net : net_state) := (serverQ net = None) /\ (clientQ net = None).
 
-(** The component lemmas above use a contract on the ambient effect.
-    Reusing them here requires lifting through ClientF and ServerF into
-    ProtoF, which freer_contract_left/right do not currently support. *)
 Lemma protocol_respect (net : net_state) :
   protocol_inv net ->
   pre (protocol_contract |> protocol one_round) net.
@@ -410,9 +405,7 @@ move=> opm [s2 c2] /s_p_run /=.
 case: opm=> [[]|] [] Hc2 -> /=.
 rewrite freer_to_hoare_bindE freer_contract_left //.
 rewrite freer_contract_prodT freer_contract_right //.
-split.
-(* first by  *)
-apply/wait_respect; rewrite /=. exact: Hc2.
+split; first by exact/wait_respect/Hc2.
 move=> opm [s3 c3] /wait_run /= [-> ->].
 case: opm=> [[]|] /=.
 all: by rewrite pre_ret.
