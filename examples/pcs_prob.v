@@ -64,11 +64,19 @@ Import NetworkChannelMod.
 Section flip_contract.
 Context {R : realType}.
 
+
+
 Definition flip_step (server_bound : bool) (ns : net_state) :
   forall X, @FlipEff R X -> X -> net_state
+  (* todo: make this dist :      ^^^^^^^^^ *)
 := fun X op =>
   match op with
   | flipe _ => fun keep => drop_new_packet ns keep server_bound
+  (* avec prob p :
+  dist p {
+  - keep => Ret ns
+  - drop => drop_new_packet ns server_bound
+  } *)
   end.
 
 Definition selected_queue (server_bound : bool) ns : packet :=
@@ -107,26 +115,20 @@ End syntax.
 #[export] Hint Extern 0 (providesOnlyF (F:=FlipEff) (flip _)) =>
   solve [exact: syn_flip] : core.
 
-(** * Probabilistic Ping-Pong Programs *)
-
 Module Export ProbPingPongM.
-
-(** ** Client *)
-
 Section client_program.
 Context {R : realType} {Fx : effect}.
 Context `{@FlipEff R ;; client_api -<< Fx} {M : freerMonad Fx}.
 
 Definition transmit (psucc : {prob R}) (program : M unit) : M unit :=
   program >> (flip psucc >> Ret tt).
-
+(* send <|| psucc ||> Ret tt. *)
+(* TODO: Change to this ^^^ *)
 Variable (psucc : {prob R}).
 
-Definition lossy_send : M unit := transmit psucc send.
-Definition C : M (option msg) := lossy_send >>= fun=> wait.
+Definition psend : M unit := transmit psucc send.
+Definition C : M (option msg) := psend >>= fun=> wait.
 End client_program.
-
-(** ** Server *)
 
 Section server_program.
 Context {R : realType} {Fx : effect}.
@@ -134,13 +136,12 @@ Context `{@FlipEff R ;; server_api -<< Fx} {M : freerMonad Fx}.
 
 Variable (psucc : {prob R}).
 
-Definition lossy_reply : M bool := reply >> flip psucc.
-Definition S_p : M (option msg) :=
-  (* recv >>= fun inc=> if inc is Some Ping then reply       >> Ret inc else Ret inc. *)
-  recv >>= fun inc=> if inc is Some Ping then lossy_reply >> Ret inc else Ret inc.
+Definition preply : M bool := reply >> flip psucc.
+Definition pS_p : M (option msg) :=
+  recv >>= fun inc=> if inc is Some Ping then preply >> Ret inc else Ret inc.
 Abbreviation loop := PingPongM.loop.
-Definition S_ (fuel : nat) : M unit := loop fuel S_p.
-Arguments S_p : simpl never.
+Definition S_ (fuel : nat) : M unit := loop fuel pS_p.
+Arguments pS_p : simpl never.
 End server_program.
 End ProbPingPongM.
 
@@ -179,8 +180,8 @@ Context `{@FlipEff R ;; client_api -<< Fx} `{ClientF -< Fx} {M : freerMonad Fx}.
 Implicit Types (psucc : {prob R}).
 
 
-Fact lossy_send_respect psucc (net : net_state) :
-  pre (@flip_contract R true -^- client_c |> (lossy_send psucc : M _)) net.
+Fact psend_respect psucc (net : net_state) :
+  pre (@flip_contract R true -^- client_c |> (psend psucc : M _)) net.
 Proof.
 rewrite !freer_to_hoare_bindE freer_contract_right //.
 split; first exact: send_respect.
@@ -191,10 +192,10 @@ split.
 - by move=> *; rewrite pre_ret.
 Qed.
 
-Fact lossy_send_run psucc (ins fns : net_state) (u : unit)
-    (run : post (@flip_contract R true -^- client_c |> (lossy_send psucc : M _)) ins u fns) :
+Fact psend_run psucc (ins fns : net_state) (u : unit)
+    (run : post (@flip_contract R true -^- client_c |> (psend psucc : M _)) ins u fns) :
   fns.(clientQ) = ins.(clientQ) /\
-  (fns.(serverQ) = !-Ping \/ fns.(serverQ) = None).
+  fns.(serverQ) != Some Pong.
 Proof.
 move: run.
 rewrite !freer_to_hoare_bindE freer_contract_right //.
@@ -202,28 +203,30 @@ case=> [[]] [[sQ cQ]] [] /send_run /= [-> ->].
 rewrite freer_contract_left //.
 case=> [keep] [net] [] /flip_run ->.
 rewrite post_ret=> -[_ <-] /=.
-by case: keep; split=> //; [left | right].
+by case: keep; split; apply/eqP.
 Qed.
 
-Lemma c_respect psucc (net : net_state)
-    (coh : clientQ net = !-Pong \/ clientQ net = None) :
+Lemma pre_c psucc (net : net_state)
+    (coh : clientQ net != Some Ping) :
   pre (@flip_contract R true -^- client_c |> (C psucc : M _)) net.
 Proof.
 rewrite /C freer_to_hoare_bindE; split.
-  exact: lossy_send_respect.
-move=> [] [sQ cQ] /lossy_send_run /= [-> _].
+  exact: psend_respect.
+move=> [] [sQ cQ] /psend_run /= [-> _].
 rewrite freer_contract_right //.
 exact/wait_respect/coh.
 Qed.
 
-Lemma c_run psucc (ins fns : net_state) (result : option msg)
+Lemma post_c psucc (ins fns : net_state) (result : option msg)
     (run : post (@flip_contract R true -^- client_c |> (C psucc : M _)) ins result fns) :
-  fns.(clientQ) = None /\ (fns.(serverQ) = !-Ping \/ fns.(serverQ) = None).
+  fns.(clientQ) = None /\ (fns.(serverQ) != Some Pong).
+  (* fns.(clientQ) = None /\ (fns.(serverQ) = Some Ping \/ fns.(serverQ) = None). *)
 Proof.
 move: run; rewrite freer_to_hoare_bindE.
-case=> [[]] [[sQ cQ]] [] /lossy_send_run /= [-> sent].
+case=> [[]] [[sQ cQ]] [] /psend_run /= [-> sent].
 rewrite freer_contract_right //.
-by move/wait_run=> /= [-> ->].
+move/wait_run => /= [-> ->].
+by split=>//; exact/eqP.
 Qed.
 End client_respectful_and_run_lemmas.
 End pccm.
@@ -237,8 +240,8 @@ Context `{@FlipEff R ;; server_api -<< Fx} {M : freerMonad Fx}.
 
 Implicit Types (psucc : {prob R}).
 
-Fact lossy_reply_respect psucc (net : net_state) :
-  pre ( @flip_contract R false -^- server_c |> (lossy_reply psucc : M _)) net.
+Fact preply_respect psucc (net : net_state) :
+  pre ( @flip_contract R false -^- server_c |> (preply psucc : M _)) net.
 Proof.
 rewrite freer_to_hoare_bindE freer_contract_right //.
 split; first exact: reply_respect.
@@ -247,10 +250,10 @@ rewrite freer_contract_left //.
 exact: flip_respect.
 Qed.
 
-Fact lossy_reply_run psucc (ins fns : net_state) keep
-    (run : post ( @flip_contract R false -^- server_c |> (lossy_reply psucc : M _)) ins keep fns) :
+Fact preply_run psucc (ins fns : net_state) keep
+    (run : post ( @flip_contract R false -^- server_c |> (preply psucc : M _)) ins keep fns) :
   fns.(clientQ) =
-    (if keep then clientQ (send_to_client Pong ins) else None) /\
+    (if keep then clientQ (fill_clientQ Pong ins) else None) /\
   fns.(serverQ) = ins.(serverQ).
 Proof.
 move: run; rewrite freer_to_hoare_bindE freer_contract_right //.
@@ -260,22 +263,24 @@ by move/flip_run=> -> /=.
 Qed.
 
 Lemma s_p_respect psucc (net : net_state)
-    (coh : serverQ net = !-Ping \/ serverQ net = None) :
-  pre ( @flip_contract R false -^- server_c |> (S_p psucc : M _)) net.
+    (coh : serverQ net != Some Pong) :
+    (* = Some Ping \/ serverQ net = None) : *)
+  pre ( @flip_contract R false -^- server_c |> (pS_p psucc : M _)) net.
 Proof.
 rewrite freer_to_hoare_bindE freer_contract_right //.
 split; first exact/recv_respect/coh.
 move=> [[]|] [sQ cQ] /recv_run /= [-> ->].
 - rewrite freer_to_hoare_bindE; split.
-  + exact: lossy_reply_respect.
+  + exact: preply_respect.
   + move=> *.
 all: by rewrite pre_ret.
 Qed.
 
 Lemma s_p_run psucc (ins fns : net_state) (result : option msg)
-  (run : post ( @flip_contract R false -^- server_c |> (S_p psucc : M _)) ins result fns) :
+  (run : post ( @flip_contract R false -^- server_c |> (pS_p psucc : M _)) ins result fns) :
   match result with
-  | Some Ping => fns.(clientQ) = clientQ (send_to_client Pong ins) \/ fns.(clientQ) = None
+  | Some Ping => fns.(clientQ) != Some Ping
+  (* clientQ (fill_clientQ Pong ins) \/ fns.(clientQ) = None *)
   | _ => fns.(clientQ) = clientQ ins
   end /\ fns.(serverQ) = None.
 Proof.
@@ -283,10 +288,9 @@ move: run.
 rewrite freer_to_hoare_bindE freer_contract_right //.
 case=>[[[]|]] [[s1 c1]] [] /recv_run /= [] -> ->.
 - rewrite freer_to_hoare_bindE.
-  case=>[[]] [[s2 c2]] [] /lossy_reply_run /= [] -> ->.
-all: rewrite post_ret; case=> <- <- //=; split=> //.
-- by left.
-- by right.
+  case=>[[]] [[s2 c2]] [] /preply_run /= [] -> ->.
+all: rewrite post_ret; case=> <- <- //=; split=>//.
+by apply/eqP.
 Qed.
 
 
@@ -294,12 +298,9 @@ Qed.
 Definition server_ready (net : net_state) := serverQ net = Some Ping.
 
 Lemma s_respect psucc fuel (net : net_state)
-  (coh : forall net, serverQ net = !-Ping \/ serverQ net = None) :
+  (coh : forall net, serverQ net != Some Pong) :
    pre ( @flip_contract R false -^- server_c |> (S_ psucc fuel : M _)) net.
 Proof.
-(* have step_respect ns :
-    server_ready ns -> pre ( @flip_contract R false -^- server_c |> (S_p psucc : M _)) ns.
-  move=> ready; apply: s_p_respect. by rewrite ready; left. *)
 move: fuel net; elim=> [|fuel IHfuel] net.
 all: rewrite /S_ /= freer_to_hoare_bindE; split; [exact: s_p_respect |].
 - by move=> *; rewrite pre_skip.
@@ -307,24 +308,6 @@ move=> result net' /s_p_run [HcQ HsQ].
   exact: IHfuel.
 Qed.
 
-(* Lemma s_run psucc fuel (ins fns : net_state) (result : unit)
-    (run : post ( @flip_contract R false -^- server_c |> (S_ psucc fuel : M _)) ins result fns) :
- (clientQ fns = clientQ (send_to_client Pong ins) \/ clientQ fns = None)
-(* | _ => clientQ fns = clientQ ins *)
- /\ serverQ fns = None.
-move: fuel ins fns run; elim=> [|fuel IHfuel] ins fns.
-- rewrite freer_to_hoare_bindE.
-  case=> r.
-  case=> [[s1 c1]].
-  case=> /s_p_run /= [] Hc ->.
-  rewrite post_skip=> <-; split=> //.
-  move : r Hc; case=> [|] /=. ; [left | ]. rewrite addn0.
-rewrite freer_to_hoare_bindE.
-case=> [r] [net] [step_run loop_run].
-have [delivered [delivered_le1 growth]] := s_p_run_growth step_run.
-apply: leq_trans (IHfuel _ _ loop_run) _.
-by rewrite growth !addnS addnAC -addn2 ltn_add2l.
-Qed. *)
 End server_respectful_and_run_lemmas.
 End pscm.
 
@@ -348,31 +331,31 @@ Context `{@FlipEff R ;; client_api -<< ClientF}.
 Context `{@FlipEff R ;; server_api -<< ServerF}.
 Context `{ClientF ;; ServerF -<< ProtoF} {M : freerMonad ProtoF}.
 
-Lemma syn_lossy_send (psucc : {prob R}) :
-  providesOnlyF (F:=ClientF) (M := M) (lossy_send psucc).
+Lemma syn_psend (psucc : {prob R}) :
+  providesOnlyF (F:=ClientF) (M := M) (psend psucc).
 Proof.
 by exists (frBind (frTrigger (inj (SEND Ping)))
   (fun=> frBind (frTrigger (inj (flipe psucc))) (fun=> frRet tt))).
 Qed.
 
 Lemma syn_s_p (psucc : {prob R}) :
-  providesOnlyF (F:= ServerF) (M := M) (S_p psucc).
+  providesOnlyF (F:= ServerF) (M := M) (pS_p psucc).
 Proof.
 exists (frBind (frTrigger (inj RECV)) (fun inc=>
   if inc is Some Ping then
     frBind (frBind (frTrigger (inj (RPLY Pong)))
       (fun=> frTrigger (inj (flipe psucc)))) (fun=> frRet inc)
   else frRet inc)).
-rewrite /= /S_p /lossy_reply.
+rewrite /= /pS_p /preply.
 congr (recv >>= _).
 by apply: boolp.funext=> -[[]|].
 Qed.
 
 End syntax.
 
-#[export] Hint Extern 0 (providesOnlyF (lossy_send _)) =>
-  solve [exact: syn_lossy_send] : core.
-#[export] Hint Extern 0 (providesOnlyF (S_p _)) =>
+#[export] Hint Extern 0 (providesOnlyF (psend _)) =>
+  solve [exact: syn_psend] : core.
+#[export] Hint Extern 0 (providesOnlyF (pS_p _)) =>
   solve [exact: syn_s_p] : core.
 End ProbProtocolSyntax.
 
@@ -393,7 +376,7 @@ Definition protocol : component (M := M) proto_api ProtoF :=
   fun _ cmd=>
     match cmd with
     | one_round =>
-        lossy_send psucc >> (S_p psucc >>= fun inc=>
+        psend psucc >> (pS_p psucc >>= fun inc=>
           match inc with
           | Some Ping => wait >>= fun inc=>
               match inc with
@@ -407,8 +390,7 @@ Definition protocol : component (M := M) proto_api ProtoF :=
 Definition protocol_contract : contract ProtoF net_state :=
   sharedP (R := R) (ClientF := ClientF) (ServerF := ServerF).
 
-Definition protocol_inv (net : net_state) := serverQ net = None /\ clientQ net = None.
-
+Definition protocol_inv (net : net_state) := (serverQ net = None) /\ (clientQ net = None).
 
 (** The component lemmas above use a contract on the ambient effect.
     Reusing them here requires lifting through ClientF and ServerF into
@@ -419,16 +401,18 @@ Lemma protocol_respect (net : net_state) :
 Proof.
 move=> [s0 c0].
 rewrite freer_to_hoare_bindE freer_contract_left // freer_contract_prodT.
-split; first by exact: lossy_send_respect.
-move=> [] [s1 c1] /lossy_send_run [].
+split; first by exact: psend_respect.
+move=> [] [s1 c1] /psend_run [].
 rewrite c0=> /= -> Hs1.
 rewrite freer_to_hoare_bindE freer_contract_right // freer_contract_prodT.
-split; first by exact/s_p_respect/Hs1.
+split; first by exact/s_p_respect.
 move=> opm [s2 c2] /s_p_run /=.
 case: opm=> [[]|] [] Hc2 -> /=.
 rewrite freer_to_hoare_bindE freer_contract_left //.
 rewrite freer_contract_prodT freer_contract_right //.
-split; first by apply/wait_respect; rewrite /=; exact: Hc2.
+split.
+(* first by  *)
+apply/wait_respect; rewrite /=. exact: Hc2.
 move=> opm [s3 c3] /wait_run /= [-> ->].
 case: opm=> [[]|] /=.
 all: by rewrite pre_ret.
@@ -441,7 +425,7 @@ Lemma protocol_run_inv (ins fns : net_state) (result : outcome) :
 Proof.
 move=> [s0 c0].
 rewrite freer_to_hoare_bindE freer_contract_left // freer_contract_prodT.
-case=> [[]] [[s1 c1]] [] /lossy_send_run [].
+case=> [[]] [[s1 c1]] [] /psend_run [].
 rewrite c0=> /= -> Hs1.
 rewrite freer_to_hoare_bindE freer_contract_right // freer_contract_prodT.
 case=> [opm] [[s2 c2]] [] /s_p_run /=.
@@ -453,7 +437,7 @@ case: opm=> [[]|] /=.
 all: rewrite post_ret=> -[_ <-]; split=> //.
 Qed.
 
-Lemma proto_correct :
+Theorem prob_ping_protocol_correct :
   correct_component protocol (no_contract proto_api) protocol_contract
     (fun=> protocol_inv).
 Proof.

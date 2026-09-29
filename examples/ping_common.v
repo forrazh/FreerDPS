@@ -1,4 +1,4 @@
-From mathcomp Require Import boot interval_inference.
+From mathcomp Require Import boot boolp interval_inference.
 From mathcomp Require Import ssrnum ssralg reals.
 From infotheo Require Import realType_ext.
 From monae Require Import preamble hierarchy.
@@ -12,8 +12,9 @@ Local Open Scope reals_ext_scope.
 Local Open Scope monae_scope.
 
 Inductive msg := Ping | Pong.
-
+HB.instance Definition _ := gen_eqMixin msg.
 Inductive outcome := GotPong | LostPing | LostPong.
+HB.instance Definition _ := gen_eqMixin outcome.
 
 Section syntactic_sugar_for_probabilities.
 Context {R : realType}.
