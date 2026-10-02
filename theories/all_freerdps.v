@@ -12,4 +12,5 @@ From FreerDPS Require Export
   component
   contract
   hoare
+  hoare_lib
   .
